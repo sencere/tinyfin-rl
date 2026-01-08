@@ -32,7 +32,11 @@
 - Scene batching: batched stepping for CPU/GPU-friendly sims.
 - Gymnasium-compatible adapter and conversion utilities.
 
-## Milestone 5 — Performance & Vectorization (Pufferlib-style)
+## Milestone 5 — Performance & Vectorization
+- Emulation wrappers: flatten/unflatten structured obs/action into compact tensors with inverse mapping.
+- Vectorization backends: serial + multiprocess; many envs per worker with preallocated buffers.
+- Framework adapters: thin shims around common RL trainers + model API (encode/decode, recurrent state packing).
+- One-liner UX: `make(name, num_envs, backend=...)` + `emulate(env, num_envs=...)`.
 - Vectorized rollout core: batched obs/actions, minimal Python overhead.
 - Zero-copy buffers for obs/rew/done; preallocated rollout storage.
 - Async stepping and rollout pipelines; configurable worker pools.
