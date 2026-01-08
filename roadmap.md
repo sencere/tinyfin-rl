@@ -1,23 +1,24 @@
 # tinyfin-rl Roadmap (Concise)
 
-**Goal:** A lightweight RL library built on Tinyfin tensors: clean API, fast simulation, and strong algorithm coverage.
+**Goal:** A modular, C-first RL library with a pluggable tensor backend (Tinyfin or alternatives), fast simulation, and strong algorithm coverage. Python scaffolding is temporary.
 
 ## Milestone 0 — Foundations
-- Project skeleton, config system, logging, and reproducible seeding.
-- Core RL API: `Env`, `Space`, `Agent`, `Policy`, `ReplayBuffer`, `Trainer`.
-- Tensor/NN adapters: policy/value heads, distribution helpers, action sampling.
-- Baseline examples: bandits, CartPole, simple gridworld.
+- C-first project skeleton, build system, logging, and reproducible seeding.
+- Core RL API in C: `Env`, `Space`, `Agent`, `Policy`, `ReplayBuffer`, `Trainer`.
+- Tensor backend ABI: minimal tensor ops, optim, and NN adapters (Tinyfin or other).
+- Visualization hooks in C with Raylib integration.
+- Placeholder samples to validate the pipeline (to be replaced by C examples).
 
 ## Milestone 1 — On-Policy Essentials
-- REINFORCE, VPG (vanilla policy gradient), A2C.
+- REINFORCE, VPG (vanilla policy gradient), A2C implemented in C.
 - PPO (clip + KL variants), GAE.
 - Common utilities: advantage normalization, entropy bonus, value loss, grad clipping.
-- Reference configs + unit tests for returns/GAE/advantage math.
+- Unit tests for returns/GAE/advantage math (C + optional Python harness).
 
 ## Milestone 2 — Off-Policy Essentials
 - DQN family: DQN, Double DQN, Dueling, Prioritized Replay.
 - Continuous control: DDPG, TD3, SAC (v1/v2 notes).
-- Replay buffers: uniform, prioritized, n-step, sequence replay.
+- Replay buffers: uniform, prioritized, n-step, sequence replay (C implementation).
 - Target networks, Polyak averaging, exploration noise helpers.
 
 ## Milestone 3 — Advanced & Specialized
@@ -30,14 +31,14 @@
 - Env wrappers: time-limit, frame stack, normalization, action repeat.
 - Vectorized envs: sync/async, multi-process, shared-memory where possible.
 - Scene batching: batched stepping for CPU/GPU-friendly sims.
-- Gymnasium-compatible adapter and conversion utilities.
+- C-first environment API with optional Python adapters (not primary).
 
 ## Milestone 5 — Performance & Vectorization
 - Emulation wrappers: flatten/unflatten structured obs/action into compact tensors with inverse mapping.
 - Vectorization backends: serial + multiprocess; many envs per worker with preallocated buffers.
-- Framework adapters: thin shims around common RL trainers + model API (encode/decode, recurrent state packing).
+- Framework adapters: thin shims around model APIs (encode/decode, recurrent state packing).
 - One-liner UX: `make(name, num_envs, backend=...)` + `emulate(env, num_envs=...)`.
-- Vectorized rollout core: batched obs/actions, minimal Python overhead.
+- Vectorized rollout core: batched obs/actions with minimal overhead (C focus).
 - Zero-copy buffers for obs/rew/done; preallocated rollout storage.
 - Async stepping and rollout pipelines; configurable worker pools.
 - Microbenchmarks for env throughput + policy inference.
