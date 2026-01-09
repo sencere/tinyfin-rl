@@ -4,7 +4,7 @@ Tinyfin-RL is a modular reinforcement learning library intended to be built arou
 
 ## Status
 
-This repository currently provides foundational building blocks (envs, spaces, policies, agents, replay buffer, trainer) and placeholders for backend and visualization integration. Python examples are temporary scaffolding and will be replaced by C modules and bindings.
+This repository currently provides foundational building blocks (envs, spaces, policies, agents, replay buffer, trainer) plus a minimal Tinyfin backend adapter and REINFORCE scaffolding. Python examples are temporary scaffolding and will be replaced by C modules and bindings.
 
 ## Goals
 
@@ -23,6 +23,7 @@ This library is intended to be used as a project foundation rather than a small 
 - `csrc/tinyfin/` embedded minimal Tinyfin subset (C tensor core snapshot)
 - `docs/` project notes and usage guides
 - `roadmap.md` milestone plan
+ - `tests/` backend parity checks (CPU/CUDA) when Tinyfin is available
 
 ## Docs
 
@@ -34,6 +35,16 @@ This library is intended to be used as a project foundation rather than a small 
 ## C backend and Tinyfin
 
 Tinyfin lives in a separate repository and may be partially copied or replaced. The key requirement here is a stable C-facing ABI. The `CBackend` loader is a placeholder for that integration.
+
+For Python scaffolding, `TinyfinBackend` wires the Tinyfin Python bindings into a minimal policy/optimizer loop. Run examples from this repo with:
+
+```bash
+PYTHONPATH=/path/to/tinyfin/python python examples/reinforce_bandit.py
+PYTHONPATH=/path/to/tinyfin/python python examples/ppo_bandit.py
+PYTHONPATH=/path/to/tinyfin/python python examples/ppo_bandit_vector.py
+PYTHONPATH=/path/to/tinyfin/python python examples/a2c_bandit.py
+PYTHONPATH=/path/to/tinyfin/python python examples/benchmark_rollout.py
+```
 
 ## Raylib visualization
 

@@ -21,6 +21,8 @@ The `CBackend` class in `tinyfin_rl/backend_c.py` is a placeholder for loading T
 
 For now, a minimal Tinyfin snapshot lives in `csrc/tinyfin/` so the tensor backend can be embedded directly in this repository.
 
+For Python scaffolding, `TinyfinBackend` wires the Tinyfin Python bindings into a minimal REINFORCE loop and a vectorized rollout helper. See `examples/reinforce_bandit.py` and `examples/benchmark_rollout.py`.
+
 ## Next steps
 
 Check `roadmap.md` for the planned milestones and upcoming algorithms.
