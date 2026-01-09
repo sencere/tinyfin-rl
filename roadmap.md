@@ -16,9 +16,9 @@
 - Visualization hooks in C with Raylib integration.
 - Placeholder samples to validate the pipeline (to be replaced by C examples).
 - Acceptance:
-  - [ ] Core C API headers compile in isolation with a minimal smoke test.
-  - [ ] Backend ABI exercised by a toy policy + optimizer step.
-  - [ ] One end-to-end C example runs with deterministic seeding.
+  - [x] Core C API headers compile in isolation with a minimal smoke test.
+  - [x] Backend ABI exercised by a toy policy + optimizer step.
+  - [x] One end-to-end C example runs with deterministic seeding.
 
 ### Milestone 1 — On-Policy Essentials
 - REINFORCE, VPG (vanilla policy gradient), A2C implemented in C.
@@ -28,7 +28,7 @@
 - Acceptance:
   - [ ] PPO or A2C reaches a basic reward threshold on a reference env.
   - [ ] GAE/returns math validated against a reference implementation.
-  - [ ] Unit tests cover normalization/entropy/value loss paths.
+  - [x] Unit tests cover normalization/entropy/value loss paths.
 
 ### Milestone 2 — Off-Policy Essentials
 - DQN family: DQN, Double DQN, Dueling, Prioritized Replay.
@@ -91,4 +91,27 @@
   - [ ] Docs cover one on-policy + one off-policy walkthrough.
 
 ## Current Status
-- TBD (placeholder for implementation progress).
+- Python scaffolding in place: envs, spaces, policies, replay buffer, agent, trainer, vector env, rollout batch.
+- Tinyfin backend adapter and Tinyfin-based policies available.
+- On-policy scaffolding: REINFORCE, A2C, PPO trainers in Python.
+- Tests cover returns/GAE math for on-policy utilities.
+- Advantage normalization, entropy, and value loss utilities covered by tests.
+- PPO/A2C now include optional entropy bonus and normalized advantages.
+- Added minimal C API header (`tinyfin_rl/rl.h`) with a smoke test stub.
+- Vectorized rollout benchmark accepts CLI params.
+- Tinyfin codebase added as `tinyfin/` submodule.
+- PPO/A2C trainer smoke tests cover entropy bonus.
+- PPO/A2C log entropy metrics; vectorized rollout benchmark can emit JSON/CSV.
+- Added C bandit REINFORCE example using the C API.
+- Added C bandit A2C example using the C API.
+- Vectorized rollout resets done envs; benchmark now supports warmup/iterations stats.
+- Added PPO vector-env smoke test and rollout reset test.
+- Added backend optimizer-step test and a Makefile for C examples/tests.
+- Added C bandit PPO example and a minimal CMake build.
+- Added env wrappers (time-limit, frame stack, action repeat, normalization) with tests.
+- Added raylib-quickstart submodule and first raylib env prototype.
+- Added C API overview doc and async/vector wrappers skeletons.
+- Added deterministic trainer smoke example in C.
+- Added raylib source submodule for direct builds without premake.
+- Added Q-learning trainer with metrics export and raylib autoplay.
+- Added env plugin API header with a grid plugin + loader example.

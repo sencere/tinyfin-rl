@@ -25,7 +25,10 @@ This library is intended to be used as a project foundation rather than a small 
 
 - `tinyfin_rl/` core library
 - `examples/` temporary scaffolding (will be replaced by C-based samples)
-- `csrc/tinyfin/` embedded minimal Tinyfin subset (C tensor core snapshot)
+- `tinyfin/` Tinyfin submodule (tensor core + C backend source)
+- `env/` standalone environment projects (Raylib, etc.)
+- `raylib/` raylib-quickstart submodule for C visualization and env prototypes
+- `raylib-src/` raylib source submodule for direct builds without premake
 - `docs/` project notes and usage guides
 - `roadmap.md` milestone plan
  - `tests/` backend parity checks (CPU/CUDA) when Tinyfin is available
@@ -36,10 +39,12 @@ This library is intended to be used as a project foundation rather than a small 
 - `docs/install.md` setup and optional dependencies
 - `docs/first_algorithm.md` REINFORCE sketch
 - `docs/api_conventions.md` API expectations
+- `docs/c_api.md` C API overview
+- `env/first-env/README.md` raylib gridworld + training notes
 
 ## C backend and Tinyfin
 
-Tinyfin lives in a separate repository and may be partially copied or replaced. The key requirement here is a stable C-facing ABI. The `CBackend` loader is a placeholder for that integration.
+Tinyfin lives in a separate repository and is included here as a submodule. The key requirement is a stable C-facing ABI. The `CBackend` loader is a placeholder for that integration.
 
 For Python scaffolding, `TinyfinBackend` wires the Tinyfin Python bindings into a minimal policy/optimizer loop. Run examples from this repo with:
 

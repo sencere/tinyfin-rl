@@ -29,6 +29,8 @@ def rollout_vector(envs: VectorEnv, policy: SoftmaxPolicy, steps: int) -> Rollou
         actions.extend(int(a) for a in act_list)
         rewards.extend(float(r) for r in reward_list)
         dones.extend(bool(d) for d in done_list)
-        obs = next_obs
+        obs = []
+        for env, o, done in zip(envs.envs, next_obs, done_list):
+            obs.append(env.reset() if done else o)
 
     return RolloutBatch(observations, actions, rewards, dones)

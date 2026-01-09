@@ -46,6 +46,7 @@ class PPOTrainer:
     lr: float = 0.03
     clip_eps: float = 0.2
     value_coef: float = 0.5
+    entropy_coef: float = 0.0
     epochs: int = 2
     steps_per_batch: int = 32
     use_gae: bool = True
@@ -126,13 +127,18 @@ class PPOTrainer:
                 returns = compute_returns(rewards, dones, self.gamma)
                 advantages = [r - v for r, v in zip(returns, values)]
             if self.adv_norm:
-                mean = sum(advantages) / max(len(advantages), 1)
-                var = sum((a - mean) ** 2 for a in advantages) / max(len(advantages), 1)
-                std = (var ** 0.5) + 1e-8
-                advantages = [(a - mean) / std for a in advantages]
+                from .utils import normalize_advantages
+                adv_mean = sum(advantages) / max(len(advantages), 1)
+                adv_var = sum((a - adv_mean) ** 2 for a in advantages) / max(len(advantages), 1)
+                adv_std = (adv_var ** 0.5)
+                if adv_std < 1e-6:
+                    self.logger.warning("advantages have near-zero std before normalization")
+                advantages = normalize_advantages(advantages)
 
             for _ in range(self.epochs):
                 loss = None
+                ent_sum = 0.0
+                ent_count = 0
                 for obs_i, act_i, adv, ret, old_logp in zip(obs, acts, advantages, returns, logps):
                     logp = self.policy.log_prob(obs_i, act_i)
                     old_logp_t = self.policy.backend.tensor([old_logp], requires_grad=False)
@@ -149,6 +155,12 @@ class PPOTrainer:
                     value_loss = value_loss * self.policy.backend.tensor([self.value_coef], requires_grad=False)
 
                     total = policy_loss + value_loss
+                    if self.entropy_coef != 0.0:
+                        entropy = self.policy.entropy(obs_i)
+                        ent_sum += float(entropy.to_numpy().item())
+                        ent_count += 1
+                        ent_scale = self.policy.backend.tensor([-self.entropy_coef], requires_grad=False)
+                        total = total + (entropy * ent_scale)
                     loss = total if loss is None else (loss + total)
 
                 if loss is not None:
@@ -158,5 +170,8 @@ class PPOTrainer:
 
             record = {"update": update, "return_mean": sum(rewards) / len(rewards)}
             metrics.append(record)
-            self.logger.info("update=%s return_mean=%.3f", update, record["return_mean"])
+            if ent_count:
+                self.logger.info("update=%s return_mean=%.3f entropy_mean=%.4f", update, record["return_mean"], ent_sum / ent_count)
+            else:
+                self.logger.info("update=%s return_mean=%.3f", update, record["return_mean"])
         return metrics

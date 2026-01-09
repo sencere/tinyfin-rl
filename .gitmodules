@@ -1,0 +1,9 @@
+[submodule "tinyfin"]
+	path = tinyfin
+	url = https://github.com/sencere/tinyfin
+[submodule "raylib"]
+	path = raylib
+	url = https://github.com/raylib-extras/raylib-quickstart
+[submodule "raylib-src"]
+	path = raylib-src
+	url = https://github.com/raysan5/raylib

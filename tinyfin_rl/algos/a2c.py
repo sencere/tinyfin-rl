@@ -27,6 +27,7 @@ class A2CTrainer:
     gamma: float = 0.99
     lr: float = 0.05
     value_coef: float = 0.5
+    entropy_coef: float = 0.0
     steps_per_batch: int = 32
     log_level: str = "INFO"
 
@@ -67,6 +68,8 @@ class A2CTrainer:
             advantages = [r - v for r, v in zip(returns, values)]
 
             loss = None
+            ent_sum = 0.0
+            ent_count = 0
             for obs_i, act_i, adv, ret in zip(obs, acts, advantages, returns):
                 logp = self.policy.log_prob(obs_i, act_i)
                 adv_t = self.policy.backend.tensor([adv], requires_grad=False)
@@ -80,6 +83,12 @@ class A2CTrainer:
                 value_loss = value_loss * self.policy.backend.tensor([self.value_coef], requires_grad=False)
 
                 total = policy_loss + value_loss
+                if self.entropy_coef != 0.0:
+                    entropy = self.policy.entropy(obs_i)
+                    ent_sum += float(entropy.to_numpy().item())
+                    ent_count += 1
+                    ent_scale = self.policy.backend.tensor([-self.entropy_coef], requires_grad=False)
+                    total = total + (entropy * ent_scale)
                 loss = total if loss is None else (loss + total)
 
             if loss is not None:
@@ -89,5 +98,8 @@ class A2CTrainer:
 
             record = {"update": update, "return_mean": sum(rewards) / len(rewards)}
             metrics.append(record)
-            self.logger.info("update=%s return_mean=%.3f", update, record["return_mean"])
+            if ent_count:
+                self.logger.info("update=%s return_mean=%.3f entropy_mean=%.4f", update, record["return_mean"], ent_sum / ent_count)
+            else:
+                self.logger.info("update=%s return_mean=%.3f", update, record["return_mean"])
         return metrics

@@ -42,6 +42,12 @@ class SoftmaxPolicy(Policy):
         a_one_hot = self.backend.one_hot(action, self.action_space.n).reshape([1, self.action_space.n])
         return self.backend.sum(self.backend.mul(logp, a_one_hot))
 
+    def entropy(self, observation: int):
+        logits = self.logits(int(observation))
+        probs = self.backend.softmax(logits)
+        logp = self.backend.log(probs)
+        ent = self.backend.sum(self.backend.mul(probs, logp))
+        return ent * self.backend.tensor([-1.0], requires_grad=False)
 
 @dataclass
 class PPOPolicy(Policy):
@@ -83,3 +89,10 @@ class PPOPolicy(Policy):
         logp = self.backend.log(self.backend.softmax(logits))
         a_one_hot = self.backend.one_hot(action, self.action_space.n).reshape([1, self.action_space.n])
         return self.backend.sum(self.backend.mul(logp, a_one_hot))
+
+    def entropy(self, observation: int):
+        logits = self.logits(int(observation))
+        probs = self.backend.softmax(logits)
+        logp = self.backend.log(probs)
+        ent = self.backend.sum(self.backend.mul(probs, logp))
+        return ent * self.backend.tensor([-1.0], requires_grad=False)

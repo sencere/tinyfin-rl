@@ -21,4 +21,4 @@ export TINYFIN_LIB=/path/to/libtinyfin.so
 
 Then use `CBackend` to load symbols.
 
-This repository also includes a minimal embedded snapshot in `csrc/tinyfin/` that can be built directly into tinyfin-rl when the C build system is added.
+This repository includes the Tinyfin submodule in `tinyfin/` for local builds when the C build system is added.

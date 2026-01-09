@@ -19,7 +19,7 @@ Raylib visualization is expected to be implemented in C. The current Python visu
 
 The `CBackend` class in `tinyfin_rl/backend_c.py` is a placeholder for loading Tinyfin or another tensor backend via a shared library. The intent is to keep the core library backend-agnostic and modular.
 
-For now, a minimal Tinyfin snapshot lives in `csrc/tinyfin/` so the tensor backend can be embedded directly in this repository.
+Tinyfin is included as a submodule in `tinyfin/` for local builds and C backend integration.
 
 For Python scaffolding, `TinyfinBackend` wires the Tinyfin Python bindings into a minimal REINFORCE loop and a vectorized rollout helper. See `examples/reinforce_bandit.py` and `examples/benchmark_rollout.py`.
 

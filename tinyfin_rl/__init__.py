@@ -8,9 +8,11 @@ from .agent import Agent
 from .replay import ReplayBuffer
 from .trainer import Trainer
 from .algos import ReinforceTrainer, PPOTrainer, A2CTrainer
-from .vector_env import VectorEnv
+from .vector_env import VectorEnv, AsyncVectorEnv
 from .rollout import RolloutBatch, rollout_vector
 from .spaces import Space, Discrete, Box
+from .env_wrappers import ActionRepeat, FrameStack, NormalizeObservation, NormalizeReward, TimeLimit
+from .vector_wrappers import TimeLimitVec
 from .seed import set_seed
 from .backend_c import CBackend
 from .backends import TinyfinBackend
@@ -38,8 +40,15 @@ __all__ = [
     "CBackend",
     "TinyfinBackend",
     "VectorEnv",
+    "AsyncVectorEnv",
     "RolloutBatch",
     "rollout_vector",
+    "ActionRepeat",
+    "FrameStack",
+    "NormalizeObservation",
+    "NormalizeReward",
+    "TimeLimit",
+    "TimeLimitVec",
     "Visualizer",
     "RaylibGridworldVisualizer",
 ]
