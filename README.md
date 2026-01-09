@@ -1,5 +1,10 @@
 # tinyfin-rl
 
+<p align="center">
+  <img src="resources/logo/logo.png" alt="tinyfin logo" />
+</p>
+
+
 Tinyfin-RL is a modular reinforcement learning library intended to be built around a tensor backend (Tinyfin or another library). The core goal is a C-first, embeddable architecture with clean interfaces, optional backends, and room for higher-performance training loops and visualization.
 
 ## Status
