@@ -140,3 +140,4 @@
 - Added async rollout runner and benchmark targets file.
 - Added checkpoint helpers, eval harness, and experiment logger.
 - Added PPO/DQN walkthrough docs.
+- Added TD3 scaffold with continuous bandit env + smoke test.

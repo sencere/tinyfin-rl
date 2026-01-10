@@ -81,6 +81,7 @@ python examples/bc_bandit.py
 python examples/trpo_bandit.py
 python examples/ppo_checkpoint.py
 python examples/dqn_checkpoint.py
+python examples/td3_bandit.py
 ```
 
 ## C plugin loader

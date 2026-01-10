@@ -1,13 +1,13 @@
 """Tinyfin-RL: lightweight RL primitives built around Tinyfin tensors."""
 
 from .config import Config
-from .envs import Env, BanditEnv, GridworldEnv
+from .envs import Env, BanditEnv, GridworldEnv, ContinuousBanditEnv
 from .policy import Policy, RandomPolicy
 from .policy_tinyfin import SoftmaxPolicy, PPOPolicy
 from .agent import Agent
 from .replay import ReplayBuffer
 from .trainer import Trainer
-from .algos import ReinforceTrainer, PPOTrainer, A2CTrainer, DQNTrainer, DuelingQNetwork, BCTrainer, TRPOTrainer, SharedPolicyTrainer
+from .algos import ReinforceTrainer, PPOTrainer, A2CTrainer, DQNTrainer, DuelingQNetwork, BCTrainer, TRPOTrainer, SharedPolicyTrainer, TD3Trainer, Actor, Critic
 from .vector_env import VectorEnv, AsyncVectorEnv
 from .rollout import RolloutBatch, rollout_vector, rollout_vector_prealloc, rollout_vector_zero_copy
 from .async_rollout import AsyncRolloutRunner
@@ -31,6 +31,7 @@ __all__ = [
     "Env",
     "BanditEnv",
     "GridworldEnv",
+    "ContinuousBanditEnv",
     "Policy",
     "RandomPolicy",
     "SoftmaxPolicy",
@@ -46,6 +47,9 @@ __all__ = [
     "BCTrainer",
     "TRPOTrainer",
     "SharedPolicyTrainer",
+    "TD3Trainer",
+    "Actor",
+    "Critic",
     "Space",
     "Discrete",
     "Box",

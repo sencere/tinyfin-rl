@@ -72,3 +72,24 @@ class GridworldEnv(Env):
 
     def _obs(self) -> int:
         return self.agent_pos[1] * self.width + self.agent_pos[0]
+
+
+class ContinuousBanditEnv(Env):
+    def __init__(self, target: float = 0.7, reward_scale: float = 1.0):
+        self.target = target
+        self.reward_scale = reward_scale
+        self.action_space = Box(-1.0, 1.0, (1,))
+        self.observation_space = Box(0.0, 1.0, (1,))
+
+    def reset(self) -> float:
+        return 0.0
+
+    def step(self, action: float):
+        try:
+            act = float(action)
+        except (TypeError, ValueError):
+            raise ValueError("invalid action")
+        if act < self.action_space.low or act > self.action_space.high:
+            raise ValueError("action out of bounds")
+        reward = self.reward_scale * (1.0 - abs(act - self.target))
+        return 0.0, reward, True, {}

@@ -5,5 +5,6 @@ from .dqn import DQNTrainer, DuelingQNetwork
 from .bc import BCTrainer
 from .trpo import TRPOTrainer
 from .shared_policy import SharedPolicyTrainer
+from .td3 import TD3Trainer, Actor, Critic
 
-__all__ = ["ReinforceTrainer", "PPOTrainer", "A2CTrainer", "DQNTrainer", "DuelingQNetwork", "BCTrainer", "TRPOTrainer", "SharedPolicyTrainer"]
+__all__ = ["ReinforceTrainer", "PPOTrainer", "A2CTrainer", "DQNTrainer", "DuelingQNetwork", "BCTrainer", "TRPOTrainer", "SharedPolicyTrainer", "TD3Trainer", "Actor", "Critic"]
