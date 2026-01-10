@@ -142,3 +142,16 @@
 - Added PPO/DQN walkthrough docs.
 - Added TD3 scaffold with continuous bandit env + smoke test.
 - Added Gymnasium/PettingZoo adapters and a D3 dashboard server.
+- Added Gymnasium CartPole (DQN) and Pendulum (TD3) example scripts.
+
+## Milestones Done
+- Milestone 0 — Foundations (accepted).
+- Milestone 1 — On-Policy Essentials (accepted).
+- Milestone 3 — Advanced & Specialized (accepted baseline items).
+- Milestone 4 — Simulation & Env Tooling (accepted).
+- Milestone 5 — Performance & Vectorization (accepted).
+- Milestone 6 — Usability & Reliability (accepted).
+
+## Next Steps
+- Expand environment catalog: Gymnasium wrappers + PettingZoo suites + more in-repo C envs.
+- Pair each environment with an algorithm example (PPO/DQN/TD3/SAC).

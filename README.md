@@ -83,7 +83,11 @@ python examples/trpo_bandit.py
 python examples/ppo_checkpoint.py
 python examples/dqn_checkpoint.py
 python examples/td3_bandit.py
+python examples/gym_cartpole_dqn.py
+python examples/gym_pendulum_td3.py
 ```
+
+Gymnasium/PettingZoo adapters require those packages to be installed.
 
 ## C plugin loader
 
