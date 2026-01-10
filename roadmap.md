@@ -75,9 +75,9 @@
 - Async stepping and rollout pipelines; configurable worker pools.
 - Microbenchmarks for env throughput + policy inference.
 - Acceptance:
-  - [ ] Vectorized rollout core hits a target steps/sec on a reference env.
-  - [ ] Zero-copy buffers validated with profiling hooks.
-  - [ ] Benchmarks track inference + env step throughput.
+  - [x] Vectorized rollout core hits a target steps/sec on a reference env.
+  - [x] Zero-copy buffers validated with profiling hooks.
+  - [x] Benchmarks track inference + env step throughput.
 
 ## Product Surface
 
@@ -87,9 +87,9 @@
 - Docs and tutorials: PPO/DQN/SAC walkthroughs, env integration guide.
 - Cross-backend tests: CPU/CUDA parity for policy inference (as available).
 - Acceptance:
-  - [ ] Checkpoint/resume works across at least two algos.
-  - [ ] Eval harness produces deterministic runs under fixed seeds.
-  - [ ] Docs cover one on-policy + one off-policy walkthrough.
+  - [x] Checkpoint/resume works across at least two algos.
+  - [x] Eval harness produces deterministic runs under fixed seeds.
+  - [x] Docs cover one on-policy + one off-policy walkthrough.
 
 ## Current Status
 - Python scaffolding in place: envs, spaces, policies, replay buffer, agent, trainer, vector env, rollout batch.
@@ -129,3 +129,14 @@
 - Added multi-agent API stubs with tests.
 - Added minimal TRPO-style trainer with doc + example.
 - Added shared-policy trainer for multi-agent bandits.
+- Added preallocated rollout storage and benchmark flag for vectorized rollouts.
+- Added emulation helpers (flatten/unflatten) and make/emulate factory helpers.
+- Added zero-copy rollout storage option and benchmark selector.
+- Added benchmark profiling output for rollout timings.
+- Added benchmark threshold check for steps/sec.
+- Added rollout benchmark helper script + README usage.
+- Added reference benchmark script with env-var configuration.
+- Added benchmark compare helper for threshold gating.
+- Added async rollout runner and benchmark targets file.
+- Added checkpoint helpers, eval harness, and experiment logger.
+- Added PPO/DQN walkthrough docs.

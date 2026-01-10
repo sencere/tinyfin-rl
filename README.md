@@ -41,6 +41,8 @@ This library is intended to be used as a project foundation rather than a small 
 - `docs/api_conventions.md` API expectations
 - `docs/c_api.md` C API overview
 - `docs/trpo.md` minimal TRPO placeholder
+- `docs/ppo_walkthrough.md` PPO walkthrough
+- `docs/dqn_walkthrough.md` DQN walkthrough
 - `env/first-env/README.md` raylib gridworld + training notes
 
 ## Quickstart (C examples)
@@ -77,6 +79,8 @@ python examples/ppo_bandit.py
 python examples/a2c_bandit.py
 python examples/bc_bandit.py
 python examples/trpo_bandit.py
+python examples/ppo_checkpoint.py
+python examples/dqn_checkpoint.py
 ```
 
 ## C plugin loader
@@ -89,6 +93,78 @@ make env_plugin_loader
 cd env/first-env
 make libfirst_env.so
 ../../build/env_plugin_loader ./libfirst_env.so
+```
+
+## Benchmark rollout throughput
+
+Run the vectorized rollout benchmark and optionally gate on steps/sec:
+
+```bash
+cd tinyfin-rl
+python examples/benchmark_rollout.py --storage array --num-envs 64 --steps 200 --min-steps-per-s 5000
+scripts/bench_rollout.sh array 5000 64 200
+```
+
+Reference benchmark (env-var configured):
+
+```bash
+cd tinyfin-rl
+MIN_STEPS_PER_S=5000 ENVS=64 STEPS_PER_ENV=200 scripts/bench_reference.sh
+```
+
+Compare benchmark results (exit non-zero if below threshold):
+
+```bash
+cd tinyfin-rl
+python scripts/bench_compare.py --storage array --num-envs 64 --steps 200 --min-steps-per-s 5000
+```
+
+Targets file (default threshold values):
+
+```bash
+cd tinyfin-rl
+cat benchmarks/rollout_targets.json
+python scripts/bench_compare.py
+```
+
+## Experiment logging
+
+Write metrics to JSONL with the experiment helper:
+
+```bash
+cd tinyfin-rl
+python - <<'PY'
+from tinyfin_rl.experiment import run_experiment
+from tinyfin_rl.backends import TinyfinBackend
+from tinyfin_rl.envs import BanditEnv
+from tinyfin_rl.policy_tinyfin import PPOPolicy
+from tinyfin_rl.algos.ppo import PPOTrainer
+from tinyfin_rl.spaces import Discrete
+
+backend = TinyfinBackend(device="cpu")
+env = BanditEnv([0.2, 0.8])
+policy = PPOPolicy(backend=backend, obs_dim=1, action_space=Discrete(2))
+trainer = PPOTrainer(env=env, policy=policy, steps_per_batch=8, epochs=1)
+run_experiment(trainer, "runs/ppo_metrics.jsonl", updates=2)
+PY
+```
+
+## Evaluation harness
+
+Deterministic evaluation under fixed seeds:
+
+```bash
+cd tinyfin-rl
+python - <<'PY'
+from tinyfin_rl.envs import BanditEnv
+from tinyfin_rl.policy import RandomPolicy
+from tinyfin_rl.eval import evaluate_policy
+
+env = BanditEnv([0.2, 0.8])
+policy = RandomPolicy(env.action_space)
+out = evaluate_policy(env, policy, episodes=5, seed=123)
+print(out["return_mean"])
+PY
 ```
 
 ## C backend and Tinyfin

@@ -23,6 +23,12 @@ Tinyfin is included as a submodule in `tinyfin/` for local builds and C backend 
 
 For Python scaffolding, `TinyfinBackend` wires the Tinyfin Python bindings into a minimal REINFORCE loop and a vectorized rollout helper. See `examples/reinforce_bandit.py` and `examples/benchmark_rollout.py`.
 
+## Usability helpers
+
+- Checkpoint helpers for PPO/DQN live in `tinyfin_rl/checkpoint.py`.
+- Deterministic evaluation is available via `tinyfin_rl/eval.py`.
+- Experiment metrics can be logged with `tinyfin_rl/experiment.py`.
+
 ## Next steps
 
 Check `roadmap.md` for the planned milestones and upcoming algorithms.
