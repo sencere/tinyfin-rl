@@ -72,4 +72,4 @@ See `examples/c/` for full examples.
 `tfrl_env_plugin_get()` which returns a struct with `create()` and `destroy()` hooks.
 
 See `env/first-env/plugin_grid.c` for a minimal plugin implementation and
-`examples/c/env_plugin_loader.c` for a loader that executes random rollouts.
+`examples/c/env_plugin_loader.c` for a loader that executes a simple trainer loop.

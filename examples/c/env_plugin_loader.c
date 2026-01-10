@@ -6,6 +6,7 @@
 
 #include "tinyfin_rl/rl.h"
 #include "tinyfin_rl/rl_plugin.h"
+#include "tinyfin_rl/rl_trainer.h"
 
 static uint64_t rng_next(uint64_t *state) {
     uint64_t x = *state;
@@ -28,6 +29,26 @@ static int arg_int(int argc, char **argv, const char *name, int def) {
         }
     }
     return def;
+}
+
+typedef struct {
+    uint64_t rng;
+    int actions;
+} random_agent;
+
+static int random_act(void *ctx, const tfrl_value *obs, tfrl_value *out_action) {
+    random_agent *agent = (random_agent *)ctx;
+    (void)obs;
+    int action = (int)(rng_uniform(&agent->rng) * agent->actions) % agent->actions;
+    out_action->type = TFRL_VALUE_I64;
+    out_action->as.i64 = action;
+    return TFRL_OK;
+}
+
+static int random_observe(void *ctx, const tfrl_transition *transition) {
+    (void)ctx;
+    (void)transition;
+    return TFRL_OK;
 }
 
 int main(int argc, char **argv) {
@@ -57,43 +78,27 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    uint64_t rng = 1234;
-    double return_sum = 0.0;
-    for (int ep = 0; ep < episodes; ep++) {
-        tfrl_env env = plugin->create();
-        tfrl_value obs = {0};
-        tfrl_step step = {0};
-        if (tfrl_env_reset(&env, &obs) != TFRL_OK) {
-            fprintf(stderr, "env reset failed\n");
-            if (plugin->destroy) {
-                plugin->destroy(&env);
-            }
-            dlclose(handle);
-            return 1;
-        }
-        int done = 0;
-        double ep_return = 0.0;
-        while (!done) {
-            int action = (int)(rng_uniform(&rng) * actions) % actions;
-            tfrl_value act = {.type = TFRL_VALUE_I64, .as.i64 = action};
-            if (tfrl_env_step(&env, &act, &step) != TFRL_OK) {
-                fprintf(stderr, "env step failed\n");
-                if (plugin->destroy) {
-                    plugin->destroy(&env);
-                }
-                dlclose(handle);
-                return 1;
-            }
-            done = tfrl_step_done(&step);
-            ep_return += step.reward;
-        }
-        return_sum += ep_return;
+    tfrl_env env = plugin->create();
+    random_agent agent_state = {.rng = 1234, .actions = actions};
+    const tfrl_agent_vtable agent_vtable = {
+        .act = random_act,
+        .observe = random_observe,
+        .destroy = NULL
+    };
+    tfrl_agent agent = {&agent_state, &agent_vtable};
+    double mean_return = 0.0;
+    if (tfrl_run_episodes(&env, &agent, episodes, &mean_return) != TFRL_OK) {
+        fprintf(stderr, "train loop failed\n");
         if (plugin->destroy) {
             plugin->destroy(&env);
         }
+        dlclose(handle);
+        return 1;
     }
-
-    printf("plugin=%s episodes=%d return_mean=%.3f\n", plugin->name, episodes, return_sum / episodes);
+    if (plugin->destroy) {
+        plugin->destroy(&env);
+    }
+    printf("plugin=%s episodes=%d return_mean=%.3f\n", plugin->name, episodes, mean_return);
     dlclose(handle);
     return 0;
 }

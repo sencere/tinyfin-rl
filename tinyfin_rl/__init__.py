@@ -7,12 +7,12 @@ from .policy_tinyfin import SoftmaxPolicy, PPOPolicy
 from .agent import Agent
 from .replay import ReplayBuffer
 from .trainer import Trainer
-from .algos import ReinforceTrainer, PPOTrainer, A2CTrainer
+from .algos import ReinforceTrainer, PPOTrainer, A2CTrainer, DQNTrainer
 from .vector_env import VectorEnv, AsyncVectorEnv
 from .rollout import RolloutBatch, rollout_vector
 from .spaces import Space, Discrete, Box
 from .env_wrappers import ActionRepeat, FrameStack, NormalizeObservation, NormalizeReward, TimeLimit
-from .vector_wrappers import TimeLimitVec
+from .vector_wrappers import ActionRepeatVec, NormalizeObservationVec, NormalizeRewardVec, TimeLimitVec
 from .seed import set_seed
 from .backend_c import CBackend
 from .backends import TinyfinBackend
@@ -33,6 +33,7 @@ __all__ = [
     "ReinforceTrainer",
     "PPOTrainer",
     "A2CTrainer",
+    "DQNTrainer",
     "Space",
     "Discrete",
     "Box",
@@ -49,6 +50,9 @@ __all__ = [
     "NormalizeReward",
     "TimeLimit",
     "TimeLimitVec",
+    "ActionRepeatVec",
+    "NormalizeObservationVec",
+    "NormalizeRewardVec",
     "Visualizer",
     "RaylibGridworldVisualizer",
 ]

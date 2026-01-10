@@ -53,6 +53,13 @@ make train_q
 ./train_q --eval --in q_table.csv --episodes 200 --metrics eval_metrics.json --metrics-format json
 ```
 
+Or run the helper script:
+
+```bash
+cd tinyfin-rl/env/first-env
+./run_train_view.sh
+```
+
 ## Autoplay in raylib viewer
 
 Train first to generate `q_table.csv`, then press `P` to toggle autoplay:

@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 
 here = os.path.dirname(__file__)
@@ -27,6 +28,23 @@ class CountingEnv(Env):
         done = self.steps >= 3
         return self.steps, 1.0, done, {}
 
+class RandomObsEnv(Env):
+    def __init__(self):
+        self.action_space = Discrete(2)
+        self.observation_space = Discrete(100)
+        self._rng = random.Random(0)
+
+    def reset(self):
+        return self._rng.randrange(0, 100)
+
+    def step(self, action):
+        _ = action
+        return self._rng.randrange(0, 100), 0.0, True, {}
+
+    def seed(self, seed: int) -> int:
+        self._rng.seed(seed)
+        return seed
+
 
 def test_async_vector_env_step():
     envs = AsyncVectorEnv([CountingEnv(), CountingEnv()])
@@ -46,3 +64,22 @@ def test_time_limit_vec_truncates():
     assert dones == [False, False]
     obs, rewards, dones, infos = envs.step([0, 0])
     assert dones == [True, True]
+
+
+def test_vector_env_seed_stable():
+    envs = VectorEnv([RandomObsEnv(), RandomObsEnv()])
+    envs.seed(123)
+    obs1 = envs.reset()
+    envs.seed(123)
+    obs2 = envs.reset()
+    assert obs1 == obs2
+
+
+def test_async_vector_env_seed_stable():
+    envs = AsyncVectorEnv([RandomObsEnv(), RandomObsEnv()])
+    envs.seed(321)
+    obs1 = envs.reset()
+    envs.seed(321)
+    obs2 = envs.reset()
+    assert obs1 == obs2
+    envs.close()

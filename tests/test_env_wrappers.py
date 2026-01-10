@@ -57,3 +57,13 @@ def test_action_repeat_accumulates_reward():
     obs, reward, terminated, truncated, _ = env.step(0)
     assert reward == 1.0
     assert terminated
+
+
+def test_wrappers_composable():
+    env = TimeLimit(FrameStack(CountingEnv(max_steps=5), num_frames=2), max_steps=2)
+    obs = env.reset()
+    assert len(obs) == 2
+    obs, reward, terminated, truncated, _ = env.step(0)
+    assert not truncated
+    obs, reward, terminated, truncated, _ = env.step(0)
+    assert truncated

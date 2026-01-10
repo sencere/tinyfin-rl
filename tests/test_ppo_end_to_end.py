@@ -32,3 +32,22 @@ def test_ppo_end_to_end_vector_env():
     metrics = trainer.train(updates=2)
     assert len(metrics) == 2
     assert all("return_mean" in record for record in metrics)
+
+
+def test_ppo_reaches_bandit_threshold():
+    backend = _backend_or_skip()
+    set_seed(0)
+    envs = VectorEnv([BanditEnv([0.1, 0.9]) for _ in range(8)])
+    policy = PPOPolicy(backend=backend, obs_dim=1, action_space=Discrete(2))
+    trainer = PPOTrainer(
+        env=envs.envs[0],
+        policy=policy,
+        vector_env=envs,
+        steps_per_batch=16,
+        epochs=2,
+        lr=0.1,
+        entropy_coef=0.0,
+        adv_norm=True,
+    )
+    metrics = trainer.train(updates=8)
+    assert metrics[-1]["return_mean"] > 0.6

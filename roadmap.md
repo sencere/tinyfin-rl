@@ -26,8 +26,8 @@
 - Common utilities: advantage normalization, entropy bonus, value loss, grad clipping.
 - Unit tests for returns/GAE/advantage math (C + optional Python harness).
 - Acceptance:
-  - [ ] PPO or A2C reaches a basic reward threshold on a reference env.
-  - [ ] GAE/returns math validated against a reference implementation.
+  - [x] PPO or A2C reaches a basic reward threshold on a reference env.
+  - [x] GAE/returns math validated against a reference implementation.
   - [x] Unit tests cover normalization/entropy/value loss paths.
 
 ### Milestone 2 — Off-Policy Essentials
@@ -36,9 +36,9 @@
 - Replay buffers: uniform, prioritized, n-step, sequence replay (C implementation).
 - Target networks, Polyak averaging, exploration noise helpers.
 - Acceptance:
-  - [ ] DQN or TD3 hits a basic reward threshold on a reference env.
-  - [ ] Replay buffer variants pass shape and sampling tests.
-  - [ ] Target network update logic tested (Polyak and hard update).
+  - [x] DQN or TD3 hits a basic reward threshold on a reference env.
+  - [x] Replay buffer variants pass shape and sampling tests.
+  - [x] Target network update logic tested (Polyak and hard update).
 
 ### Milestone 3 — Advanced & Specialized
 - Actor-critic variants: TRPO, ACKTR (optional).
@@ -59,8 +59,9 @@
 - C-first environment API with optional Python adapters (not primary).
 - Acceptance:
   - [ ] Wrappers are composable and tested (time-limit + frame stack).
-  - [ ] Vectorized envs run sync + async with stable seeding.
-  - [ ] One environment adapter demoed in C.
+  - [x] Wrappers are composable and tested (time-limit + frame stack).
+  - [x] Vectorized envs run sync + async with stable seeding.
+  - [x] One environment adapter demoed in C.
 
 ## Acceleration
 
@@ -115,3 +116,8 @@
 - Added raylib source submodule for direct builds without premake.
 - Added Q-learning trainer with metrics export and raylib autoplay.
 - Added env plugin API header with a grid plugin + loader example.
+- Added vector env wrappers (repeat + normalization) and a one-shot train/run script.
+- Added wrapper composition test and vector env seeding tests.
+- Added PPO reward-threshold test and GAE reference validation.
+- Added replay buffer variants with tests and DQN target update helpers.
+- Added DQN bandit end-to-end threshold test.
