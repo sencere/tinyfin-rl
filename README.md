@@ -42,6 +42,52 @@ This library is intended to be used as a project foundation rather than a small 
 - `docs/c_api.md` C API overview
 - `env/first-env/README.md` raylib gridworld + training notes
 
+## Quickstart (C examples)
+
+Build the C examples and run the deterministic trainer smoke test:
+
+```bash
+cd tinyfin-rl
+make
+./build/trainer_smoke
+```
+
+## Raylib env (train + autoplay)
+
+Train the Q-learning policy and watch it in the raylib viewer:
+
+```bash
+cd tinyfin-rl/env/first-env
+make train_q
+./train_q --episodes 2000 --report 200 --out q_table.csv
+make
+./first_env
+```
+
+Press `P` to toggle autoplay and `L` to reload `q_table.csv`.
+
+## Python scaffolding (PPO/A2C/DQN)
+
+The Python trainers require Tinyfin. Point `PYTHONPATH` at `tinyfin/python`:
+
+```bash
+export PYTHONPATH=/path/to/tinyfin/python
+python examples/ppo_bandit.py
+python examples/a2c_bandit.py
+```
+
+## C plugin loader
+
+Build and run the plugin loader against the grid env:
+
+```bash
+cd tinyfin-rl
+make env_plugin_loader
+cd env/first-env
+make libfirst_env.so
+../../build/env_plugin_loader ./libfirst_env.so
+```
+
 ## C backend and Tinyfin
 
 Tinyfin lives in a separate repository and is included here as a submodule. The key requirement is a stable C-facing ABI. The `CBackend` loader is a placeholder for that integration.

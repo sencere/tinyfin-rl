@@ -121,3 +121,4 @@
 - Added PPO reward-threshold test and GAE reference validation.
 - Added replay buffer variants with tests and DQN target update helpers.
 - Added DQN bandit end-to-end threshold test.
+- Added quickstart docs for C examples, raylib env, Python scaffolding, and plugin loader.
