@@ -141,3 +141,4 @@
 - Added checkpoint helpers, eval harness, and experiment logger.
 - Added PPO/DQN walkthrough docs.
 - Added TD3 scaffold with continuous bandit env + smoke test.
+- Added Gymnasium/PettingZoo adapters and a D3 dashboard server.

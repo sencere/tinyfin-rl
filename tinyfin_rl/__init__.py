@@ -24,6 +24,7 @@ from .factory import make, emulate
 from .checkpoint import save_policy_checkpoint, load_policy_checkpoint, save_q_checkpoint, load_q_checkpoint
 from .eval import evaluate_policy
 from .experiment import ExperimentLogger, run_experiment
+from .adapters import GymnasiumEnv, make_gymnasium, ParallelPettingZooEnv, make_pettingzoo_parallel
 from .visualize import Visualizer, RaylibGridworldVisualizer
 
 __all__ = [
@@ -76,6 +77,10 @@ __all__ = [
     "evaluate_policy",
     "ExperimentLogger",
     "run_experiment",
+    "GymnasiumEnv",
+    "make_gymnasium",
+    "ParallelPettingZooEnv",
+    "make_pettingzoo_parallel",
     "VectorEnv",
     "AsyncVectorEnv",
     "RolloutBatch",

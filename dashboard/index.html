@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tinyfin-rl dashboard</title>
+    <style>
+      body { font-family: "Courier New", monospace; margin: 24px; background: #f7f3ef; color: #1b1b1b; }
+      h1 { font-size: 20px; margin-bottom: 12px; }
+      #chart { border: 2px solid #222; padding: 12px; background: #fff; }
+      .meta { margin-top: 12px; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <h1>tinyfin-rl run dashboard</h1>
+    <div id="chart"></div>
+    <div class="meta" id="meta"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+    <script>
+      const chartEl = d3.select("#chart");
+      const width = 640;
+      const height = 240;
+      const margin = { top: 10, right: 10, bottom: 30, left: 40 };
+      const svg = chartEl.append("svg").attr("width", width).attr("height", height);
+
+      function render(records) {
+        svg.selectAll("*").remove();
+        if (!records.length) {
+          svg.append("text").attr("x", 10).attr("y", 20).text("No metrics yet.");
+          return;
+        }
+        const x = d3.scaleLinear()
+          .domain([0, records.length - 1])
+          .range([margin.left, width - margin.right]);
+        const y = d3.scaleLinear()
+          .domain(d3.extent(records, d => d.return_mean ?? d.return ?? 0))
+          .nice()
+          .range([height - margin.bottom, margin.top]);
+        const line = d3.line()
+          .x((d, i) => x(i))
+          .y(d => y(d.return_mean ?? d.return ?? 0));
+
+        svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x));
+        svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y));
+        svg.append("path")
+          .datum(records)
+          .attr("fill", "none")
+          .attr("stroke", "#0c2d48")
+          .attr("stroke-width", 2)
+          .attr("d", line);
+      }
+
+      async function load() {
+        const res = await fetch("/api/metrics");
+        const data = await res.json();
+        render(data.records || []);
+        document.getElementById("meta").textContent = `records=${(data.records || []).length}`;
+      }
+
+      load();
+      setInterval(load, 2000);
+    </script>
+  </body>
+</html>

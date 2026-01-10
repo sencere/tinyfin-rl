@@ -43,6 +43,7 @@ This library is intended to be used as a project foundation rather than a small 
 - `docs/trpo.md` minimal TRPO placeholder
 - `docs/ppo_walkthrough.md` PPO walkthrough
 - `docs/dqn_walkthrough.md` DQN walkthrough
+- `docs/adapters.md` Gymnasium + PettingZoo adapters
 - `env/first-env/README.md` raylib gridworld + training notes
 
 ## Quickstart (C examples)
@@ -167,6 +168,17 @@ out = evaluate_policy(env, policy, episodes=5, seed=123)
 print(out["return_mean"])
 PY
 ```
+
+## Dashboard (D3)
+
+Serve a simple D3 dashboard for JSONL metrics:
+
+```bash
+cd tinyfin-rl
+python scripts/dashboard_server.py --metrics runs/ppo_metrics.jsonl --port 8000
+```
+
+Note: the dashboard loads D3 from a CDN; for offline use, vendor a local copy in `dashboard/`.
 
 ## C backend and Tinyfin
 
