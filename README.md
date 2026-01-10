@@ -40,6 +40,7 @@ This library is intended to be used as a project foundation rather than a small 
 - `docs/first_algorithm.md` REINFORCE sketch
 - `docs/api_conventions.md` API expectations
 - `docs/c_api.md` C API overview
+- `docs/trpo.md` minimal TRPO placeholder
 - `env/first-env/README.md` raylib gridworld + training notes
 
 ## Quickstart (C examples)
@@ -74,6 +75,8 @@ The Python trainers require Tinyfin. Point `PYTHONPATH` at `tinyfin/python`:
 export PYTHONPATH=/path/to/tinyfin/python
 python examples/ppo_bandit.py
 python examples/a2c_bandit.py
+python examples/bc_bandit.py
+python examples/trpo_bandit.py
 ```
 
 ## C plugin loader

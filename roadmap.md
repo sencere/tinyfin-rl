@@ -46,9 +46,9 @@
 - Imitation + RLHF hooks: dataset loaders, preference model interface.
 - Multi-agent primitives: shared policy, independent learners, centralized critic hooks.
 - Acceptance:
-  - [ ] One offline baseline (BC or CQL) runs end-to-end on a toy dataset.
-  - [ ] Multi-agent API can train a simple shared-policy task.
-  - [ ] Advanced algo added with minimal doc + example.
+  - [x] One offline baseline (BC or CQL) runs end-to-end on a toy dataset.
+  - [x] Multi-agent API can train a simple shared-policy task.
+  - [x] Advanced algo added with minimal doc + example.
 
 ## Product Surface
 
@@ -121,4 +121,11 @@
 - Added PPO reward-threshold test and GAE reference validation.
 - Added replay buffer variants with tests and DQN target update helpers.
 - Added DQN bandit end-to-end threshold test.
+- Added Double DQN and prioritized replay support in DQN trainer.
+- Added dueling DQN network and target update tests.
 - Added quickstart docs for C examples, raylib env, Python scaffolding, and plugin loader.
+- Added offline dataset loader stubs (transitions + preferences) with tests.
+- Added behavior cloning trainer + bandit example/test.
+- Added multi-agent API stubs with tests.
+- Added minimal TRPO-style trainer with doc + example.
+- Added shared-policy trainer for multi-agent bandits.
