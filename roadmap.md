@@ -147,6 +147,8 @@
 - Added SAC trainer (Python) with continuous bandit example.
 - Added Gymnasium CartPole PPO example and PettingZoo coop pong random agent.
 - Expanded adapters docs and factory helpers for Gymnasium/PettingZoo.
+- Added SAC walkthrough doc (continuous bandit).
+- Added SAC Pendulum example (scalarized) and SAC smoke test.
 
 ## Milestones Done
 - Milestone 0 — Foundations (accepted).
@@ -159,4 +161,3 @@
 ## Next Steps
 - Expand environment catalog: Gymnasium wrappers + PettingZoo suites + more in-repo C envs.
 - Pair each environment with an algorithm example (PPO/DQN/TD3/SAC).
-- Add SAC walkthrough doc + reference example (e.g., Pendulum).

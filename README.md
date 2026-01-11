@@ -43,6 +43,7 @@ This library is intended to be used as a project foundation rather than a small 
 - `docs/trpo.md` minimal TRPO placeholder
 - `docs/ppo_walkthrough.md` PPO walkthrough
 - `docs/dqn_walkthrough.md` DQN walkthrough
+- `docs/sac_walkthrough.md` SAC walkthrough
 - `docs/adapters.md` Gymnasium + PettingZoo adapters
 - `env/first-env/README.md` raylib gridworld + training notes
 - `env/lineworld/README.md` headless lineworld + Q-learning
@@ -98,6 +99,7 @@ python examples/sac_bandit.py
 python examples/gym_cartpole_dqn.py
 python examples/gym_cartpole_ppo.py
 python examples/gym_pendulum_td3.py
+python examples/gym_pendulum_sac.py
 python examples/pettingzoo_coop_pong_random.py
 ```
 
