@@ -14,10 +14,17 @@ class Visualizer:
 
 class RaylibGridworldVisualizer(Visualizer):
     def __init__(self, cell_size: int = 64, fps: int = 30, title: str = "Tinyfin-RL Gridworld"):
+        rl = None
         try:
-            import pyray as rl
-        except ImportError as exc:
-            raise ImportError("pyray is required for Raylib visualization") from exc
+            import pyray as rl  # type: ignore
+        except ImportError:
+            rl = None
+        if rl is None or not hasattr(rl, "init_window"):
+            try:
+                from .raylib_ctypes import rl as ctypes_rl
+            except Exception as exc:
+                raise ImportError("raylib bindings not available; build raylib-src/src or install pyray") from exc
+            rl = ctypes_rl
         self.rl = rl
         self.cell_size = cell_size
         self.fps = fps

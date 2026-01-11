@@ -34,6 +34,8 @@ class SoftmaxPolicy(Policy):
         logits = self.logits(int(observation))
         probs = self.backend.softmax(logits)
         p = probs.to_numpy().reshape(-1)
+        if np.any(np.isnan(p)) or p.sum() <= 0:
+            p = np.ones_like(p) / len(p)
         return int(np.random.choice(len(p), p=p))
 
     def log_prob(self, observation: int, action: int):
@@ -82,6 +84,8 @@ class PPOPolicy(Policy):
         logits = self.logits(int(observation))
         probs = self.backend.softmax(logits)
         p = probs.to_numpy().reshape(-1)
+        if np.any(np.isnan(p)) or p.sum() <= 0:
+            p = np.ones_like(p) / len(p)
         return int(np.random.choice(len(p), p=p))
 
     def log_prob(self, observation: int, action: int):

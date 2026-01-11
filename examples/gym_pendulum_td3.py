@@ -22,12 +22,16 @@ class ScalarObsEnv:
 
     def step(self, action):
         obs, reward, done, info = self.env.step([action])
+        if hasattr(self.env, "render"):
+            self.env.render()
+        elif hasattr(self.env, "env") and hasattr(self.env.env, "render"):
+            self.env.env.render()
         return float(obs[0]), reward, done, info
 
 
 def main():
     set_seed(0)
-    base_env = make_gymnasium("Pendulum-v1")
+    base_env = make_gymnasium("Pendulum-v1", render_mode="human")
     env = ScalarObsEnv(base_env)
     backend = TinyfinBackend(device="cpu")
     actor = Actor(backend=backend)

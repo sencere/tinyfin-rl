@@ -18,6 +18,8 @@ class TinyfinBackend:
     def __post_init__(self) -> None:
         if tf is None:
             raise RuntimeError("tinyfin is not available; set PYTHONPATH to tinyfin/python")
+        if not hasattr(tf, "Tensor"):
+            raise RuntimeError("tinyfin Python bindings not found; set PYTHONPATH to tinyfin/python")
         self.tf = tf
         if hasattr(tf, "backend_set"):
             target = "cuda" if self.device == "cuda" else "cpu"
@@ -64,5 +66,7 @@ class TinyfinBackend:
         for p in params:
             grad = p.grad_numpy()
             if grad is None:
+                continue
+            if not np.isfinite(grad).all():
                 continue
             p.numpy_view()[:] = p.numpy_view() - lr * grad
