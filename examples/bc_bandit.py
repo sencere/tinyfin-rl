@@ -1,3 +1,6 @@
+from _bootstrap import setup_path
+setup_path()
+
 from tinyfin_rl.backends import TinyfinBackend
 from tinyfin_rl.policy_tinyfin import SoftmaxPolicy
 from tinyfin_rl.algos.bc import BCTrainer

@@ -1,3 +1,6 @@
+from _bootstrap import setup_path
+setup_path()
+
 import argparse
 import json
 from pathlib import Path

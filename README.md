@@ -103,6 +103,8 @@ python examples/gym_pendulum_sac.py
 python examples/pettingzoo_coop_pong_random.py
 ```
 
+Examples auto-add the repo root to `sys.path`, so you can also run them from `examples/` without setting `PYTHONPATH` to the repo.
+
 Gymnasium/PettingZoo adapters require those packages to be installed.
 
 ## C plugin loader

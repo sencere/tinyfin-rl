@@ -31,7 +31,7 @@ Wrap a PettingZoo parallel env:
 ```bash
 python - <<'PY'
 from tinyfin_rl.adapters.pettingzoo_adapter import make_pettingzoo_parallel
-env = make_pettingzoo_parallel("butterfly/coop_pong_v5")
+env = make_pettingzoo_parallel("butterfly/cooperative_pong_v5")
 obs, info = env.reset()
 print(list(obs.keys())[:2])
 PY

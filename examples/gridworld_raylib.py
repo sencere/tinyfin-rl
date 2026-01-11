@@ -1,3 +1,6 @@
+from _bootstrap import setup_path
+setup_path()
+
 from tinyfin_rl import Agent, GridworldEnv, RandomPolicy, RaylibGridworldVisualizer, Trainer
 
 

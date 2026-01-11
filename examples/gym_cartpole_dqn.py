@@ -1,3 +1,6 @@
+from _bootstrap import setup_path
+setup_path()
+
 from tinyfin_rl.adapters.gymnasium_adapter import make_gymnasium
 from tinyfin_rl.algos.dqn import DQNTrainer, QNetwork, hard_update
 from tinyfin_rl.backends import TinyfinBackend
