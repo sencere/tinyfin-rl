@@ -4,9 +4,21 @@ from .envs import BanditEnv, GridworldEnv, Env
 from .vector_env import VectorEnv
 
 
-def make(name: str, num_envs: int = 1) -> Env | VectorEnv:
+def make(name: str, num_envs: int = 1) -> Env | VectorEnv | object:
     name = name.lower()
-    if name == "bandit":
+    if name.startswith("gym:") or name.startswith("gymnasium:"):
+        gym_name = name.split(":", 1)[1]
+
+        def _make():
+            from .adapters.gymnasium_adapter import make_gymnasium
+            return make_gymnasium(gym_name)
+    elif name.startswith("pettingzoo:"):
+        if num_envs > 1:
+            raise ValueError("pettingzoo envs do not support num_envs > 1")
+        pz_name = name.split(":", 1)[1]
+        from .adapters.pettingzoo_adapter import make_pettingzoo_parallel
+        return make_pettingzoo_parallel(pz_name)
+    elif name == "bandit":
         def _make():
             return BanditEnv([0.1, 0.5, 0.9])
     elif name == "gridworld":

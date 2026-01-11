@@ -1,7 +1,7 @@
 import random
 from typing import Dict, Tuple
 
-from .spaces import Discrete, Space
+from .spaces import Discrete, Space, Box
 
 
 class Env:

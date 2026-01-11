@@ -7,7 +7,7 @@ from .policy_tinyfin import SoftmaxPolicy, PPOPolicy
 from .agent import Agent
 from .replay import ReplayBuffer
 from .trainer import Trainer
-from .algos import ReinforceTrainer, PPOTrainer, A2CTrainer, DQNTrainer, DuelingQNetwork, BCTrainer, TRPOTrainer, SharedPolicyTrainer, TD3Trainer, Actor, Critic
+from .algos import ReinforceTrainer, PPOTrainer, A2CTrainer, DQNTrainer, DuelingQNetwork, BCTrainer, TRPOTrainer, SharedPolicyTrainer, TD3Trainer, Actor, Critic, SACTrainer, SACActor, SACCritic
 from .vector_env import VectorEnv, AsyncVectorEnv
 from .rollout import RolloutBatch, rollout_vector, rollout_vector_prealloc, rollout_vector_zero_copy
 from .async_rollout import AsyncRolloutRunner
@@ -51,6 +51,9 @@ __all__ = [
     "TD3Trainer",
     "Actor",
     "Critic",
+    "SACTrainer",
+    "SACActor",
+    "SACCritic",
     "Space",
     "Discrete",
     "Box",

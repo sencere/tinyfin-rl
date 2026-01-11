@@ -143,6 +143,10 @@
 - Added TD3 scaffold with continuous bandit env + smoke test.
 - Added Gymnasium/PettingZoo adapters and a D3 dashboard server.
 - Added Gymnasium CartPole (DQN) and Pendulum (TD3) example scripts.
+- Added headless lineworld C env with Q-learning trainer + plugin build.
+- Added SAC trainer (Python) with continuous bandit example.
+- Added Gymnasium CartPole PPO example and PettingZoo coop pong random agent.
+- Expanded adapters docs and factory helpers for Gymnasium/PettingZoo.
 
 ## Milestones Done
 - Milestone 0 — Foundations (accepted).
@@ -155,3 +159,4 @@
 ## Next Steps
 - Expand environment catalog: Gymnasium wrappers + PettingZoo suites + more in-repo C envs.
 - Pair each environment with an algorithm example (PPO/DQN/TD3/SAC).
+- Add SAC walkthrough doc + reference example (e.g., Pendulum).

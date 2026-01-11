@@ -45,6 +45,7 @@ This library is intended to be used as a project foundation rather than a small 
 - `docs/dqn_walkthrough.md` DQN walkthrough
 - `docs/adapters.md` Gymnasium + PettingZoo adapters
 - `env/first-env/README.md` raylib gridworld + training notes
+- `env/lineworld/README.md` headless lineworld + Q-learning
 
 ## Quickstart (C examples)
 
@@ -70,6 +71,16 @@ make
 
 Press `P` to toggle autoplay and `L` to reload `q_table.csv`.
 
+## Headless env (lineworld)
+
+Train a Q-learning policy in a simple 1D lineworld:
+
+```bash
+cd tinyfin-rl/env/lineworld
+make
+./train_q --episodes 2000 --report 200 --out q_table.csv
+```
+
 ## Python scaffolding (PPO/A2C/DQN)
 
 The Python trainers require Tinyfin. Point `PYTHONPATH` at `tinyfin/python`:
@@ -83,8 +94,11 @@ python examples/trpo_bandit.py
 python examples/ppo_checkpoint.py
 python examples/dqn_checkpoint.py
 python examples/td3_bandit.py
+python examples/sac_bandit.py
 python examples/gym_cartpole_dqn.py
+python examples/gym_cartpole_ppo.py
 python examples/gym_pendulum_td3.py
+python examples/pettingzoo_coop_pong_random.py
 ```
 
 Gymnasium/PettingZoo adapters require those packages to be installed.
