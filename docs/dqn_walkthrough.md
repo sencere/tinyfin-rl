@@ -1,21 +1,15 @@
-# DQN Walkthrough (Bandit)
+# DQN Walkthrough
 
-This walkthrough runs the DQN trainer on a simple bandit environment.
-
-1) Set Tinyfin on PYTHONPATH:
+Use the C trainer with a C env plugin:
 
 ```bash
-export PYTHONPATH=/path/to/tinyfin/python
+cd tinyfin-rl
+make train_dqn
+./build/train_dqn --env environments/lineworld/liblineworld.so --obs-n 7 --action-n 2
+./build/train_dqn --env environments/lineworld/liblineworld.so --obs-n 7 --action-n 2 --save runs/lineworld_dqn
+./build/train_dqn --env environments/lineworld/liblineworld.so --obs-n 7 --action-n 2 --load runs/lineworld_dqn --eval-steps 500
+make play_dqn
+./build/play_dqn lineworld --load runs/lineworld_dqn --fps 10
 ```
 
-2) Run the DQN example:
-
-```bash
-python examples/dqn_checkpoint.py
-```
-
-3) (Optional) run the DQN bandit test:
-
-```bash
-pytest tests/test_dqn_end_to_end.py
-```
+Python can call the same C trainer via bindings (see `docs/python_bindings.md`).

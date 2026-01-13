@@ -64,12 +64,40 @@ int main(void) {
 }
 ```
 
-See `examples/c/` for full examples.
+See `environments/first-env/view.c` and `environments/lineworld/view.c` for renderer-driven examples.
+
+## plugin_viewer
+
+`environments/common/plugin_viewer` loads an env plugin + renderer pair and steps with random actions.
+You can pass an env directory name (uses `viewer.conf`) or explicit shared library paths.
+
+```bash
+cd environments/common
+make
+./plugin_viewer lineworld --fps 10
+```
+
+`--fps` (or `TFRL_RENDER_FPS` / `viewer.conf: fps`) throttles the render loop.
 
 ## Env plugins
 
 `tinyfin_rl/rl_plugin.h` defines a minimal plugin interface for environments. A plugin exposes
 `tfrl_env_plugin_get()` which returns a struct with `create()` and `destroy()` hooks.
 
-See `env/first-env/plugin_grid.c` for a minimal plugin implementation and
-`examples/c/env_plugin_loader.c` for a loader that executes a simple trainer loop.
+See `environments/first-env/plugin_grid.c` for a minimal plugin implementation.
+
+## Renderer ABI
+
+`tinyfin_rl/rl_render.h` defines the renderer ABI used by C-only raylib renderers. Renderers receive a `tfrl_value` so they can handle discrete or buffer observations.
+
+## Trainer ABI
+
+`tinyfin_rl/rl_train.h` defines C-first DQN/PPO trainers backed by Tinyfin.
+
+## Render snapshots (planned)
+
+`tinyfin_rl/rl_render_snapshot.h` defines an optional, renderer-agnostic snapshot ABI.
+
+## Env metadata
+
+`tinyfin_rl/rl_env_info.h` describes optional metadata (`tfrl_env_metadata_get`) for action/observation space introspection.

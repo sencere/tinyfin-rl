@@ -4,11 +4,11 @@ Tinyfin-RL is intended to be embedded into a C-first project with a tensor backe
 
 ## Local usage
 
-Use the Python modules as temporary scaffolding while the C modules are built. The examples are placeholders and will be replaced by C-based samples.
+Python bindings load C environments through the plugin ABI; C envs remain the source of truth.
 
 ## Optional dependencies
 
-- Raylib visualization is intended for C integration.
+- Raylib visualization is intended for C integration (shared library via `raylib-src` or system raylib).
 - Gymnasium is only used by temporary Python stubs.
 
 ## Tinyfin C backend
@@ -22,3 +22,28 @@ export TINYFIN_LIB=/path/to/libtinyfin.so
 Then use `CBackend` to load symbols.
 
 This repository includes the Tinyfin submodule in `tinyfin/` for local builds when the C build system is added.
+
+## Raylib shared library (Linux)
+
+If you are using the bundled `raylib-src`, build the shared library:
+
+```bash
+cd tinyfin-rl/raylib-src/src
+make RAYLIB_LIBTYPE=SHARED
+```
+
+Then build the environment renderers (example):
+
+```bash
+cd tinyfin-rl/environments/first-env
+make libfirst_env_render.so
+```
+
+## C trainer library
+
+Build the Tinyfin-backed DQN/PPO trainers:
+
+```bash
+cd tinyfin-rl
+make tfrl_train
+```

@@ -1,69 +1,61 @@
 # tinyfin-rl Roadmap
 
-**Goal:** A modular, C-first RL library with a pluggable tensor backend (Tinyfin or alternatives), fast simulation, and solid algorithm coverage. Python is scaffolding, not the product.
+**Goal:** A modular, C-first RL library with a pluggable tensor backend (Tinyfin or alternatives), fast simulation, and solid algorithm coverage. Python is a thin binding layer, not the source of truth.
 
 ## Immediate Focus (1 sprint)
-- Lock C API & ABI (`Env`, `Agent`, `Trainer`, tensor backend).
-- Ship one on-policy algorithm (PPO or A2C) end-to-end in C.
-- Establish a baseline vectorized rollout benchmark.
+- Lock C API & ABI (`Env`, plugin ABI, renderer ABI, metadata ABI).
+- Stabilize the raylib build pipeline across environments.
+- Provide a C trainer + renderer sample per env.
+- Finalize Python bindings for C envs (introspection + adapter).
 
 ## Core Milestones
 
-### 0 — Foundations (Done)
+### 0 — Foundations (In Progress)
 - C-first project skeleton, build, logging, deterministic seeding.
 - Core C APIs: envs, agents, policies, buffers, trainers.
 - Tensor backend ABI (Tinyfin-compatible).
-- Minimal visualization hooks.
-- **Result:** Headers compile, backend exercised, deterministic C example runs.
+- Env plugin ABI (`rl_plugin.h`) and renderer ABI (`rl_render.h`).
+- **Result:** C env plugins build and render via raylib.
 
-### 1 — On-Policy RL (Done)
-- REINFORCE / A2C / PPO (+ GAE).
-- Advantage normalization, entropy bonus, value loss, grad clipping.
-- Unit tests for returns & GAE math.
-- **Result:** PPO/A2C hits reward thresholds on reference envs.
+### 1 — Python Bindings (In Progress)
+- `ctypes` bindings for env plugins and renderers.
+- Env metadata introspection (`rl_env_info.h`).
+- **Result:** Python can load C envs and render via C-only raylib.
 
-### 2 — Off-Policy RL (Done)
-- DQN family (Double, Dueling, Prioritized).
-- Continuous control (TD3, SAC baseline).
-- Replay buffers (uniform, prioritized, n-step).
-- Target networks & Polyak updates.
-- **Result:** DQN/TD3 pass end-to-end reward checks.
+### 2 — C Trainers (Planned)
+- Minimal C trainers for on-policy and off-policy loops.
+- Reference trainer targets each env plugin.
+- **Result:** End-to-end C training without Python.
 
-### 3 — Advanced & Specialized (Done)
-- TRPO-style actor–critic.
-- Offline RL baseline (BC / CQL).
-- Multi-agent primitives (shared policy, centralized critic hooks).
-- **Result:** Advanced algorithm runs with example + docs.
+### 3 — Algorithms (Planned)
+- Move core algorithm implementations to C or provide clear C bindings.
+- Keep Python trainers as optional wrappers.
+- **Result:** C-first training is the default path.
 
 ## Product & Performance
 
-### 4 — Environments & Simulation (Done)
-- Env wrappers (time-limit, frame stack, normalization, action repeat).
-- Vectorized envs (sync + async, deterministic seeding).
-- C-first env API with optional adapters.
-- **Result:** Composable wrappers and vector envs validated.
+### 4 — Environments & Simulation (In Progress)
+- Expand in-repo C environments.
+- Pair each env with a renderer + viewer app.
+- **Result:** Env catalog with C viewer + plugin build.
 
-### 5 — Performance & Vectorization (Done)
-- Vectorized rollout core with preallocated, zero-copy buffers.
-- Async stepping pipelines and worker pools.
-- Flatten/unflatten emulation helpers.
+### 5 — Performance & Vectorization (Planned)
+- Vectorized rollout core in C.
 - Benchmarks for env + inference throughput.
 - **Result:** Steps/sec targets met and benchmark-gated.
 
-### 6 — Usability & Reliability (Done)
-- Experiment manager (checkpoints, resume, sweeps).
-- Evaluation harness with deterministic seeds.
-- Core docs & walkthroughs (PPO, DQN, SAC).
-- **Result:** Reproducible training across multiple algorithms.
+### 6 — Usability & Reliability (Planned)
+- Reproducible training via C trainers.
+- Core docs and walkthroughs updated to C-first flow.
+- **Result:** C-first workflows documented end-to-end.
 
 ## Current State (Summary)
-- C API stabilized with multiple working C examples.
-- PPO, A2C, DQN, TD3, SAC available (C-first focus, Python where needed).
-- Vectorized rollouts, async execution, and benchmarks in place.
-- Env plugins, wrappers, Gymnasium/PettingZoo adapters supported.
-- Docs and walkthroughs cover core workflows.
+- C env plugins and C renderers are the primary path.
+- C trainer ABI exists with DQN/PPO backed by Tinyfin.
+- Python can load C envs and call C trainers via bindings.
+- C viewers exist for each in-repo environment.
 
 ## Next Steps
-- Expand in-repo C environments.
-- Pair each env with a reference algorithm example.
-- Reduce Python surface area further in favor of C.
+- Add C trainer loop examples and migrate algorithm walkthroughs.
+- Expand env metadata and space support beyond discrete.
+- Stabilize raylib toolchain on all supported platforms.

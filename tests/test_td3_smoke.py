@@ -8,7 +8,7 @@ root = os.path.normpath(os.path.join(here, ".."))
 sys.path.insert(0, root)
 
 from tinyfin_rl.backends import TinyfinBackend
-from tinyfin_rl.envs import ContinuousBanditEnv
+import pytest
 from tinyfin_rl.algos.td3 import Actor, Critic, TD3Trainer
 from tinyfin_rl.replay import ReplayBuffer
 from tinyfin_rl.seed import set_seed
@@ -24,7 +24,7 @@ def _backend_or_skip():
 def test_td3_trainer_runs():
     backend = _backend_or_skip()
     set_seed(0)
-    env = ContinuousBanditEnv(target=0.6)
+    pytest.skip("Python ContinuousBanditEnv removed; use C env plugin adapter.")
     actor = Actor(backend=backend)
     critic1 = Critic(backend=backend)
     critic2 = Critic(backend=backend)

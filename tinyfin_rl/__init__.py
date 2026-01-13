@@ -1,9 +1,15 @@
 """Tinyfin-RL: lightweight RL primitives built around Tinyfin tensors."""
 
 from .config import Config
-from .envs import Env, BanditEnv, GridworldEnv, ContinuousBanditEnv
+from .envs import Env
 from .policy import Policy, RandomPolicy
-from .policy_tinyfin import SoftmaxPolicy, PPOPolicy
+try:
+    from .policy_tinyfin import SoftmaxPolicy, PPOPolicy
+    _HAS_TINYFIN = True
+except OSError:
+    SoftmaxPolicy = None  # type: ignore[assignment]
+    PPOPolicy = None  # type: ignore[assignment]
+    _HAS_TINYFIN = False
 from .agent import Agent
 from .replay import ReplayBuffer
 from .trainer import Trainer
@@ -16,7 +22,10 @@ from .env_wrappers import ActionRepeat, FrameStack, NormalizeObservation, Normal
 from .vector_wrappers import ActionRepeatVec, NormalizeObservationVec, NormalizeRewardVec, TimeLimitVec
 from .seed import set_seed
 from .backend_c import CBackend
-from .backends import TinyfinBackend
+try:
+    from .backends import TinyfinBackend
+except OSError:
+    TinyfinBackend = None  # type: ignore[assignment]
 from .datasets import Transition, PreferencePair, load_transition_csv, load_preference_csv, iter_batch
 from .multi_agent import SharedPolicyMultiAgent, IndependentMultiAgent
 from .emulation import EmulationSpec, flatten, unflatten, infer_spec
@@ -25,14 +34,10 @@ from .checkpoint import save_policy_checkpoint, load_policy_checkpoint, save_q_c
 from .eval import evaluate_policy
 from .experiment import ExperimentLogger, run_experiment
 from .adapters import GymnasiumEnv, make_gymnasium, ParallelPettingZooEnv, make_pettingzoo_parallel
-from .visualize import Visualizer, RaylibGridworldVisualizer
 
 __all__ = [
     "Config",
     "Env",
-    "BanditEnv",
-    "GridworldEnv",
-    "ContinuousBanditEnv",
     "Policy",
     "RandomPolicy",
     "SoftmaxPolicy",
@@ -100,6 +105,4 @@ __all__ = [
     "ActionRepeatVec",
     "NormalizeObservationVec",
     "NormalizeRewardVec",
-    "Visualizer",
-    "RaylibGridworldVisualizer",
 ]

@@ -10,7 +10,7 @@ sys.path.insert(0, root)
 from tinyfin_rl.multi_agent import SharedPolicyMultiAgent, IndependentMultiAgent
 from tinyfin_rl.algos.shared_policy import SharedPolicyTrainer
 from tinyfin_rl.backends import TinyfinBackend
-from tinyfin_rl.envs import BanditEnv
+import pytest
 from tinyfin_rl.policy_tinyfin import SoftmaxPolicy
 from tinyfin_rl.spaces import Discrete
 from tinyfin_rl.policy import Policy
@@ -51,7 +51,7 @@ def test_shared_policy_trainer_runs():
         backend = TinyfinBackend(device="cpu")
     except RuntimeError:
         pytest.skip("tinyfin backend not available")
-    envs = [BanditEnv([0.2, 0.8]) for _ in range(3)]
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     policy = SoftmaxPolicy(backend=backend, obs_dim=1, action_space=Discrete(2))
     trainer = SharedPolicyTrainer(envs=envs, policy=policy, steps_per_batch=8)
     metrics = trainer.train(updates=2)

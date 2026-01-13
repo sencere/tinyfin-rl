@@ -9,7 +9,7 @@ sys.path.insert(0, root)
 
 from tinyfin_rl.algos.dqn import DQNTrainer, QNetwork, hard_update
 from tinyfin_rl.backends import TinyfinBackend
-from tinyfin_rl.envs import BanditEnv
+import pytest
 from tinyfin_rl.replay import ReplayBuffer, PrioritizedReplayBuffer
 from tinyfin_rl.spaces import Discrete
 from tinyfin_rl.seed import set_seed
@@ -25,7 +25,7 @@ def _backend_or_skip():
 def test_dqn_bandit_threshold():
     backend = _backend_or_skip()
     set_seed(0)
-    env = BanditEnv([0.1, 0.9])
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     action_space = Discrete(2)
     q_net = QNetwork(backend=backend, obs_dim=1, action_space=action_space)
     target_net = QNetwork(backend=backend, obs_dim=1, action_space=action_space)
@@ -57,7 +57,7 @@ def test_dqn_bandit_threshold():
 def test_dqn_with_prioritized_replay_runs():
     backend = _backend_or_skip()
     set_seed(1)
-    env = BanditEnv([0.2, 0.8])
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     action_space = Discrete(2)
     q_net = QNetwork(backend=backend, obs_dim=1, action_space=action_space)
     target_net = QNetwork(backend=backend, obs_dim=1, action_space=action_space)

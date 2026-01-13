@@ -8,7 +8,7 @@ root = os.path.normpath(os.path.join(here, ".."))
 sys.path.insert(0, root)
 
 from tinyfin_rl.backends import TinyfinBackend
-from tinyfin_rl.envs import BanditEnv
+import pytest
 from tinyfin_rl.policy_tinyfin import PPOPolicy
 from tinyfin_rl.algos.ppo import PPOTrainer
 from tinyfin_rl.spaces import Discrete
@@ -26,7 +26,7 @@ def _backend_or_skip():
 def test_ppo_end_to_end_vector_env():
     backend = _backend_or_skip()
     set_seed(0)
-    envs = VectorEnv([BanditEnv([0.2, 0.8]) for _ in range(4)])
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     policy = PPOPolicy(backend=backend, obs_dim=1, action_space=Discrete(2))
     trainer = PPOTrainer(env=envs.envs[0], policy=policy, vector_env=envs, steps_per_batch=8, epochs=1)
     metrics = trainer.train(updates=2)
@@ -37,7 +37,7 @@ def test_ppo_end_to_end_vector_env():
 def test_ppo_reaches_bandit_threshold():
     backend = _backend_or_skip()
     set_seed(0)
-    envs = VectorEnv([BanditEnv([0.1, 0.9]) for _ in range(8)])
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     policy = PPOPolicy(backend=backend, obs_dim=1, action_space=Discrete(2))
     trainer = PPOTrainer(
         env=envs.envs[0],

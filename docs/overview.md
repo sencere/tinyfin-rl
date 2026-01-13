@@ -1,6 +1,6 @@
 # tinyfin-rl overview
 
-Tinyfin-RL is a modular reinforcement learning toolkit aimed at C-first usage with a tensor backend (Tinyfin or an alternative). The API layers are intentionally small so they can map cleanly to C modules and bindings.
+Tinyfin-RL is a modular reinforcement learning toolkit aimed at C-first usage with a tensor backend (Tinyfin or an alternative). The API layers are intentionally small so they can map cleanly to C modules and Python bindings.
 
 ## Core API
 
@@ -13,7 +13,11 @@ Tinyfin-RL is a modular reinforcement learning toolkit aimed at C-first usage wi
 
 ## Visualization
 
-Raylib visualization is expected to be implemented in C. The current Python visualizer is a temporary placeholder so the training loop can stay modular while the C modules are built.
+Raylib visualization is implemented in C. Python can call the C renderers via `ctypes`, but there are no Python-side raylib bindings.
+
+## Env metadata
+
+Environment plugins may expose `tfrl_env_metadata_get()` (see `tinyfin_rl/rl_env_info.h`) for action/observation space introspection in Python.
 
 ## C backend integration
 
@@ -21,7 +25,13 @@ The `CBackend` class in `tinyfin_rl/backend_c.py` is a placeholder for loading T
 
 Tinyfin is included as a submodule in `tinyfin/` for local builds and C backend integration.
 
-For Python scaffolding, `TinyfinBackend` wires the Tinyfin Python bindings into a minimal REINFORCE loop and a vectorized rollout helper. See `examples/reinforce_bandit.py` and `examples/benchmark_rollout.py`.
+Python bindings for C environments live in `tinyfin_rl/bindings`. See `docs/python_bindings.md` for loading env plugins and raylib renderers from Python.
+
+## C trainers
+
+The C trainer ABI (`tinyfin_rl/rl_train.h`) provides DQN and PPO implementations backed by Tinyfin.
+
+For usage examples, see `docs/training.md`.
 
 ## Usability helpers
 

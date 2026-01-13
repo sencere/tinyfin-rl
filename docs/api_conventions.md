@@ -26,7 +26,7 @@ This document describes the conventions tinyfin-rl follows today and the expecta
 ## Trainer
 
 - `Trainer.train(episodes)` runs complete episodes and logs returns/steps.
-- Optional `Visualizer` hooks are called on reset and step; these will migrate to C/Raylib.
+- Visualization runs via the C renderer ABI (`rl_render.h`); Python visualizers are not used.
 
 ## Tinyfin integration
 

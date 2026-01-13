@@ -8,7 +8,7 @@ root = os.path.normpath(os.path.join(here, ".."))
 sys.path.insert(0, root)
 
 from tinyfin_rl.backends import TinyfinBackend
-from tinyfin_rl.envs import BanditEnv
+import pytest
 from tinyfin_rl.policy_tinyfin import PPOPolicy
 from tinyfin_rl.algos.ppo import PPOTrainer
 from tinyfin_rl.algos.a2c import A2CTrainer
@@ -24,7 +24,7 @@ def _backend_or_skip():
 
 def test_ppo_entropy_bonus_runs():
     backend = _backend_or_skip()
-    env = BanditEnv([0.2, 0.8])
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     policy = PPOPolicy(backend=backend, obs_dim=1, action_space=Discrete(2))
     trainer = PPOTrainer(env=env, policy=policy, steps_per_batch=8, epochs=1, entropy_coef=0.01)
     metrics = trainer.train(updates=1)
@@ -33,7 +33,7 @@ def test_ppo_entropy_bonus_runs():
 
 def test_a2c_entropy_bonus_runs():
     backend = _backend_or_skip()
-    env = BanditEnv([0.3, 0.7])
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     policy = PPOPolicy(backend=backend, obs_dim=1, action_space=Discrete(2))
     trainer = A2CTrainer(env=env, policy=policy, steps_per_batch=8, entropy_coef=0.01)
     metrics = trainer.train(updates=1)

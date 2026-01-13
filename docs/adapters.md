@@ -2,7 +2,7 @@
 
 ## Gymnasium
 
-Use Gymnasium environments via a thin wrapper:
+Use Gymnasium environments via a thin wrapper (Python-only):
 
 ```bash
 python - <<'PY'
@@ -13,7 +13,7 @@ print(obs)
 PY
 ```
 
-You can also use the factory helper:
+You can also use the factory helper (Python-only):
 
 ```bash
 python - <<'PY'
@@ -26,7 +26,7 @@ PY
 
 ## PettingZoo (parallel)
 
-Wrap a PettingZoo parallel env:
+Wrap a PettingZoo parallel env (Python-only):
 
 ```bash
 python - <<'PY'
@@ -37,7 +37,7 @@ print(list(obs.keys())[:2])
 PY
 ```
 
-Factory helper:
+Factory helper (Python-only):
 
 ```bash
 python - <<'PY'

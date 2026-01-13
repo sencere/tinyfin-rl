@@ -1,25 +1,21 @@
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .agent import Agent
 from .envs import Env
 from .logging import setup_logging
-from .visualize import Visualizer
 
 
 class Trainer:
-    def __init__(self, env: Env, agent: Agent, log_level: str = "INFO", visualizer: Optional[Visualizer] = None):
+    def __init__(self, env: Env, agent: Agent, log_level: str = "INFO"):
         self.env = env
         self.agent = agent
         self.logger = setup_logging(level=log_level)
-        self.visualizer = visualizer
 
     def train(self, episodes: int = 1) -> List[Dict[str, float]]:
         metrics = []
         for episode in range(episodes):
             reset_out = self.env.reset()
             obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
-            if self.visualizer is not None:
-                self.visualizer.on_reset(self.env, obs)
             done = False
             episode_return = 0.0
             steps = 0
@@ -35,11 +31,7 @@ class Trainer:
                 obs = next_obs
                 episode_return += reward
                 steps += 1
-                if self.visualizer is not None:
-                    self.visualizer.on_step(self.env, obs, action, reward, done)
             record = {"episode": episode, "return": episode_return, "steps": steps}
             metrics.append(record)
             self.logger.info("episode=%s return=%.3f steps=%s", episode, episode_return, steps)
-        if self.visualizer is not None:
-            self.visualizer.close()
         return metrics

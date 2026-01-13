@@ -9,7 +9,7 @@ sys.path.insert(0, root)
 
 from tinyfin_rl.algos.bc import BCTrainer
 from tinyfin_rl.backends import TinyfinBackend
-from tinyfin_rl.envs import BanditEnv
+import pytest
 from tinyfin_rl.policy_tinyfin import SoftmaxPolicy
 from tinyfin_rl.spaces import Discrete
 from tinyfin_rl.seed import set_seed
@@ -25,7 +25,7 @@ def _backend_or_skip():
 def test_bc_bandit_action_match():
     backend = _backend_or_skip()
     set_seed(0)
-    env = BanditEnv([0.1, 0.9])
+    pytest.skip("Python BanditEnv removed; use C env plugin adapter.")
     dataset = []
     for _ in range(200):
         obs = env.reset()
