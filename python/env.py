@@ -50,6 +50,7 @@ class TfrlEnvSpec(ctypes.Structure):
         ("obs_high", c_double),
         ("action_low", c_double),
         ("action_high", c_double),
+        ("agent_count", c_int32),
     ]
 
 
@@ -81,6 +82,7 @@ class EnvSpec:
     obs_high: float
     action_low: float
     action_high: float
+    agent_count: int
 
 
 class EnvLib:
@@ -152,6 +154,7 @@ class EnvHandle:
             obs_high=spec.obs_high,
             action_low=spec.action_low,
             action_high=spec.action_high,
+            agent_count=spec.agent_count,
         )
 
     def close(self) -> None:

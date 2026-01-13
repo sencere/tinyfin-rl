@@ -46,6 +46,9 @@ int got = tfrl_env_step_multi(env, actions, agents, steps, 2);
 - `point1d`
 - `coin_maze`
 - `coin_maze_duo`
+- `py:gymnasium:ENV_ID` (Python bridge)
+- `py:pettingzoo:MODULE` (Python bridge)
+- `py:retro:ENV_ID` (Python bridge)
 
 ## Python
 

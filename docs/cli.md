@@ -12,6 +12,9 @@ Common flags:
 
 - `--algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random`
 - `--env maze_rooms|lineworld|lineworld_duo|lineworld_cont|point1d|coin_maze|coin_maze_duo`
+- `--env py:gymnasium:ENV_ID` (Python bridge)
+- `--env py:pettingzoo:MODULE` (Python bridge, e.g. `py:pettingzoo:butterfly.pistonball_v6`)
+- `--env py:retro:ENV_ID` (Python bridge)
 - `--envs N` (vectorized stepping)
 - `--threads N` (parallel stepping)
 - `--agents N` (expected agent count; validates env)

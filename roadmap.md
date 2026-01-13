@@ -223,6 +223,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Multi-agent policy sharing and agent-count validation
 - coin_maze_duo cooperative environment + golden run
 - Replay CLI prints trace metadata
+- Python env bridge for Gymnasium/PettingZoo/Retro
 
 ---
 
@@ -233,6 +234,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 3. Expand golden runs for Rainbow/QRDQN baselines
 4. Add trace metadata dump in replay CLI
 5. Multi-agent support (multi-agent env API + per-agent policies + trace updates)
+6. Python env proxy for Gymnasium/PettingZoo/Gym-Retro (C runner owns loop)
 
 ## Recent Updates
 
@@ -258,6 +260,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Multi-agent share-policy flag and agent-count validation
 - coin_maze_duo cooperative env + golden run
 - Replay CLI prints trace metadata
+- Python env bridge for Gymnasium/PettingZoo/Retro
 
 ## Quality Tiers
 

@@ -2,6 +2,8 @@
 
 Python does not own the environment loop. It only calls the C binary.
 
+For Gymnasium/PettingZoo/Retro, use the Python bridge in `docs/python_bridge.md`.
+
 ```bash
 python3 -m python.train
 ```
