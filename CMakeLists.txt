@@ -19,6 +19,7 @@ set(SRC_CORE
     src/core/algo_sac.c
     src/core/algo_td3.c
     src/core/algo_impala.c
+    src/core/algo_mcts.c
     src/core/algo_reinforce.c
     src/core/algo_ppo.c
     src/core/replay_buffer.c

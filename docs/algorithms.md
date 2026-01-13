@@ -3,7 +3,7 @@
 Tinyfin-RL selects algorithms via `--algo`. All algorithms share the
 `tfrl_algo` interface in `src/core/algo_api.h`.
 
-Note: Continuous (box) actions are currently supported by `random`, `sac`, and `td3`.
+Note: Continuous (box) actions are currently supported by `random`, `sac`, and `td3`. MCTS currently supports `maze_rooms` and `lineworld`.
 
 ## DQN
 
@@ -69,6 +69,19 @@ Flags:
 - `--per-alpha`
 - `--per-beta`
 - `--save PATH` / `--load PATH`
+
+## MCTS (Planner)
+
+UCT-style MCTS for discrete environments (`maze_rooms`, `lineworld`).
+
+```bash
+./build/tinyfin-rl train --algo mcts --env maze_rooms --steps 2000 --mcts-sims 400 --mcts-depth 80
+```
+
+Flags:
+
+- `--mcts-sims`
+- `--mcts-depth`
 
 ## REINFORCE
 

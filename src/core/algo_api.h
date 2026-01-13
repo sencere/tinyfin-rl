@@ -32,10 +32,13 @@ typedef struct {
     int batch_size;
     float per_alpha;
     float per_beta;
+    int mcts_sims;
+    int mcts_depth;
     int steps_per_batch;
     int epochs;
     const char *save_path;
     const char *load_path;
+    const char *env_name;
 } tfrl_algo_config;
 
 typedef struct {

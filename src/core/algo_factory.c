@@ -12,6 +12,7 @@ tfrl_algo tfrl_algo_trpo_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_sac_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_td3_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_impala_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_mcts_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg);
 
@@ -30,6 +31,14 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
         }
         fprintf(stderr, "algo '%s' does not support continuous actions yet; using random policy\n", cfg->name);
         return tfrl_algo_random_create(cfg);
+    }
+    if (strcmp(cfg->name, "mcts") == 0) {
+        tfrl_algo algo = tfrl_algo_mcts_create(cfg);
+        if (!algo.ctx) {
+            fprintf(stderr, "mcts requires maze_rooms or lineworld; using random policy\n");
+            return tfrl_algo_random_create(cfg);
+        }
+        return algo;
     }
     if (strcmp(cfg->name, "dqn") == 0) {
         return tfrl_algo_dqn_create(cfg);

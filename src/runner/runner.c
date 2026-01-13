@@ -112,10 +112,13 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         .batch_size = cfg->batch_size,
         .per_alpha = cfg->per_alpha,
         .per_beta = cfg->per_beta,
+        .mcts_sims = cfg->mcts_sims,
+        .mcts_depth = cfg->mcts_depth,
         .steps_per_batch = cfg->steps_per_batch,
         .epochs = cfg->epochs,
         .save_path = cfg->save_path,
         .load_path = cfg->load_path,
+        .env_name = cfg->env_name,
     };
     tfrl_algo algo = tfrl_algo_create(&algo_cfg, spec);
     if (!algo.ctx) {

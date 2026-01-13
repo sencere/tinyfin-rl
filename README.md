@@ -56,6 +56,7 @@ Select environment:
 ./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2
 ./build/tinyfin-rl train --algo td3 --steps 2000
 ./build/tinyfin-rl train --algo impala --steps 2000 --steps-per-batch 64
+./build/tinyfin-rl train --algo mcts --env maze_rooms --steps 2000 --mcts-sims 400 --mcts-depth 80
 ./build/tinyfin-rl train --algo dqn --steps 2000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ```

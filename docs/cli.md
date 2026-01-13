@@ -10,7 +10,7 @@
 
 Common flags:
 
-- `--algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|random`
+- `--algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random`
 - `--env maze_rooms|lineworld|lineworld_cont|point1d`
 - `--envs N` (vectorized stepping)
 - `--steps N`
@@ -25,6 +25,8 @@ Common flags:
 - `--batch-size N` (DQN family, SAC, TD3)
 - `--per-alpha N` (DQN family, SAC, TD3)
 - `--per-beta N` (DQN family, SAC, TD3)
+- `--mcts-sims N` (MCTS)
+- `--mcts-depth N` (MCTS)
 - `--entropy-coef N` (A2C/IMPALA/SAC)
 - `--save PATH`
 - `--load PATH`

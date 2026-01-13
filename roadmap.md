@@ -100,9 +100,10 @@ Rendering is safe, optional, and non-invasive.
 - Rainbow DQN
 - QR-DQN
 - IMPALA / V-trace
+- MCTS (planner)
 
 ### Key Deliverables
-- `--algo ppo | dqn | reinforce | a2c | trpo | sac | td3 | rainbow | qrdqn | impala`
+- `--algo ppo | dqn | reinforce | a2c | trpo | sac | td3 | rainbow | qrdqn | impala | mcts`
 - Shared algorithm interface
 - Reference implementation per algorithm
 
@@ -195,6 +196,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Optional Python wrapper calls the C binary and exposes env bindings
 - Batched inference for DQN when using `--envs`
 - Replay buffer + PER support for DQN family, SAC, and TD3
+- MCTS planner for `maze_rooms` and `lineworld`
 
 ---
 

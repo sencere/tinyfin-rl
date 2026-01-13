@@ -28,6 +28,8 @@ typedef struct {
     int batch_size;
     float per_alpha;
     float per_beta;
+    int mcts_sims;
+    int mcts_depth;
     int steps_per_batch;
     int epochs;
     int log_every;

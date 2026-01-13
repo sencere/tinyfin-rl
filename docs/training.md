@@ -47,6 +47,12 @@ Use replay/PER tuning:
 ./build/tinyfin-rl train --algo td3 --env point1d --steps 2000 --replay-size 10000 --batch-size 64
 ```
 
+## MCTS (Planner)
+
+```bash
+./build/tinyfin-rl train --algo mcts --env maze_rooms --steps 2000 --mcts-sims 400 --mcts-depth 80
+```
+
 ## Checkpoints
 
 Use `--save PATH` and `--load PATH`:
