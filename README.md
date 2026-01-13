@@ -66,6 +66,10 @@ Eval:
 Replay:
 
 ```bash
+make -C raylib-src/src
+make clean
+make USE_RAYLIB=1
+export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
 ```
 

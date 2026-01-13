@@ -27,3 +27,21 @@ Use `--save PATH` and `--load PATH`:
 ./build/tinyfin-rl train --algo dqn --steps 2000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ```
+
+## Render after training
+
+Record a trace and replay it:
+
+```bash
+./build/tinyfin-rl train --algo dqn --steps 2000 --trace-out runs/run.tft
+```
+
+Then build the viewer and replay:
+
+```bash
+make -C raylib-src/src
+make clean
+make USE_RAYLIB=1
+export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
+./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
+```
