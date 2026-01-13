@@ -53,6 +53,7 @@ typedef struct {
     int step_count;
     int seed;
     int deterministic;
+    unsigned int rng_state;
 } tfrl_td3_algo;
 
 static Tensor *one_hot(int n, int idx) {
@@ -88,9 +89,22 @@ static int argmax_tensor(Tensor *t) {
     return best;
 }
 
-static float rand_normal(void) {
-    float u1 = ((float)rand() + 1.0f) / ((float)RAND_MAX + 2.0f);
-    float u2 = ((float)rand() + 1.0f) / ((float)RAND_MAX + 2.0f);
+static unsigned int td3_lcg_next(unsigned int *state) {
+    *state = (*state * 1664525u) + 1013904223u;
+    return *state;
+}
+
+static float td3_rand_uniform(tfrl_td3_algo *algo) {
+    if (algo->deterministic) {
+        return (td3_lcg_next(&algo->rng_state) & 0x00FFFFFFu) / 16777215.0f;
+    }
+    return (float)rand() / (float)RAND_MAX;
+}
+
+static float rand_normal(tfrl_td3_algo *algo) {
+    float u1 = td3_rand_uniform(algo);
+    float u2 = td3_rand_uniform(algo);
+    if (u1 <= 0.0f) u1 = 1e-6f;
     return sqrtf(-2.0f * logf(u1)) * cosf(2.0f * (float)M_PI * u2);
 }
 
@@ -233,7 +247,7 @@ static tfrl_action td3_act(void *ctx, tfrl_obs obs) {
         for (int i = 0; i < algo->action_dim; i++) {
             float v = tensor_get_f32_at(a, (size_t)i);
             float scaled = v * scale + bias;
-            float noise = rand_normal() * TD3_EXPLORATION_NOISE;
+            float noise = rand_normal(algo) * TD3_EXPLORATION_NOISE;
             float noisy = clampf(scaled + noise, low, high);
             action.data[i] = noisy;
         }
@@ -316,7 +330,7 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                     for (int j = 0; j < algo->action_dim; j++) {
                         float v = tensor_get_f32_at(next_tanh, (size_t)j);
                         float scaled = v * scale + bias;
-                        float noise = clampf(rand_normal() * TD3_TARGET_NOISE, -TD3_NOISE_CLIP, TD3_NOISE_CLIP);
+                        float noise = clampf(rand_normal(algo) * TD3_TARGET_NOISE, -TD3_NOISE_CLIP, TD3_NOISE_CLIP);
                         float noisy = clampf(scaled + noise, low, high);
                         tensor_set_f32_at(next_a, (size_t)j, noisy);
                     }
@@ -541,7 +555,7 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
             for (int j = 0; j < algo->action_dim; j++) {
                 float v = tensor_get_f32_at(next_tanh, (size_t)j);
                 float scaled = v * scale + bias;
-                float noise = clampf(rand_normal() * TD3_TARGET_NOISE, -TD3_NOISE_CLIP, TD3_NOISE_CLIP);
+                float noise = clampf(rand_normal(algo) * TD3_TARGET_NOISE, -TD3_NOISE_CLIP, TD3_NOISE_CLIP);
                 float noisy = clampf(scaled + noise, low, high);
                 tensor_set_f32_at(next_a, (size_t)j, noisy);
             }
@@ -751,6 +765,7 @@ tfrl_algo tfrl_algo_td3_create(const tfrl_algo_config *cfg) {
     algo->per_beta = cfg->per_beta;
     algo->seed = cfg->seed;
     algo->deterministic = cfg->deterministic;
+    algo->rng_state = (unsigned int)(cfg->seed > 0 ? cfg->seed : 1);
     if (cfg->replay_size > 0) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }

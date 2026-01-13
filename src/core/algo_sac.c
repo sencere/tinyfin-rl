@@ -56,6 +56,7 @@ typedef struct {
     int step_count;
     int seed;
     int deterministic;
+    unsigned int rng_state;
 } tfrl_sac_algo;
 
 static Tensor *one_hot(int n, int idx) {
@@ -78,9 +79,22 @@ static int sample_action(Tensor *probs) {
     return (int)(probs->size > 0 ? probs->size - 1 : 0);
 }
 
-static float rand_normal(void) {
-    float u1 = ((float)rand() + 1.0f) / ((float)RAND_MAX + 2.0f);
-    float u2 = ((float)rand() + 1.0f) / ((float)RAND_MAX + 2.0f);
+static unsigned int sac_lcg_next(unsigned int *state) {
+    *state = (*state * 1664525u) + 1013904223u;
+    return *state;
+}
+
+static float sac_rand_uniform(tfrl_sac_algo *algo) {
+    if (algo->deterministic) {
+        return (sac_lcg_next(&algo->rng_state) & 0x00FFFFFFu) / 16777215.0f;
+    }
+    return (float)rand() / (float)RAND_MAX;
+}
+
+static float rand_normal(tfrl_sac_algo *algo) {
+    float u1 = sac_rand_uniform(algo);
+    float u2 = sac_rand_uniform(algo);
+    if (u1 <= 0.0f) u1 = 1e-6f;
     return sqrtf(-2.0f * logf(u1)) * cosf(2.0f * (float)M_PI * u2);
 }
 
@@ -163,7 +177,7 @@ static void sample_action_stats(const tfrl_sac_algo *algo, tfrl_obs obs, float *
         if (log_std < SAC_LOG_STD_MIN) log_std = SAC_LOG_STD_MIN;
         if (log_std > SAC_LOG_STD_MAX) log_std = SAC_LOG_STD_MAX;
         float std = expf(log_std);
-        float eps = rand_normal();
+        float eps = rand_normal(algo);
         float u = mean + std * eps;
         float a = tanhf(u);
         out_action[i] = a * scale + bias;
@@ -198,7 +212,7 @@ static Tensor *policy_action_logp(tfrl_sac_algo *algo, Tensor *obs_t, Tensor **o
     Tensor *eps = tensor_new(2, shape);
     if (eps) {
         for (int i = 0; i < algo->action_dim; i++) {
-            tensor_set_f32_at(eps, (size_t)i, rand_normal());
+            tensor_set_f32_at(eps, (size_t)i, rand_normal(algo));
         }
     }
     Tensor *std_eps = tensor_mul(std, eps);
@@ -842,6 +856,7 @@ tfrl_algo tfrl_algo_sac_create(const tfrl_algo_config *cfg) {
     algo->per_beta = cfg->per_beta;
     algo->seed = cfg->seed;
     algo->deterministic = cfg->deterministic;
+    algo->rng_state = (unsigned int)(cfg->seed > 0 ? cfg->seed : 1);
     if (cfg->replay_size > 0) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }

@@ -35,6 +35,7 @@ typedef struct {
     int seed;
     int deterministic;
     int step_count;
+    unsigned int rng_state;
     int buf_count;
     int obs_buf[RAINBOW_N_STEP];
     int action_buf[RAINBOW_N_STEP];
@@ -42,6 +43,26 @@ typedef struct {
     int done_buf[RAINBOW_N_STEP];
     int next_obs_buf[RAINBOW_N_STEP];
 } tfrl_rainbow_algo;
+
+static unsigned int rainbow_lcg_next(unsigned int *state) {
+    *state = (*state * 1664525u) + 1013904223u;
+    return *state;
+}
+
+static float rainbow_rand_uniform(tfrl_rainbow_algo *algo) {
+    if (algo->deterministic) {
+        return (rainbow_lcg_next(&algo->rng_state) & 0x00FFFFFFu) / 16777215.0f;
+    }
+    return (float)rand() / (float)RAND_MAX;
+}
+
+static int rainbow_rand_int(tfrl_rainbow_algo *algo, int max) {
+    if (max <= 0) return 0;
+    if (algo->deterministic) {
+        return (int)(rainbow_lcg_next(&algo->rng_state) % (unsigned int)max);
+    }
+    return rand() % max;
+}
 
 static Tensor *one_hot(int n, int idx) {
     int shape[2] = {1, n};
@@ -142,9 +163,9 @@ static int load_linear(Linear *layer, const char *prefix, const char *tag) {
 static tfrl_action rainbow_act(void *ctx, tfrl_obs obs) {
     tfrl_rainbow_algo *algo = (tfrl_rainbow_algo *)ctx;
     tfrl_action action = {0};
-    float r = (float)rand() / (float)RAND_MAX;
+    float r = rainbow_rand_uniform(algo);
     if (r < algo->epsilon) {
-        action.index = rand() % algo->action_n;
+        action.index = rainbow_rand_int(algo, algo->action_n);
         return action;
     }
     Tensor *x = obs_to_tensor(algo, obs);
@@ -178,9 +199,9 @@ static void rainbow_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_ac
 
     Tensor *q_values = linear_forward(algo->q, x);
     for (int i = 0; i < count; i++) {
-        float r = (float)rand() / (float)RAND_MAX;
+        float r = rainbow_rand_uniform(algo);
         if (r < algo->epsilon) {
-            out_actions[i].index = rand() % algo->action_n;
+            out_actions[i].index = rainbow_rand_int(algo, algo->action_n);
             continue;
         }
         int best = 0;
@@ -440,6 +461,7 @@ tfrl_algo tfrl_algo_rainbow_create(const tfrl_algo_config *cfg) {
     algo->per_beta = cfg->per_beta;
     algo->seed = cfg->seed;
     algo->deterministic = cfg->deterministic;
+    algo->rng_state = (unsigned int)(cfg->seed > 0 ? cfg->seed : 1);
     if (cfg->replay_size > 0) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }

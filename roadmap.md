@@ -215,15 +215,19 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - PPO entropy bonus + GAE(λ)
 - Deterministic replay sampling for off-policy algos
 - Trace headers include per-run config metadata
+- PPO value clipping / trust-region guardrails
+- Deterministic epsilon/action-noise RNG paths
+- Golden runs expanded for PPO/TD3 variants
+- Trace metadata overlay in viewer
 
 ---
 
 ## Near-Term Next Steps
 
-1. Add PPO value clip / trust-region guardrails
-2. Add deterministic replay sampling for epsilon/action noise paths
-3. Expand golden runs to cover TD3 + PPO variants
-4. Add trace metadata viewer overlay
+1. Add PPO KL diagnostics and early stopping
+2. Add deterministic RNG coverage to SAC/TD3 policy sampling docs
+3. Expand golden runs for Rainbow/QRDQN baselines
+4. Add trace metadata dump in replay CLI
 
 ## Recent Updates
 
@@ -241,6 +245,10 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - PPO entropy bonus + GAE(λ)
 - Deterministic replay sampling for replay buffers
 - Trace headers now include config metadata
+- PPO value clipping
+- Deterministic epsilon/action-noise RNG
+- Golden runs PPO/TD3 variants
+- Trace metadata overlay in viewer
 
 ## Quality Tiers
 

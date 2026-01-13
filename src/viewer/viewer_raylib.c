@@ -1,7 +1,9 @@
 #include "viewer.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "raylib.h"
 
@@ -60,6 +62,7 @@ struct tfrl_viewer {
     int init;
     int fps;
     const char *title;
+    char *meta;
     int width;
     int height;
 };
@@ -81,6 +84,9 @@ tfrl_viewer *tfrl_viewer_create(const tfrl_viewer_config *cfg) {
     if (!viewer) return NULL;
     viewer->fps = cfg ? cfg->fps : 60;
     viewer->title = cfg ? cfg->title : NULL;
+    if (cfg && cfg->meta) {
+        viewer->meta = strdup(cfg->meta);
+    }
     return viewer;
 }
 
@@ -159,6 +165,11 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
         DrawText(TextFormat("reward: %.3f", grid_v2.reward), 200, text_y, 18, DARKGRAY);
         DrawText(TextFormat("done: %u", grid_v2.done), 360, text_y, 18, DARKGRAY);
     }
+    if (viewer->meta) {
+        char meta_buf[180];
+        snprintf(meta_buf, sizeof(meta_buf), "meta: %.160s", viewer->meta);
+        DrawText(meta_buf, 10, text_y + 22, 16, DARKGRAY);
+    }
     EndDrawing();
 }
 
@@ -172,5 +183,6 @@ void tfrl_viewer_destroy(tfrl_viewer *viewer) {
     if (viewer->init) {
         CloseWindow();
     }
+    free(viewer->meta);
     free(viewer);
 }

@@ -39,6 +39,8 @@ typedef struct {
     float *rewards;
     int *dones;
     float *old_logp;
+    float *old_values;
+    float *old_next_values;
 } tfrl_ppo_algo;
 
 static Tensor *one_hot(int n, int idx) {
@@ -130,6 +132,21 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
     tensor_free(logits);
     tensor_free(x);
 
+    Tensor *vx = one_hot(algo->obs_n, transition->obs.index);
+    Tensor *v = linear_forward(algo->value, vx);
+    algo->old_values[algo->count] = v ? tensor_get_f32_at(v, 0) : 0.0f;
+    tensor_free(v);
+    tensor_free(vx);
+    float next_v = 0.0f;
+    if (!transition->done) {
+        Tensor *vx_next = one_hot(algo->obs_n, transition->next_obs.index);
+        Tensor *v_next = linear_forward(algo->value, vx_next);
+        next_v = v_next ? tensor_get_f32_at(v_next, 0) : 0.0f;
+        tensor_free(v_next);
+        tensor_free(vx_next);
+    }
+    algo->old_next_values[algo->count] = next_v;
+
     algo->count++;
     if (algo->count < algo->batch) return;
 
@@ -145,24 +162,12 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
         return;
     }
 
-    float mean = 0.0f;
     for (int i = 0; i < algo->batch; i++) {
-        Tensor *x = one_hot(algo->obs_n, algo->obs_idx[i]);
-        Tensor *v = linear_forward(algo->value, x);
-        float v_scalar = tensor_get_f32_at(v, 0);
-        values[i] = v_scalar;
-        tensor_free(v);
-        tensor_free(x);
-
-        if (!algo->dones[i]) {
-            Tensor *x_next = one_hot(algo->obs_n, algo->next_obs_idx[i]);
-            Tensor *v_next = linear_forward(algo->value, x_next);
-            next_values[i] = tensor_get_f32_at(v_next, 0);
-            tensor_free(v_next);
-            tensor_free(x_next);
-        }
+        values[i] = algo->old_values[i];
+        next_values[i] = algo->old_next_values[i];
     }
 
+    float mean = 0.0f;
     float gae = 0.0f;
     for (int i = algo->batch - 1; i >= 0; i--) {
         float not_done = algo->dones[i] ? 0.0f : 1.0f;
@@ -219,9 +224,19 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             tensor_set_f32_at(target, 0, returns[i]);
             Tensor *vdiff = tensor_sub(v, target);
             Tensor *value_loss = tensor_mul(vdiff, vdiff);
+            Tensor *old_v = tensor_new(1, (int[1]){1});
+            tensor_set_f32_at(old_v, 0, algo->old_values[i]);
+            Tensor *v_delta = tensor_sub(v, old_v);
+            Tensor *v_delta_clip = tensor_clamp(v_delta, -algo->clip_eps, algo->clip_eps);
+            Tensor *v_clipped = tensor_add(old_v, v_delta_clip);
+            Tensor *vdiff_clip = tensor_sub(v_clipped, target);
+            Tensor *value_loss_clip = tensor_mul(vdiff_clip, vdiff_clip);
+            float loss_unclipped = tensor_get_f32_at(value_loss, 0);
+            float loss_clipped = tensor_get_f32_at(value_loss_clip, 0);
+            Tensor *value_loss_used = loss_unclipped > loss_clipped ? value_loss : value_loss_clip;
             Tensor *value_coef = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(value_coef, 0, PPO_VALUE_COEF);
-            Tensor *value_loss_scaled = tensor_mul(value_loss, value_coef);
+            Tensor *value_loss_scaled = tensor_mul(value_loss_used, value_coef);
 
             Tensor *total = tensor_add(policy_loss_neg, value_loss_scaled);
             if (algo->entropy_coef > 0.0f) {
@@ -252,6 +267,12 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(value_loss_scaled);
             tensor_free(value_coef);
             tensor_free(value_loss);
+            tensor_free(value_loss_clip);
+            tensor_free(vdiff_clip);
+            tensor_free(v_clipped);
+            tensor_free(v_delta_clip);
+            tensor_free(v_delta);
+            tensor_free(old_v);
             tensor_free(vdiff);
             tensor_free(target);
             tensor_free(v);
@@ -295,6 +316,8 @@ static void ppo_destroy(void *ctx) {
     free(algo->rewards);
     free(algo->dones);
     free(algo->old_logp);
+    free(algo->old_values);
+    free(algo->old_next_values);
     free(algo);
 }
 
@@ -353,7 +376,9 @@ tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg) {
     algo->rewards = (float *)calloc((size_t)algo->batch, sizeof(float));
     algo->dones = (int *)calloc((size_t)algo->batch, sizeof(int));
     algo->old_logp = (float *)calloc((size_t)algo->batch, sizeof(float));
-    if (!algo->obs_idx || !algo->next_obs_idx || !algo->actions || !algo->rewards || !algo->dones || !algo->old_logp) {
+    algo->old_values = (float *)calloc((size_t)algo->batch, sizeof(float));
+    algo->old_next_values = (float *)calloc((size_t)algo->batch, sizeof(float));
+    if (!algo->obs_idx || !algo->next_obs_idx || !algo->actions || !algo->rewards || !algo->dones || !algo->old_logp || !algo->old_values || !algo->old_next_values) {
         ppo_destroy(algo);
         return out;
     }

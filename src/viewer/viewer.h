@@ -10,6 +10,7 @@ extern "C" {
 typedef struct {
     int fps;
     const char *title;
+    const char *meta;
 } tfrl_viewer_config;
 
 typedef struct tfrl_viewer tfrl_viewer;

@@ -81,7 +81,8 @@ static int run_replay(const tfrl_runner_config *cfg) {
         fprintf(stderr, "failed to open trace: %s\n", cfg->trace_in);
         return 1;
     }
-    tfrl_viewer_config vcfg = {.fps = cfg->render_fps, .title = "tinyfin-rl replay"};
+    const char *meta = tfrl_trace_reader_meta(reader);
+    tfrl_viewer_config vcfg = {.fps = cfg->render_fps, .title = "tinyfin-rl replay", .meta = meta};
     tfrl_viewer *viewer = tfrl_viewer_create(&vcfg);
     if (!viewer) {
         fprintf(stderr, "viewer not available (build without raylib?)\n");

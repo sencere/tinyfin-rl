@@ -29,6 +29,7 @@ If you keep all parameters identical, results should be reproducible.
 - Changing `--envs`, `--batch-size`, or `--replay-size` changes sampling order.
 - Different binaries or compiler settings can change floating-point behavior.
  - Replay sampling uses deterministic RNG only when `--deterministic` is set.
+ - Epsilon policies and action-noise paths use deterministic RNG only when `--deterministic` is set.
 
 ## Recommended Practice
 
