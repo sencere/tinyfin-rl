@@ -55,3 +55,5 @@ Golden runs:
 ```bash
 ./scripts/golden_runs.sh
 ```
+
+Includes `lineworld`, `lineworld_cont`, `maze_rooms`, and `point1d` checks.
