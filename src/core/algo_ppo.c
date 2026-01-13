@@ -18,6 +18,8 @@
 
 #include "algo_api.h"
 
+#define PPO_VALUE_COEF 0.5f
+
 typedef struct {
     Linear *policy;
     Linear *value;
@@ -179,7 +181,15 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
 
             Tensor *adv_t = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(adv_t, 0, advantages[i]);
-            Tensor *policy_loss = tensor_mul(clipped, adv_t);
+            float ratio_v = tensor_get_f32_at(ratio, 0);
+            float clipped_v = tensor_get_f32_at(clipped, 0);
+            Tensor *ratio_used = NULL;
+            if (advantages[i] >= 0.0f) {
+                ratio_used = ratio_v < clipped_v ? ratio : clipped;
+            } else {
+                ratio_used = ratio_v > clipped_v ? ratio : clipped;
+            }
+            Tensor *policy_loss = tensor_mul(ratio_used, adv_t);
             Tensor *neg = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(neg, 0, -1.0f);
             Tensor *policy_loss_neg = tensor_mul(policy_loss, neg);
@@ -189,14 +199,19 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             tensor_set_f32_at(target, 0, returns[i]);
             Tensor *vdiff = tensor_sub(v, target);
             Tensor *value_loss = tensor_mul(vdiff, vdiff);
+            Tensor *value_coef = tensor_new(1, (int[1]){1});
+            tensor_set_f32_at(value_coef, 0, PPO_VALUE_COEF);
+            Tensor *value_loss_scaled = tensor_mul(value_loss, value_coef);
 
-            Tensor *total = tensor_add(policy_loss_neg, value_loss);
+            Tensor *total = tensor_add(policy_loss_neg, value_loss_scaled);
 
             adam_zero_grad(algo->opt);
             tensor_backward(total);
             adam_step(algo->opt, 0.0f);
 
             tensor_free(total);
+            tensor_free(value_loss_scaled);
+            tensor_free(value_coef);
             tensor_free(value_loss);
             tensor_free(vdiff);
             tensor_free(target);

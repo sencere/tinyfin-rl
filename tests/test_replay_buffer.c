@@ -69,5 +69,40 @@ int main(void) {
         if (!expect(weights2[i] == 1.0f, "uniform weight")) return 1;
     }
     tfrl_replay_free(ring);
+
+    tfrl_replay_buffer *prio = tfrl_replay_create(8, 0.6f);
+    if (!expect(prio != NULL, "create prio")) return 1;
+    for (int i = 0; i < 8; i++) {
+        tfrl_transition tr3 = {0};
+        tr3.obs.index = i;
+        float p = i == 7 ? 10.0f : 1.0f;
+        tfrl_replay_push(prio, &tr3, p);
+    }
+    int counts[8] = {0};
+    srand(42);
+    for (int i = 0; i < 500; i++) {
+        int idx3[1] = {0};
+        float w3[1] = {0};
+        int got3 = tfrl_replay_sample(prio, 1, idx3, w3, 0.6f);
+        if (!expect(got3 == 1, "prio sample count")) return 1;
+        counts[idx3[0]]++;
+        if (!expect(w3[0] > 0.0f && w3[0] <= 1.0f, "prio weight range")) return 1;
+    }
+    if (!expect(counts[7] > counts[0], "prio bias toward high priority")) return 1;
+
+    int idx_a[4] = {0};
+    float w_a[4] = {0};
+    srand(123);
+    if (!expect(tfrl_replay_sample(prio, 4, idx_a, w_a, 0.4f) == 4, "det sample a")) return 1;
+    int idx_b[4] = {0};
+    float w_b[4] = {0};
+    srand(123);
+    if (!expect(tfrl_replay_sample(prio, 4, idx_b, w_b, 0.4f) == 4, "det sample b")) return 1;
+    for (int i = 0; i < 4; i++) {
+        if (!expect(idx_a[i] == idx_b[i], "det idx match")) return 1;
+        if (!expect(w_a[i] == w_b[i], "det weight match")) return 1;
+    }
+
+    tfrl_replay_free(prio);
     return 0;
 }

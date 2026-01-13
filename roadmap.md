@@ -209,15 +209,18 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - TD3 continuous target policy smoothing noise
 - Versioned algorithm defaults schema (v1)
 - CI smoke script (`scripts/ci.sh`)
+- PPO surrogate min/clipped objective + value-loss scaling
+- Config logging of resolved defaults (`algo_config`)
+- Golden runs now check peak/last returns
 
 ---
 
 ## Near-Term Next Steps
 
-1. Improve PPO stability and audit value/advantage scaling
-2. Add config dump/logging for resolved defaults per run
-3. Expand replay buffer tests (PER bias correction + determinism)
-4. Add short learning-curve CI gates for golden runs
+1. Add PPO entropy bonus (optional) and GAE(λ)
+2. Add deterministic replay sampling (fixed RNG per update)
+3. Expand golden runs with short curve checks per algo
+4. Add per-algo config dumps to trace headers
 
 ## Recent Updates
 
@@ -229,6 +232,9 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Replay buffer tests extended for ring buffer + weights
 - TD3 target policy smoothing noise for continuous actions
 - Versioned per-algo defaults (schema v1)
+- PPO clipped surrogate min + value-loss coefficient
+- Config defaults logging per run
+- Golden runs peak/last return gates
 
 ## Quality Tiers
 

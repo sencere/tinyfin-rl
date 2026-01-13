@@ -111,6 +111,28 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (int_unset_positive(cfg->epochs)) cfg->epochs = schema->epochs;
 }
 
+static void log_algo_config(const tfrl_algo_config *cfg) {
+    if (!cfg) return;
+    fprintf(stdout,
+            "algo_config name=%s defaults=v%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f "
+            "replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d\n",
+            cfg->name ? cfg->name : "null",
+            cfg->defaults_version,
+            cfg->gamma,
+            cfg->lr,
+            cfg->epsilon,
+            cfg->entropy_coef,
+            cfg->clip_eps,
+            cfg->replay_size,
+            cfg->batch_size,
+            cfg->per_alpha,
+            cfg->per_beta,
+            cfg->steps_per_batch,
+            cfg->epochs,
+            cfg->mcts_sims,
+            cfg->mcts_depth);
+}
+
 static int require_positive(const char *name, int v) {
     if (v > 0) return 1;
     fprintf(stderr, "invalid %s: %d\n", name, v);
@@ -179,6 +201,7 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     if (!cfg || !spec) return out;
     tfrl_algo_config merged = *cfg;
     apply_algo_defaults(&merged);
+    log_algo_config(&merged);
     if (!validate_algo_config(&merged)) return out;
     const tfrl_algo_config *cfg_use = &merged;
     if (!cfg_use->name) {

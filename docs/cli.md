@@ -43,6 +43,7 @@ Defaults:
 
 - Algorithm defaults are applied from the schema in `src/core/algo_factory.c` (defaults v1).
 - Omitted flags fall back to per-algo defaults rather than global CLI values.
+- Resolved defaults are logged at startup as an `algo_config` line.
 
 ## Eval
 
