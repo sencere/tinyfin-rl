@@ -120,6 +120,7 @@ export TFRL_PY_BRIDGE=/tmp/tfrl_py_bridge.sock
 - `docs/determinism.md` determinism contract + flags
 - `docs/install.md` build notes
 - `docs/python_bridge.md` Python env bridge (Gymnasium/PettingZoo/Retro)
+- `docs/python_workflow.md` Python usage overview (C loop + bridge)
 - `docs/env_api.md` env API + Python binding
 - `scripts/run_tests.sh` lightweight test runner
 - `scripts/golden_runs.sh` golden run regression script
