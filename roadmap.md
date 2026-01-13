@@ -206,15 +206,18 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Deterministic mode via `--deterministic`
 - Golden runs regression script
 - Continuous SAC uses a stochastic policy with log-prob entropy
+- TD3 continuous target policy smoothing noise
+- Versioned algorithm defaults schema (v1)
+- CI smoke script (`scripts/ci.sh`)
 
 ---
 
 ## Near-Term Next Steps
 
-1. Finish typed config schema + versioned defaults for algorithms
-2. Expand determinism docs (threading, replay sampling, batch ordering)
-3. Replay buffer tests, determinism checks, and CI wiring
-4. Continuous TD3 improvements (target policy noise + clipped smoothing)
+1. Improve PPO stability and audit value/advantage scaling
+2. Add config dump/logging for resolved defaults per run
+3. Expand replay buffer tests (PER bias correction + determinism)
+4. Add short learning-curve CI gates for golden runs
 
 ## Recent Updates
 
@@ -222,6 +225,10 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Deterministic mode and fixed seeding behavior
 - Golden runs regression script
 - Stochastic continuous SAC with tanh log-prob correction
+- Determinism contract doc + CI smoke script
+- Replay buffer tests extended for ring buffer + weights
+- TD3 target policy smoothing noise for continuous actions
+- Versioned per-algo defaults (schema v1)
 
 ## Quality Tiers
 

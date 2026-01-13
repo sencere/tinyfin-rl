@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,13 @@
 
 #define TD3_TARGET_UPDATE 100
 #define TD3_POLICY_DELAY 2
+#define TD3_TARGET_NOISE 0.2f
+#define TD3_NOISE_CLIP 0.5f
+#define TD3_EXPLORATION_NOISE 0.1f
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 typedef struct {
     Linear *policy;
@@ -76,6 +84,29 @@ static int argmax_tensor(Tensor *t) {
         }
     }
     return best;
+}
+
+static float rand_normal(void) {
+    float u1 = ((float)rand() + 1.0f) / ((float)RAND_MAX + 2.0f);
+    float u2 = ((float)rand() + 1.0f) / ((float)RAND_MAX + 2.0f);
+    return sqrtf(-2.0f * logf(u1)) * cosf(2.0f * (float)M_PI * u2);
+}
+
+static float clampf(float v, float lo, float hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+static void action_scale_bias(const tfrl_td3_algo *algo, float *scale, float *bias) {
+    float low = algo->action_low;
+    float high = algo->action_high;
+    if (high <= low) {
+        low = -1.0f;
+        high = 1.0f;
+    }
+    *scale = (high - low) * 0.5f;
+    *bias = (high + low) * 0.5f;
 }
 
 static Tensor *obs_to_tensor(const tfrl_td3_algo *algo, tfrl_obs obs) {
@@ -188,18 +219,21 @@ static tfrl_action td3_act(void *ctx, tfrl_obs obs) {
     if (algo->action_type == TFRL_SPACE_BOX) {
         Tensor *a = tensor_tanh(logits);
         action.data_len = algo->action_dim;
+        float scale = 1.0f;
+        float bias = 0.0f;
         float low = algo->action_low;
         float high = algo->action_high;
         if (high <= low) {
             low = -1.0f;
             high = 1.0f;
         }
+        action_scale_bias(algo, &scale, &bias);
         for (int i = 0; i < algo->action_dim; i++) {
             float v = tensor_get_f32_at(a, (size_t)i);
-            float scaled = low + (v + 1.0f) * 0.5f * (high - low);
-            float noise = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
-            scaled += noise * 0.1f;
-            action.data[i] = scaled;
+            float scaled = v * scale + bias;
+            float noise = rand_normal() * TD3_EXPLORATION_NOISE;
+            float noisy = clampf(scaled + noise, low, high);
+            action.data[i] = noisy;
         }
         tensor_free(a);
     } else {
@@ -261,7 +295,25 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
             if (!tr->done) {
                 if (algo->action_type == TFRL_SPACE_BOX) {
                     Tensor *next_logits = linear_forward(algo->tpolicy, x_next);
-                    Tensor *next_a = tensor_tanh(next_logits);
+                    Tensor *next_tanh = tensor_tanh(next_logits);
+                    int shape[2] = {1, algo->action_dim};
+                    Tensor *next_a = tensor_new(2, shape);
+                    float scale = 1.0f;
+                    float bias = 0.0f;
+                    float low = algo->action_low;
+                    float high = algo->action_high;
+                    if (high <= low) {
+                        low = -1.0f;
+                        high = 1.0f;
+                    }
+                    action_scale_bias(algo, &scale, &bias);
+                    for (int j = 0; j < algo->action_dim; j++) {
+                        float v = tensor_get_f32_at(next_tanh, (size_t)j);
+                        float scaled = v * scale + bias;
+                        float noise = clampf(rand_normal() * TD3_TARGET_NOISE, -TD3_NOISE_CLIP, TD3_NOISE_CLIP);
+                        float noisy = clampf(scaled + noise, low, high);
+                        tensor_set_f32_at(next_a, (size_t)j, noisy);
+                    }
                     Tensor *tq_in = concat_obs_action(algo, x_next, next_a);
                     Tensor *tq1 = linear_forward(algo->tq1, tq_in);
                     Tensor *tq2 = linear_forward(algo->tq2, tq_in);
@@ -273,6 +325,7 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                     tensor_free(tq1);
                     tensor_free(tq_in);
                     tensor_free(next_a);
+                    tensor_free(next_tanh);
                     tensor_free(next_logits);
                 } else {
                     Tensor *next_logits = linear_forward(algo->tpolicy, x_next);
@@ -339,7 +392,18 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                 if (algo->action_type == TFRL_SPACE_BOX) {
                     Tensor *pi_logits = linear_forward(algo->policy, x);
                     Tensor *pi_action = tensor_tanh(pi_logits);
-                    Tensor *qa_in = concat_obs_action(algo, x, pi_action);
+                    int shape[2] = {1, algo->action_dim};
+                    Tensor *scale_t = tensor_new(2, shape);
+                    Tensor *bias_t = tensor_new(2, shape);
+                    float scale = 1.0f;
+                    float bias = 0.0f;
+                    action_scale_bias(algo, &scale, &bias);
+                    for (int j = 0; j < algo->action_dim; j++) {
+                        tensor_set_f32_at(scale_t, (size_t)j, scale);
+                        tensor_set_f32_at(bias_t, (size_t)j, bias);
+                    }
+                    Tensor *pi_scaled = tensor_add(tensor_mul(pi_action, scale_t), bias_t);
+                    Tensor *qa_in = concat_obs_action(algo, x, pi_scaled);
                     Tensor *q1_pi = linear_forward(algo->q1, qa_in);
                     Tensor *neg = tensor_new(1, (int[1]){1});
                     tensor_set_f32_at(neg, 0, -1.0f);
@@ -347,6 +411,9 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                     tensor_free(neg);
                     tensor_free(q1_pi);
                     tensor_free(qa_in);
+                    tensor_free(pi_scaled);
+                    tensor_free(bias_t);
+                    tensor_free(scale_t);
                     tensor_free(pi_action);
                     tensor_free(pi_logits);
                 } else {
@@ -453,7 +520,25 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
     if (!transition->done) {
         if (algo->action_type == TFRL_SPACE_BOX) {
             Tensor *next_logits = linear_forward(algo->tpolicy, x_next);
-            Tensor *next_a = tensor_tanh(next_logits);
+            Tensor *next_tanh = tensor_tanh(next_logits);
+            int shape[2] = {1, algo->action_dim};
+            Tensor *next_a = tensor_new(2, shape);
+            float scale = 1.0f;
+            float bias = 0.0f;
+            float low = algo->action_low;
+            float high = algo->action_high;
+            if (high <= low) {
+                low = -1.0f;
+                high = 1.0f;
+            }
+            action_scale_bias(algo, &scale, &bias);
+            for (int j = 0; j < algo->action_dim; j++) {
+                float v = tensor_get_f32_at(next_tanh, (size_t)j);
+                float scaled = v * scale + bias;
+                float noise = clampf(rand_normal() * TD3_TARGET_NOISE, -TD3_NOISE_CLIP, TD3_NOISE_CLIP);
+                float noisy = clampf(scaled + noise, low, high);
+                tensor_set_f32_at(next_a, (size_t)j, noisy);
+            }
             Tensor *tq_in = concat_obs_action(algo, x_next, next_a);
             Tensor *tq1 = linear_forward(algo->tq1, tq_in);
             Tensor *tq2 = linear_forward(algo->tq2, tq_in);
@@ -465,6 +550,7 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(tq1);
             tensor_free(tq_in);
             tensor_free(next_a);
+            tensor_free(next_tanh);
             tensor_free(next_logits);
         } else {
             Tensor *next_logits = linear_forward(algo->tpolicy, x_next);
@@ -526,7 +612,18 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
         if (algo->action_type == TFRL_SPACE_BOX) {
             Tensor *pi_logits = linear_forward(algo->policy, x);
             Tensor *pi_action = tensor_tanh(pi_logits);
-            Tensor *qa_in = concat_obs_action(algo, x, pi_action);
+            int shape[2] = {1, algo->action_dim};
+            Tensor *scale_t = tensor_new(2, shape);
+            Tensor *bias_t = tensor_new(2, shape);
+            float scale = 1.0f;
+            float bias = 0.0f;
+            action_scale_bias(algo, &scale, &bias);
+            for (int j = 0; j < algo->action_dim; j++) {
+                tensor_set_f32_at(scale_t, (size_t)j, scale);
+                tensor_set_f32_at(bias_t, (size_t)j, bias);
+            }
+            Tensor *pi_scaled = tensor_add(tensor_mul(pi_action, scale_t), bias_t);
+            Tensor *qa_in = concat_obs_action(algo, x, pi_scaled);
             Tensor *q1_pi = linear_forward(algo->q1, qa_in);
             Tensor *neg = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(neg, 0, -1.0f);
@@ -540,6 +637,9 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(neg);
             tensor_free(q1_pi);
             tensor_free(qa_in);
+            tensor_free(pi_scaled);
+            tensor_free(bias_t);
+            tensor_free(scale_t);
             tensor_free(pi_action);
             tensor_free(pi_logits);
         } else {

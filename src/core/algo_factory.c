@@ -16,6 +16,101 @@ tfrl_algo tfrl_algo_mcts_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg);
 
+typedef struct {
+    const char *name;
+    int defaults_version;
+    float gamma;
+    float lr;
+    float epsilon;
+    float entropy_coef;
+    float clip_eps;
+    int replay_size;
+    int batch_size;
+    float per_alpha;
+    float per_beta;
+    int mcts_sims;
+    int mcts_depth;
+    int steps_per_batch;
+    int epochs;
+} tfrl_algo_schema;
+
+static const tfrl_algo_schema ALGO_SCHEMA_DEFAULT = {
+    .name = "default",
+    .defaults_version = 1,
+    .gamma = 0.99f,
+    .lr = 0.05f,
+    .epsilon = 0.1f,
+    .entropy_coef = 0.0f,
+    .clip_eps = 0.2f,
+    .replay_size = 1000,
+    .batch_size = 32,
+    .per_alpha = 0.0f,
+    .per_beta = 0.4f,
+    .mcts_sims = 200,
+    .mcts_depth = 50,
+    .steps_per_batch = 64,
+    .epochs = 2,
+};
+
+static const tfrl_algo_schema ALGO_SCHEMAS[] = {
+    {.name = "dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "rainbow", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "qrdqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "ppo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 0.2f, .steps_per_batch = 64, .epochs = 2},
+    {.name = "reinforce", .defaults_version = 1, .gamma = 0.99f, .lr = 0.01f, .steps_per_batch = 64},
+    {.name = "a2c", .defaults_version = 1, .gamma = 0.99f, .lr = 0.001f, .entropy_coef = 0.01f, .steps_per_batch = 64},
+    {.name = "trpo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 0.01f, .steps_per_batch = 64},
+    {.name = "impala", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 1.0f, .entropy_coef = 0.01f, .steps_per_batch = 64},
+    {.name = "sac", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .entropy_coef = 0.2f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "td3", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "mcts", .defaults_version = 1, .gamma = 0.99f, .mcts_sims = 200, .mcts_depth = 50},
+    {.name = "random", .defaults_version = 1, .gamma = 0.99f},
+};
+
+static const tfrl_algo_schema *algo_schema_for(const char *name) {
+    if (!name) return &ALGO_SCHEMA_DEFAULT;
+    size_t count = sizeof(ALGO_SCHEMAS) / sizeof(ALGO_SCHEMAS[0]);
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(ALGO_SCHEMAS[i].name, name) == 0) return &ALGO_SCHEMAS[i];
+    }
+    return &ALGO_SCHEMA_DEFAULT;
+}
+
+static int float_unset_positive(float v) {
+    return v <= 0.0f;
+}
+
+static int float_unset_nonneg(float v) {
+    return v < 0.0f;
+}
+
+static int int_unset_positive(int v) {
+    return v <= 0;
+}
+
+static int int_unset_nonneg(int v) {
+    return v < 0;
+}
+
+static void apply_algo_defaults(tfrl_algo_config *cfg) {
+    if (!cfg) return;
+    const tfrl_algo_schema *schema = algo_schema_for(cfg->name);
+    cfg->defaults_version = schema->defaults_version;
+    if (float_unset_positive(cfg->gamma)) cfg->gamma = schema->gamma;
+    if (float_unset_positive(cfg->lr)) cfg->lr = schema->lr;
+    if (float_unset_nonneg(cfg->epsilon)) cfg->epsilon = schema->epsilon;
+    if (float_unset_nonneg(cfg->entropy_coef)) cfg->entropy_coef = schema->entropy_coef;
+    if (float_unset_positive(cfg->clip_eps)) cfg->clip_eps = schema->clip_eps;
+    if (int_unset_nonneg(cfg->replay_size)) cfg->replay_size = schema->replay_size;
+    if (int_unset_nonneg(cfg->batch_size)) cfg->batch_size = schema->batch_size;
+    if (float_unset_nonneg(cfg->per_alpha)) cfg->per_alpha = schema->per_alpha;
+    if (float_unset_nonneg(cfg->per_beta)) cfg->per_beta = schema->per_beta;
+    if (int_unset_positive(cfg->mcts_sims)) cfg->mcts_sims = schema->mcts_sims;
+    if (int_unset_positive(cfg->mcts_depth)) cfg->mcts_depth = schema->mcts_depth;
+    if (int_unset_positive(cfg->steps_per_batch)) cfg->steps_per_batch = schema->steps_per_batch;
+    if (int_unset_positive(cfg->epochs)) cfg->epochs = schema->epochs;
+}
+
 static int require_positive(const char *name, int v) {
     if (v > 0) return 1;
     fprintf(stderr, "invalid %s: %d\n", name, v);
@@ -82,60 +177,63 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
 tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec) {
     tfrl_algo out = {0};
     if (!cfg || !spec) return out;
-    if (!validate_algo_config(cfg)) return out;
-    if (!cfg->name) {
-        return tfrl_algo_random_create(cfg);
+    tfrl_algo_config merged = *cfg;
+    apply_algo_defaults(&merged);
+    if (!validate_algo_config(&merged)) return out;
+    const tfrl_algo_config *cfg_use = &merged;
+    if (!cfg_use->name) {
+        return tfrl_algo_random_create(cfg_use);
     }
-    if (strcmp(cfg->name, "random") == 0) {
-        return tfrl_algo_random_create(cfg);
+    if (strcmp(cfg_use->name, "random") == 0) {
+        return tfrl_algo_random_create(cfg_use);
     }
-    if (cfg->action_type == TFRL_SPACE_BOX) {
-        if (strcmp(cfg->name, "sac") == 0 || strcmp(cfg->name, "td3") == 0) {
-            return strcmp(cfg->name, "sac") == 0 ? tfrl_algo_sac_create(cfg) : tfrl_algo_td3_create(cfg);
+    if (cfg_use->action_type == TFRL_SPACE_BOX) {
+        if (strcmp(cfg_use->name, "sac") == 0 || strcmp(cfg_use->name, "td3") == 0) {
+            return strcmp(cfg_use->name, "sac") == 0 ? tfrl_algo_sac_create(cfg_use) : tfrl_algo_td3_create(cfg_use);
         }
-        fprintf(stderr, "algo '%s' does not support continuous actions yet; using random policy\n", cfg->name);
-        return tfrl_algo_random_create(cfg);
+        fprintf(stderr, "algo '%s' does not support continuous actions yet; using random policy\n", cfg_use->name);
+        return tfrl_algo_random_create(cfg_use);
     }
-    if (strcmp(cfg->name, "mcts") == 0) {
-        tfrl_algo algo = tfrl_algo_mcts_create(cfg);
+    if (strcmp(cfg_use->name, "mcts") == 0) {
+        tfrl_algo algo = tfrl_algo_mcts_create(cfg_use);
         if (!algo.ctx) {
             fprintf(stderr, "mcts requires maze_rooms or lineworld; using random policy\n");
-            return tfrl_algo_random_create(cfg);
+            return tfrl_algo_random_create(cfg_use);
         }
         return algo;
     }
-    if (strcmp(cfg->name, "dqn") == 0) {
-        return tfrl_algo_dqn_create(cfg);
+    if (strcmp(cfg_use->name, "dqn") == 0) {
+        return tfrl_algo_dqn_create(cfg_use);
     }
-    if (strcmp(cfg->name, "rainbow") == 0) {
-        return tfrl_algo_rainbow_create(cfg);
+    if (strcmp(cfg_use->name, "rainbow") == 0) {
+        return tfrl_algo_rainbow_create(cfg_use);
     }
-    if (strcmp(cfg->name, "qrdqn") == 0) {
-        return tfrl_algo_qrdqn_create(cfg);
+    if (strcmp(cfg_use->name, "qrdqn") == 0) {
+        return tfrl_algo_qrdqn_create(cfg_use);
     }
-    if (strcmp(cfg->name, "a2c") == 0) {
-        return tfrl_algo_a2c_create(cfg);
+    if (strcmp(cfg_use->name, "a2c") == 0) {
+        return tfrl_algo_a2c_create(cfg_use);
     }
-    if (strcmp(cfg->name, "trpo") == 0) {
-        return tfrl_algo_trpo_create(cfg);
+    if (strcmp(cfg_use->name, "trpo") == 0) {
+        return tfrl_algo_trpo_create(cfg_use);
     }
-    if (strcmp(cfg->name, "sac") == 0) {
-        return tfrl_algo_sac_create(cfg);
+    if (strcmp(cfg_use->name, "sac") == 0) {
+        return tfrl_algo_sac_create(cfg_use);
     }
-    if (strcmp(cfg->name, "td3") == 0) {
-        return tfrl_algo_td3_create(cfg);
+    if (strcmp(cfg_use->name, "td3") == 0) {
+        return tfrl_algo_td3_create(cfg_use);
     }
-    if (strcmp(cfg->name, "impala") == 0) {
-        return tfrl_algo_impala_create(cfg);
+    if (strcmp(cfg_use->name, "impala") == 0) {
+        return tfrl_algo_impala_create(cfg_use);
     }
-    if (strcmp(cfg->name, "reinforce") == 0) {
-        return tfrl_algo_reinforce_create(cfg);
+    if (strcmp(cfg_use->name, "reinforce") == 0) {
+        return tfrl_algo_reinforce_create(cfg_use);
     }
-    if (strcmp(cfg->name, "ppo") == 0) {
-        return tfrl_algo_ppo_create(cfg);
+    if (strcmp(cfg_use->name, "ppo") == 0) {
+        return tfrl_algo_ppo_create(cfg_use);
     }
-    fprintf(stderr, "unknown algo '%s'; using random policy\n", cfg->name);
-    return tfrl_algo_random_create(cfg);
+    fprintf(stderr, "unknown algo '%s'; using random policy\n", cfg_use->name);
+    return tfrl_algo_random_create(cfg_use);
 }
 
 void tfrl_algo_destroy(tfrl_algo *algo) {

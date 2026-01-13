@@ -57,3 +57,14 @@ Golden runs:
 ```
 
 Includes `lineworld`, `lineworld_cont`, `maze_rooms`, and `point1d` checks.
+
+CI smoke:
+
+```bash
+./scripts/ci.sh
+```
+
+## Determinism
+
+For strict reproducibility, use `--deterministic` (single-thread stepping +
+fixed seed). See `docs/determinism.md` for details and caveats.

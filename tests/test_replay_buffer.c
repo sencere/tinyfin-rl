@@ -41,5 +41,33 @@ int main(void) {
     if (!expect(tr != NULL, "get transition")) return 1;
 
     tfrl_replay_free(buf);
+
+    tfrl_replay_buffer *ring = tfrl_replay_create(4, 0.0f);
+    if (!expect(ring != NULL, "create ring")) return 1;
+    for (int i = 0; i < 6; i++) {
+        tfrl_transition tr2 = {0};
+        tr2.obs.index = i;
+        tfrl_replay_push(ring, &tr2, 1.0f);
+    }
+    if (!expect(tfrl_replay_size(ring) == 4, "ring size after wrap")) return 1;
+    int seen[6] = {0};
+    for (int i = 0; i < 4; i++) {
+        const tfrl_transition *cur = tfrl_replay_get(ring, i);
+        if (!expect(cur != NULL, "ring get")) return 1;
+        if (cur->obs.index >= 0 && cur->obs.index < 6) {
+            seen[cur->obs.index] = 1;
+        }
+    }
+    for (int i = 2; i < 6; i++) {
+        if (!expect(seen[i] == 1, "ring contains last entries")) return 1;
+    }
+    int idx2[4] = {0};
+    float weights2[4] = {0};
+    int got2 = tfrl_replay_sample(ring, 4, idx2, weights2, 0.0f);
+    if (!expect(got2 == 4, "ring sample count")) return 1;
+    for (int i = 0; i < 4; i++) {
+        if (!expect(weights2[i] == 1.0f, "uniform weight")) return 1;
+    }
+    tfrl_replay_free(ring);
     return 0;
 }

@@ -23,6 +23,7 @@ typedef struct {
     double obs_high;
     double action_low;
     double action_high;
+    int defaults_version;
     float gamma;
     float lr;
     float epsilon;

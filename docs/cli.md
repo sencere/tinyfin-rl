@@ -37,7 +37,12 @@ Common flags:
 - `--render-every N`
 - `--render-fps N`
 - `--trace-out FILE`
-- `--deterministic` (single-thread stepping + fixed seed)
+- `--deterministic` (single-thread stepping + fixed seed when `--seed` is 0)
+
+Defaults:
+
+- Algorithm defaults are applied from the schema in `src/core/algo_factory.c` (defaults v1).
+- Omitted flags fall back to per-algo defaults rather than global CLI values.
 
 ## Eval
 

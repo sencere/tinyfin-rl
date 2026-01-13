@@ -9,6 +9,9 @@ env stepping.
 Threaded stepping is available via `--threads N` to split env stepping across
 worker threads.
 
+For deterministic baselines, use `--deterministic` (or `--threads 1`) to avoid
+thread scheduling variability.
+
 ## Benchmark
 
 ```bash

@@ -3,6 +3,8 @@
 Tinyfin-RL selects algorithms via `--algo`. All algorithms share the
 `tfrl_algo` interface in `src/core/algo_api.h`.
 
+Defaults are versioned and applied per algorithm in `src/core/algo_factory.c`.
+
 Note: Continuous (box) actions are currently supported by `random`, `sac`, and `td3`. MCTS currently supports `maze_rooms` and `lineworld`.
 
 ## DQN
@@ -140,7 +142,7 @@ Off-policy flags:
 ## TD3 (Discrete/Continuous, Minimal)
 
 Twin Q networks with delayed policy updates for discrete actions. For box actions, this uses a minimal continuous variant
-with deterministic actions (no entropy term).
+with deterministic actions (no entropy term) and target policy smoothing noise.
 
 ```bash
 ./build/tinyfin-rl train --algo td3 --steps 2000
