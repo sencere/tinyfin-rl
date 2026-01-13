@@ -37,6 +37,8 @@ Select environment:
 ```bash
 ./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 1000
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
+./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 500
+./build/tinyfin-rl train --algo random --env point1d --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --render live --render-env 0
 ```
@@ -45,8 +47,15 @@ Select environment:
 
 ```bash
 ./build/tinyfin-rl train --algo dqn --steps 2000
+./build/tinyfin-rl train --algo rainbow --steps 2000
+./build/tinyfin-rl train --algo qrdqn --steps 2000
 ./build/tinyfin-rl train --algo reinforce --steps 2000 --steps-per-batch 512
 ./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2
+./build/tinyfin-rl train --algo a2c --steps 2000 --steps-per-batch 64
+./build/tinyfin-rl train --algo trpo --steps 2000 --steps-per-batch 64 --clip-eps 0.01
+./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2
+./build/tinyfin-rl train --algo td3 --steps 2000
+./build/tinyfin-rl train --algo impala --steps 2000 --steps-per-batch 64
 ./build/tinyfin-rl train --algo dqn --steps 2000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ```
@@ -78,8 +87,8 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 ## Notes
 
 - The canonical environment is a four-room grid (`maze_rooms`).
-- A second reference environment (`lineworld`) validates the API shape.
-- DQN/REINFORCE/PPO are implemented in C using Tinyfin.
+- Reference environments: `lineworld`, `lineworld_cont`, `point1d`.
+- DQN/REINFORCE/PPO plus A2C/TRPO/IMPALA/Rainbow/QR-DQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
 
 ## Docs
@@ -94,6 +103,7 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 - `docs/replay.md` trace replay
 - `docs/install.md` build notes
 - `docs/env_api.md` env API + Python binding
+- `scripts/run_tests.sh` lightweight test runner
 - `python/README.md` optional Python wrapper
 - `architecture.md` system design
 - `roadmap.md` milestones

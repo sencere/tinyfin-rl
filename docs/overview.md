@@ -10,6 +10,8 @@ control loop.
 make
 ./build/tinyfin-rl train --algo dqn --steps 1000
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
+./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 500
+./build/tinyfin-rl train --algo random --env point1d --steps 500
 ./build/tinyfin-rl train --algo dqn --steps 1000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
@@ -39,4 +41,10 @@ End-to-end demo:
 
 ```bash
 ./scripts/run_demo.sh
+```
+
+Tests:
+
+```bash
+./scripts/run_tests.sh
 ```

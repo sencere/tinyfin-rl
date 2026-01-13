@@ -93,14 +93,21 @@ Rendering is safe, optional, and non-invasive.
 - REINFORCE (baseline)
 - PPO
 - DQN (discrete)
+- A2C
+- TRPO (KL-penalty)
+- SAC (discrete + continuous)
+- TD3 (discrete + continuous)
+- Rainbow DQN
+- QR-DQN
+- IMPALA / V-trace
 
 ### Key Deliverables
-- `--algo ppo | dqn | reinforce`
+- `--algo ppo | dqn | reinforce | a2c | trpo | sac | td3 | rainbow | qrdqn | impala`
 - Shared algorithm interface
 - Reference implementation per algorithm
 
 **Result:**  
-C-first training is the default path.
+C-first training is the default path, with discrete and minimal continuous variants.
 
 ---
 
@@ -140,7 +147,7 @@ Python is a convenience layer via CLI and an env shared library.
 - Add second environment only if architecture remains unchanged
 
 **Result:**  
-Two environments exist (`maze_rooms`, `lineworld`) with space/dtype metadata in `tfrl_env_spec`.
+Environments include `maze_rooms`, `lineworld`, `lineworld_cont`, and `point1d` with space/dtype metadata in `tfrl_env_spec`.
 
 ---
 
@@ -184,9 +191,10 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Tinyfin-RL now builds a single `tinyfin-rl` binary from `src/`
 - The runner supports train/eval/replay with configurable algorithms
 - Rendering is optional and isolated via render snapshots + a viewer module
-- Two reference environments: `maze_rooms` and `lineworld`
+- Reference environments: `maze_rooms`, `lineworld`, `lineworld_cont`, `point1d`
 - Optional Python wrapper calls the C binary and exposes env bindings
 - Batched inference for DQN when using `--envs`
+- Replay buffer + PER support for DQN family, SAC, and TD3
 
 ---
 
@@ -196,16 +204,15 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 2. Extend render snapshot specs for richer environments
 3. Add richer environment suite
 4. Add true parallel stepping (threads)
+5. Continuous SAC/TD3: add stochastic policy + log-prob entropy
+6. Replay buffer tests and CI wiring
 
 ## Additional Algorithms (Ideas)
 
-- A2C / A3C (shared or separate actor-critic)
-- SAC (continuous)
-- TD3 (continuous)
-- TRPO (trust-region)
-- Rainbow DQN (C51 + PER + dueling + n-step)
-- QR-DQN (distributional)
-- IMPALA / V-trace (scalable off-policy)
+- A3C (async actor-critic)
+- Rainbow DQN extensions (C51 + dueling)
+- Distributional variants beyond QR-DQN
+- IMPALA-scale actor/learner split
 
 ## Advanced Vectorization Roadmap
 

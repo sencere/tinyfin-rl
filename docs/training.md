@@ -7,6 +7,19 @@
 ./build/tinyfin-rl eval --algo dqn --env maze_rooms --episodes 5 --load runs/dqn
 ```
 
+Use replay/PER tuning:
+
+```bash
+./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64 --per-alpha 0.6 --per-beta 0.4
+```
+
+## Rainbow / QR-DQN
+
+```bash
+./build/tinyfin-rl train --algo rainbow --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
+./build/tinyfin-rl train --algo qrdqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
+```
+
 ## REINFORCE
 
 ```bash
@@ -17,6 +30,21 @@
 
 ```bash
 ./build/tinyfin-rl train --algo ppo --env maze_rooms --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2
+```
+
+## A2C / TRPO / IMPALA
+
+```bash
+./build/tinyfin-rl train --algo a2c --env maze_rooms --steps 2000 --steps-per-batch 64
+./build/tinyfin-rl train --algo trpo --env maze_rooms --steps 2000 --steps-per-batch 64 --clip-eps 0.01
+./build/tinyfin-rl train --algo impala --env maze_rooms --steps 2000 --steps-per-batch 64 --clip-eps 1.0
+```
+
+## SAC / TD3 (Continuous)
+
+```bash
+./build/tinyfin-rl train --algo sac --env point1d --steps 2000 --replay-size 10000 --batch-size 64
+./build/tinyfin-rl train --algo td3 --env point1d --steps 2000 --replay-size 10000 --batch-size 64
 ```
 
 ## Checkpoints
