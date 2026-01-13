@@ -147,6 +147,25 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         }
     }
     const tfrl_env_spec *spec = tfrl_env_get_spec(envs[0]);
+    int agent_count = tfrl_env_agent_count(envs[0]);
+    if (agent_count <= 0) {
+        fprintf(stderr, "env agent count invalid\n");
+        for (int i = 0; i < env_count; i++) {
+            tfrl_env_destroy(envs[i]);
+        }
+        free(envs);
+        return 1;
+    }
+    for (int i = 1; i < env_count; i++) {
+        if (tfrl_env_agent_count(envs[i]) != agent_count) {
+            fprintf(stderr, "env agent count mismatch\n");
+            for (int j = 0; j < env_count; j++) {
+                tfrl_env_destroy(envs[j]);
+            }
+            free(envs);
+            return 1;
+        }
+    }
     tfrl_algo_config algo_cfg = {
         .name = cfg->algo ? cfg->algo : "dqn",
         .obs_n = spec->obs_n,
@@ -184,14 +203,26 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         .deterministic = cfg->deterministic,
     };
     tfrl_algo_config_apply_defaults(&algo_cfg);
-    tfrl_algo algo = tfrl_algo_create(&algo_cfg, spec);
-    if (!algo.ctx) {
-        fprintf(stderr, "algo creation failed\n");
-        for (int i = 0; i < env_count; i++) {
-            tfrl_env_destroy(envs[i]);
+    tfrl_algo algos[agent_count];
+    char load_paths[agent_count][256];
+    for (int a = 0; a < agent_count; a++) {
+        tfrl_algo_config cfg_agent = algo_cfg;
+        if (cfg->load_path && agent_count > 1) {
+            snprintf(load_paths[a], sizeof(load_paths[a]), "%s.agent%d", cfg->load_path, a);
+            cfg_agent.load_path = load_paths[a];
         }
-        free(envs);
-        return 1;
+        algos[a] = tfrl_algo_create(&cfg_agent, spec);
+        if (!algos[a].ctx) {
+            fprintf(stderr, "algo creation failed\n");
+            for (int k = 0; k < a; k++) {
+                tfrl_algo_destroy(&algos[k]);
+            }
+            for (int i = 0; i < env_count; i++) {
+                tfrl_env_destroy(envs[i]);
+            }
+            free(envs);
+            return 1;
+        }
     }
 
     tfrl_viewer *viewer = NULL;
@@ -211,11 +242,12 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     tfrl_trace_writer *writer = NULL;
     char trace_meta[512];
     snprintf(trace_meta, sizeof(trace_meta),
-             "algo=%s defaults=v%d env=%s seed=%d deterministic=%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f "
+             "algo=%s defaults=v%d env=%s agents=%d seed=%d deterministic=%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f "
              "replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d",
              algo_cfg.name ? algo_cfg.name : "null",
              algo_cfg.defaults_version,
              algo_cfg.env_name ? algo_cfg.env_name : "null",
+             agent_count,
              algo_cfg.seed,
              algo_cfg.deterministic,
              algo_cfg.gamma,
@@ -244,11 +276,12 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         }
     }
 
-    tfrl_obs *obs = (tfrl_obs *)calloc((size_t)env_count, sizeof(tfrl_obs));
-    tfrl_action *actions = (tfrl_action *)calloc((size_t)env_count, sizeof(tfrl_action));
-    tfrl_step_result *steps = (tfrl_step_result *)calloc((size_t)env_count, sizeof(tfrl_step_result));
-    double *episode_returns = (double *)calloc((size_t)env_count, sizeof(double));
-    int *episode_counts = (int *)calloc((size_t)env_count, sizeof(int));
+    int total_agents = env_count * agent_count;
+    tfrl_obs *obs = (tfrl_obs *)calloc((size_t)total_agents, sizeof(tfrl_obs));
+    tfrl_action *actions = (tfrl_action *)calloc((size_t)total_agents, sizeof(tfrl_action));
+    tfrl_step_result *steps = (tfrl_step_result *)calloc((size_t)total_agents, sizeof(tfrl_step_result));
+    double *episode_returns = (double *)calloc((size_t)total_agents, sizeof(double));
+    int *episode_counts = (int *)calloc((size_t)total_agents, sizeof(int));
     if (!obs || !actions || !steps || !episode_returns || !episode_counts) {
         fprintf(stderr, "allocation failed\n");
         free(obs);
@@ -263,31 +296,81 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         return 1;
     }
     for (int i = 0; i < env_count; i++) {
-        obs[i] = tfrl_env_reset(envs[i], (uint64_t)(seed + i));
+        int got = tfrl_env_reset_multi(envs[i], (uint64_t)(seed + i), &obs[i * agent_count], agent_count);
+        if (got != agent_count) {
+            fprintf(stderr, "env reset failed\n");
+            for (int a = 0; a < agent_count; a++) {
+                tfrl_algo_destroy(&algos[a]);
+            }
+            for (int j = 0; j < env_count; j++) {
+                tfrl_env_destroy(envs[j]);
+            }
+            free(envs);
+            free(obs);
+            free(actions);
+            free(steps);
+            free(episode_returns);
+            free(episode_counts);
+            return 1;
+        }
     }
 
     if (cfg->mode == TFRL_MODE_TRAIN) {
         int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
         int thread_count = cfg->threads > 0 ? cfg->threads : env_count;
         if (cfg->deterministic) thread_count = 1;
-        for (int step = 0; step < total_steps; step++) {
-            tfrl_algo_act_batch(&algo, obs, env_count, actions);
-            if (env_count == 1) {
-                steps[0] = tfrl_env_step(envs[0], actions[0]);
-            } else {
-                step_envs_threaded(envs, env_count, actions, steps, thread_count);
+        tfrl_obs *obs_batch = (tfrl_obs *)calloc((size_t)env_count, sizeof(tfrl_obs));
+        tfrl_action *act_batch = (tfrl_action *)calloc((size_t)env_count, sizeof(tfrl_action));
+        if (!obs_batch || !act_batch) {
+            fprintf(stderr, "allocation failed\n");
+            free(obs_batch);
+            free(act_batch);
+            for (int a = 0; a < agent_count; a++) {
+                tfrl_algo_destroy(&algos[a]);
             }
             for (int i = 0; i < env_count; i++) {
-                tfrl_transition transition = {
-                    .obs = obs[i],
-                    .action = actions[i],
-                    .reward = steps[i].reward,
-                    .next_obs = steps[i].observation,
-                    .done = steps[i].done,
-                };
-                algo.vtable->update(algo.ctx, &transition);
-                obs[i] = steps[i].observation;
-                episode_returns[i] += steps[i].reward;
+                tfrl_env_destroy(envs[i]);
+            }
+            free(envs);
+            free(obs);
+            free(actions);
+            free(steps);
+            free(episode_returns);
+            free(episode_counts);
+            return 1;
+        }
+        for (int step = 0; step < total_steps; step++) {
+            for (int a = 0; a < agent_count; a++) {
+                for (int i = 0; i < env_count; i++) {
+                    obs_batch[i] = obs[i * agent_count + a];
+                }
+                tfrl_algo_act_batch(&algos[a], obs_batch, env_count, act_batch);
+                for (int i = 0; i < env_count; i++) {
+                    actions[i * agent_count + a] = act_batch[i];
+                }
+            }
+            for (int i = 0; i < env_count; i++) {
+                int got = tfrl_env_step_multi(envs[i], &actions[i * agent_count], agent_count, &steps[i * agent_count], agent_count);
+                if (got != agent_count) {
+                    fprintf(stderr, "env step failed\n");
+                    step = total_steps;
+                    break;
+                }
+            }
+            for (int i = 0; i < env_count; i++) {
+                for (int a = 0; a < agent_count; a++) {
+                    int idx = i * agent_count + a;
+                    tfrl_transition transition = {
+                        .obs = obs[idx],
+                        .action = actions[idx],
+                        .reward = steps[idx].reward,
+                        .next_obs = steps[idx].observation,
+                        .done = steps[idx].done,
+                    };
+                    algos[a].vtable->update(algos[a].ctx, &transition);
+                    obs[idx] = steps[idx].observation;
+                    episode_returns[idx] += steps[idx].reward;
+                }
             }
 
             if ((viewer || writer) && should_render(step, cfg->render_every)) {
@@ -301,23 +384,35 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             }
 
             for (int i = 0; i < env_count; i++) {
-                if (steps[i].done) {
-                    episode_counts[i] += 1;
-                    if (cfg->log_every > 0 && (episode_counts[i] % cfg->log_every) == 0) {
-                        fprintf(stdout, "env=%d episode=%d return=%.4f\n", i, episode_counts[i], episode_returns[i]);
+                int env_done = 0;
+                for (int a = 0; a < agent_count; a++) {
+                    int idx = i * agent_count + a;
+                    if (steps[idx].done) env_done = 1;
+                }
+                if (env_done) {
+                    for (int a = 0; a < agent_count; a++) {
+                        int idx = i * agent_count + a;
+                        episode_counts[idx] += 1;
+                        if (cfg->log_every > 0 && (episode_counts[idx] % cfg->log_every) == 0) {
+                            fprintf(stdout, "env=%d agent=%d episode=%d return=%.4f\n", i, a, episode_counts[idx], episode_returns[idx]);
+                        }
+                        episode_returns[idx] = 0.0;
                     }
-                    obs[i] = tfrl_env_reset(envs[i], (uint64_t)(cfg->seed + i));
-                    episode_returns[i] = 0.0;
+                    int got = tfrl_env_reset_multi(envs[i], (uint64_t)(cfg->seed + i), &obs[i * agent_count], agent_count);
+                    if (got != agent_count) {
+                        fprintf(stderr, "env reset failed\n");
+                        break;
+                    }
                 }
             }
             if (viewer && tfrl_viewer_should_close(viewer)) {
                 break;
             }
         }
-        if (env_count > 1) {
+        if (env_count > 1 || agent_count > 1) {
             double sum = 0.0;
             int count = 0;
-            for (int i = 0; i < env_count; i++) {
+            for (int i = 0; i < total_agents; i++) {
                 sum += episode_returns[i];
                 count += episode_counts[i] > 0 ? episode_counts[i] : 0;
             }
@@ -325,17 +420,30 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 fprintf(stdout, "avg_return=%.4f episodes=%d\n", sum / (double)count, count);
             }
         }
+        free(obs_batch);
+        free(act_batch);
     } else if (cfg->mode == TFRL_MODE_EVAL) {
         int episodes = cfg->episodes > 0 ? cfg->episodes : 10;
         for (int ep = 0; ep < episodes; ep++) {
-            obs[0] = tfrl_env_reset(envs[0], (uint64_t)seed);
+            if (tfrl_env_reset_multi(envs[0], (uint64_t)seed, obs, agent_count) != agent_count) {
+                fprintf(stderr, "env reset failed\n");
+                break;
+            }
             int done = 0;
             int step = 0;
             while (!done) {
-                actions[0] = algo.vtable->act(algo.ctx, obs[0]);
-                steps[0] = tfrl_env_step(envs[0], actions[0]);
-                obs[0] = steps[0].observation;
-                done = steps[0].done;
+                for (int a = 0; a < agent_count; a++) {
+                    actions[a] = algos[a].vtable->act(algos[a].ctx, obs[a]);
+                }
+                if (tfrl_env_step_multi(envs[0], actions, agent_count, steps, agent_count) != agent_count) {
+                    fprintf(stderr, "env step failed\n");
+                    done = 1;
+                } else {
+                    for (int a = 0; a < agent_count; a++) {
+                        obs[a] = steps[a].observation;
+                        if (steps[a].done) done = 1;
+                    }
+                }
 
                 if ((viewer || writer) && should_render(step, cfg->render_every)) {
                     size_t written = tfrl_env_render_write(envs[render_idx], render_buf, render_buf_len);
@@ -359,9 +467,19 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     if (viewer) tfrl_viewer_destroy(viewer);
     free(render_buf);
     if (cfg->save_path) {
-        tfrl_algo_save(&algo, cfg->save_path);
+        if (agent_count == 1) {
+            tfrl_algo_save(&algos[0], cfg->save_path);
+        } else {
+            for (int a = 0; a < agent_count; a++) {
+                char path[256];
+                snprintf(path, sizeof(path), "%s.agent%d", cfg->save_path, a);
+                tfrl_algo_save(&algos[a], path);
+            }
+        }
     }
-    tfrl_algo_destroy(&algo);
+    for (int a = 0; a < agent_count; a++) {
+        tfrl_algo_destroy(&algos[a]);
+    }
     for (int i = 0; i < env_count; i++) {
         tfrl_env_destroy(envs[i]);
     }

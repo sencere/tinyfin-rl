@@ -219,6 +219,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Deterministic epsilon/action-noise RNG paths
 - Golden runs expanded for PPO/TD3 variants
 - Trace metadata overlay in viewer
+- Multi-agent env API + lineworld_duo example
 
 ---
 
@@ -228,6 +229,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 2. Add deterministic RNG coverage to SAC/TD3 policy sampling docs
 3. Expand golden runs for Rainbow/QRDQN baselines
 4. Add trace metadata dump in replay CLI
+5. Multi-agent support (multi-agent env API + per-agent policies + trace updates)
 
 ## Recent Updates
 
@@ -249,6 +251,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Deterministic epsilon/action-noise RNG
 - Golden runs PPO/TD3 variants
 - Trace metadata overlay in viewer
+- Multi-agent env API with per-agent policies + lineworld_duo
 
 ## Quality Tiers
 

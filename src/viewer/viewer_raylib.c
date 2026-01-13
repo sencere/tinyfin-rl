@@ -151,7 +151,11 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
         for (size_t i = 0; i < entity_count; i++) {
             int cx = (int)entities[i].x * CELL_SIZE + CELL_SIZE / 2;
             int cy = (int)entities[i].y * CELL_SIZE + CELL_SIZE / 2;
-            DrawCircle(cx, cy, CELL_SIZE * 0.2f, (Color){255, 215, 0, 255});
+            if (entities[i].type == 2) {
+                DrawRectangle(cx - CELL_SIZE / 4, cy - CELL_SIZE / 4, CELL_SIZE / 2, CELL_SIZE / 2, (Color){220, 80, 80, 255});
+            } else {
+                DrawCircle(cx, cy, CELL_SIZE * 0.2f, (Color){255, 215, 0, 255});
+            }
         }
     }
 

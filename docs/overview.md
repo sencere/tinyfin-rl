@@ -10,6 +10,7 @@ control loop.
 make
 ./build/tinyfin-rl train --algo dqn --steps 1000
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
+./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 500
 ./build/tinyfin-rl train --algo random --env point1d --steps 500
 ./build/tinyfin-rl train --algo dqn --env coin_maze --steps 500

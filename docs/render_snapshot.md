@@ -69,4 +69,4 @@ After the walls array, v3 appends `entity_count` entries:
 type, x, y, value
 ```
 
-`type` is application-defined (e.g., 1 = coin).
+`type` is application-defined (e.g., 1 = coin, 2 = agent).
