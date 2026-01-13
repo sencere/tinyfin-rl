@@ -118,7 +118,12 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         return run_replay(cfg);
     }
 
-    seed_rng(cfg->seed);
+    int seed = cfg->seed;
+    if (cfg->deterministic && seed == 0) {
+        seed = 1;
+        fprintf(stdout, "deterministic mode: seed set to %d\n", seed);
+    }
+    seed_rng(seed);
     int env_count = cfg->envs > 0 ? cfg->envs : 1;
     int render_idx = cfg->render_env;
     if (render_idx < 0) render_idx = 0;
@@ -129,7 +134,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     tfrl_env **envs = (tfrl_env **)calloc((size_t)env_count, sizeof(tfrl_env *));
     if (!envs) return 1;
     for (int i = 0; i < env_count; i++) {
-        tfrl_env_config env_cfg = {.name = cfg->env_name, .seed = (uint64_t)(cfg->seed + i)};
+        tfrl_env_config env_cfg = {.name = cfg->env_name, .seed = (uint64_t)(seed + i)};
         envs[i] = tfrl_env_create(&env_cfg);
         if (!envs[i]) {
             fprintf(stderr, "env creation failed\n");
@@ -230,12 +235,13 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         return 1;
     }
     for (int i = 0; i < env_count; i++) {
-        obs[i] = tfrl_env_reset(envs[i], (uint64_t)(cfg->seed + i));
+        obs[i] = tfrl_env_reset(envs[i], (uint64_t)(seed + i));
     }
 
     if (cfg->mode == TFRL_MODE_TRAIN) {
         int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
         int thread_count = cfg->threads > 0 ? cfg->threads : env_count;
+        if (cfg->deterministic) thread_count = 1;
         for (int step = 0; step < total_steps; step++) {
             tfrl_algo_act_batch(&algo, obs, env_count, actions);
             if (env_count == 1) {
@@ -294,7 +300,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     } else if (cfg->mode == TFRL_MODE_EVAL) {
         int episodes = cfg->episodes > 0 ? cfg->episodes : 10;
         for (int ep = 0; ep < episodes; ep++) {
-            obs[0] = tfrl_env_reset(envs[0], (uint64_t)cfg->seed);
+            obs[0] = tfrl_env_reset(envs[0], (uint64_t)seed);
             int done = 0;
             int step = 0;
             while (!done) {

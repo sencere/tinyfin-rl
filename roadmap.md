@@ -203,6 +203,8 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - MCTS planner for `maze_rooms` and `lineworld`
 - Render snapshots v3 with entity lists and richer metadata
 - Threaded env stepping via `--threads`
+- Deterministic mode via `--deterministic`
+- Golden runs regression script
 
 ---
 
@@ -214,6 +216,12 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 4. Golden runs regression suite (lineworld/point1d/maze) with thresholds
 5. Continuous SAC/TD3: add stochastic policy + log-prob entropy
 6. Replay buffer tests, determinism checks, and CI wiring
+
+## Recent Updates
+
+- Config validation for algorithm params and space constraints
+- Deterministic mode and fixed seeding behavior
+- Golden runs regression script
 
 ## Quality Tiers
 

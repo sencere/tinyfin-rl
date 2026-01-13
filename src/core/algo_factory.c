@@ -16,9 +16,73 @@ tfrl_algo tfrl_algo_mcts_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg);
 
+static int require_positive(const char *name, int v) {
+    if (v > 0) return 1;
+    fprintf(stderr, "invalid %s: %d\n", name, v);
+    return 0;
+}
+
+static int require_nonneg(const char *name, int v) {
+    if (v >= 0) return 1;
+    fprintf(stderr, "invalid %s: %d\n", name, v);
+    return 0;
+}
+
+static int require_float_positive(const char *name, float v) {
+    if (v > 0.0f) return 1;
+    fprintf(stderr, "invalid %s: %.6f\n", name, v);
+    return 0;
+}
+
+static int require_discrete(const char *algo, const tfrl_algo_config *cfg) {
+    if (cfg->obs_type == TFRL_SPACE_DISCRETE && cfg->action_type == TFRL_SPACE_DISCRETE) return 1;
+    fprintf(stderr, "%s requires discrete obs/action spaces\n", algo);
+    return 0;
+}
+
+static int validate_algo_config(const tfrl_algo_config *cfg) {
+    if (!cfg || !cfg->name) return 1;
+    if (!require_positive("obs_n", cfg->obs_n)) return 0;
+    if (!require_positive("action_n", cfg->action_n)) return 0;
+    if (!require_float_positive("gamma", cfg->gamma)) return 0;
+    if (!require_nonneg("replay_size", cfg->replay_size)) return 0;
+    if (!require_nonneg("batch_size", cfg->batch_size)) return 0;
+
+    if (strcmp(cfg->name, "ppo") == 0) {
+        if (!require_discrete("ppo", cfg)) return 0;
+        if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
+        if (!require_positive("epochs", cfg->epochs)) return 0;
+        if (!require_float_positive("clip_eps", cfg->clip_eps)) return 0;
+    } else if (strcmp(cfg->name, "reinforce") == 0) {
+        if (!require_discrete("reinforce", cfg)) return 0;
+        if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
+    } else if (strcmp(cfg->name, "a2c") == 0 || strcmp(cfg->name, "trpo") == 0 || strcmp(cfg->name, "impala") == 0) {
+        if (!require_discrete(cfg->name, cfg)) return 0;
+        if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
+    } else if (strcmp(cfg->name, "dqn") == 0 || strcmp(cfg->name, "rainbow") == 0 || strcmp(cfg->name, "qrdqn") == 0) {
+        if (cfg->action_type != TFRL_SPACE_DISCRETE) {
+            fprintf(stderr, "%s requires discrete action space\n", cfg->name);
+            return 0;
+        }
+        if (!require_positive("batch_size", cfg->batch_size)) return 0;
+    } else if (strcmp(cfg->name, "sac") == 0 || strcmp(cfg->name, "td3") == 0) {
+        if (!require_positive("batch_size", cfg->batch_size)) return 0;
+    } else if (strcmp(cfg->name, "mcts") == 0) {
+        if (!require_discrete("mcts", cfg)) return 0;
+        if (!require_positive("mcts_sims", cfg->mcts_sims)) return 0;
+        if (!require_positive("mcts_depth", cfg->mcts_depth)) return 0;
+        if (!cfg->env_name || (strcmp(cfg->env_name, "maze_rooms") != 0 && strcmp(cfg->env_name, "lineworld") != 0)) {
+            fprintf(stderr, "mcts requires env maze_rooms or lineworld\n");
+            return 0;
+        }
+    }
+    return 1;
+}
+
 tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec) {
     tfrl_algo out = {0};
     if (!cfg || !spec) return out;
+    if (!validate_algo_config(cfg)) return out;
     if (!cfg->name) {
         return tfrl_algo_random_create(cfg);
     }

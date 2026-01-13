@@ -49,3 +49,9 @@ Tests:
 ```bash
 ./scripts/run_tests.sh
 ```
+
+Golden runs:
+
+```bash
+./scripts/golden_runs.sh
+```

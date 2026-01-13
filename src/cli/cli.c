@@ -18,6 +18,13 @@ static const char *arg_str(int argc, char **argv, const char *name, const char *
     return def;
 }
 
+static int arg_flag(int argc, char **argv, const char *name) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
 static float arg_float(int argc, char **argv, const char *name, float def) {
     const char *v = arg_str(argc, argv, name, NULL);
     return v ? (float)atof(v) : def;
@@ -25,9 +32,9 @@ static float arg_float(int argc, char **argv, const char *name, float def) {
 
 void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "usage:\n");
-    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
+    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "           [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
-    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
+    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N]\n", name);
     fprintf(stderr, "algo params:\n");
@@ -58,6 +65,7 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->env_name = arg_str(argc, argv, "--env", "maze_rooms");
     out_cfg->envs = arg_int(argc, argv, "--envs", 1);
     out_cfg->threads = arg_int(argc, argv, "--threads", 0);
+    out_cfg->deterministic = arg_flag(argc, argv, "--deterministic");
     out_cfg->steps = arg_int(argc, argv, "--steps", 1000);
     out_cfg->episodes = arg_int(argc, argv, "--episodes", 10);
     out_cfg->seed = arg_int(argc, argv, "--seed", 0);

@@ -37,6 +37,7 @@ Common flags:
 - `--render-every N`
 - `--render-fps N`
 - `--trace-out FILE`
+- `--deterministic` (single-thread stepping + fixed seed)
 
 ## Eval
 

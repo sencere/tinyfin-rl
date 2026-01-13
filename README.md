@@ -106,6 +106,7 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 - `docs/install.md` build notes
 - `docs/env_api.md` env API + Python binding
 - `scripts/run_tests.sh` lightweight test runner
+- `scripts/golden_runs.sh` golden run regression script
 - `python/README.md` optional Python wrapper
 - `architecture.md` system design
 - `roadmap.md` milestones
