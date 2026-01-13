@@ -20,6 +20,20 @@ typedef struct {
     uint32_t max_steps;
 } tfrl_grid_snapshot;
 
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t agent_x;
+    uint32_t agent_y;
+    uint32_t goal_x;
+    uint32_t goal_y;
+    uint32_t step;
+    uint32_t max_steps;
+    float reward;
+    uint32_t done;
+    uint32_t env_kind;
+} tfrl_grid_snapshot_v2;
+
 struct tfrl_viewer {
     int init;
     int fps;
@@ -52,13 +66,24 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
     if (!viewer || !snapshot || len < sizeof(tfrl_render_snapshot_header) + sizeof(tfrl_grid_snapshot)) return;
     const unsigned char *bytes = (const unsigned char *)snapshot;
     const tfrl_render_snapshot_header *header = (const tfrl_render_snapshot_header *)bytes;
-    if (header->payload_bytes < sizeof(tfrl_grid_snapshot)) return;
-
     const unsigned char *payload = bytes + sizeof(tfrl_render_snapshot_header);
-    const tfrl_grid_snapshot *grid = (const tfrl_grid_snapshot *)payload;
-    size_t walls_bytes = header->payload_bytes - sizeof(tfrl_grid_snapshot);
+    const tfrl_grid_snapshot *grid = NULL;
+    tfrl_grid_snapshot_v2 grid_v2 = {0};
+    size_t payload_header_size = 0;
+    if (header->api_version == 0x0002) {
+        if (header->payload_bytes < sizeof(tfrl_grid_snapshot_v2)) return;
+        const tfrl_grid_snapshot_v2 *grid_ptr = (const tfrl_grid_snapshot_v2 *)payload;
+        grid_v2 = *grid_ptr;
+        grid = (const tfrl_grid_snapshot *)&grid_v2;
+        payload_header_size = sizeof(tfrl_grid_snapshot_v2);
+    } else {
+        if (header->payload_bytes < sizeof(tfrl_grid_snapshot)) return;
+        grid = (const tfrl_grid_snapshot *)payload;
+        payload_header_size = sizeof(tfrl_grid_snapshot);
+    }
+    size_t walls_bytes = header->payload_bytes - payload_header_size;
     if (walls_bytes < (size_t)(grid->width * grid->height)) return;
-    const unsigned char *walls = payload + sizeof(tfrl_grid_snapshot);
+    const unsigned char *walls = payload + payload_header_size;
 
     if (!ensure_init(viewer, (int)grid->width, (int)grid->height)) return;
     if (WindowShouldClose()) return;
@@ -81,6 +106,10 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
 
     int text_y = (int)grid->height * CELL_SIZE + 10;
     DrawText(TextFormat("step: %u / %u", grid->step, grid->max_steps), 10, text_y, 18, DARKGRAY);
+    if (header->api_version == 0x0002) {
+        DrawText(TextFormat("reward: %.3f", grid_v2.reward), 200, text_y, 18, DARKGRAY);
+        DrawText(TextFormat("done: %u", grid_v2.done), 360, text_y, 18, DARKGRAY);
+    }
     EndDrawing();
 }
 

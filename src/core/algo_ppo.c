@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -127,12 +128,38 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
     if (algo->count < algo->batch) return;
 
     float *returns = (float *)calloc((size_t)algo->batch, sizeof(float));
-    if (!returns) return;
+    float *advantages = (float *)calloc((size_t)algo->batch, sizeof(float));
+    if (!returns || !advantages) {
+        free(returns);
+        free(advantages);
+        return;
+    }
     float g = 0.0f;
     for (int i = algo->batch - 1; i >= 0; i--) {
         if (algo->dones[i]) g = 0.0f;
         g = algo->rewards[i] + algo->gamma * g;
         returns[i] = g;
+    }
+
+    float mean = 0.0f;
+    for (int i = 0; i < algo->batch; i++) {
+        Tensor *x = one_hot(algo->obs_n, algo->obs_idx[i]);
+        Tensor *v = linear_forward(algo->value, x);
+        float v_scalar = tensor_get_f32_at(v, 0);
+        advantages[i] = returns[i] - v_scalar;
+        mean += advantages[i];
+        tensor_free(v);
+        tensor_free(x);
+    }
+    mean /= (float)algo->batch;
+    float var = 0.0f;
+    for (int i = 0; i < algo->batch; i++) {
+        float d = advantages[i] - mean;
+        var += d * d;
+    }
+    float std = sqrtf(var / (float)algo->batch + 1e-8f);
+    for (int i = 0; i < algo->batch; i++) {
+        advantages[i] = (advantages[i] - mean) / std;
     }
 
     int epochs = algo->epochs > 0 ? algo->epochs : 2;
@@ -151,7 +178,7 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             Tensor *clipped = tensor_clamp(ratio, 1.0f - algo->clip_eps, 1.0f + algo->clip_eps);
 
             Tensor *adv_t = tensor_new(1, (int[1]){1});
-            tensor_set_f32_at(adv_t, 0, returns[i]);
+            tensor_set_f32_at(adv_t, 0, advantages[i]);
             Tensor *policy_loss = tensor_mul(clipped, adv_t);
             Tensor *neg = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(neg, 0, -1.0f);
@@ -192,6 +219,7 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
     }
 
     free(returns);
+    free(advantages);
     algo->count = 0;
 }
 

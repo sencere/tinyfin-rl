@@ -30,6 +30,8 @@ struct tfrl_env {
     int y;
     float pos;
     int steps;
+    float last_reward;
+    int last_done;
     uint32_t frame_index;
 };
 
@@ -43,6 +45,20 @@ typedef struct {
     uint32_t step;
     uint32_t max_steps;
 } tfrl_grid_snapshot;
+
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t agent_x;
+    uint32_t agent_y;
+    uint32_t goal_x;
+    uint32_t goal_y;
+    uint32_t step;
+    uint32_t max_steps;
+    float reward;
+    uint32_t done;
+    uint32_t env_kind;
+} tfrl_grid_snapshot_v2;
 
 static int is_wall_maze(int x, int y) {
     if (x < 0 || x >= MAZE_W || y < 0 || y >= MAZE_H) return 1;
@@ -161,6 +177,8 @@ tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed) {
     env->y = 0;
     env->pos = -1.0f;
     env->steps = 0;
+    env->last_reward = 0.0f;
+    env->last_done = 0;
     env->frame_index = 0;
     tfrl_obs obs = {0};
     if (env->kind == TFRL_ENV_LINEWORLD) {
@@ -244,6 +262,8 @@ tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action) {
         out.reward = reached ? 1.0 : -0.01;
     }
     out.done = done;
+    env->last_reward = (float)out.reward;
+    env->last_done = out.done;
     return out;
 }
 
@@ -277,7 +297,7 @@ size_t tfrl_env_render_bytes_needed(const tfrl_env *env) {
         w = POINT1D_W;
         h = POINT1D_H;
     }
-    size_t payload_bytes = sizeof(tfrl_grid_snapshot) + (w * h);
+    size_t payload_bytes = sizeof(tfrl_grid_snapshot_v2) + (w * h);
     return sizeof(tfrl_render_snapshot_header) + payload_bytes;
 }
 
@@ -292,7 +312,7 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
         w = POINT1D_W;
         h = POINT1D_H;
     }
-    size_t payload_bytes = sizeof(tfrl_grid_snapshot) + (w * h);
+    size_t payload_bytes = sizeof(tfrl_grid_snapshot_v2) + (w * h);
     size_t total = sizeof(tfrl_render_snapshot_header) + payload_bytes;
     if (buffer_len < total) return 0;
 
@@ -322,7 +342,7 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
         goal_y = 0;
     }
 
-    tfrl_grid_snapshot payload = {
+    tfrl_grid_snapshot_v2 payload = {
         .width = (uint32_t)w,
         .height = (uint32_t)h,
         .agent_x = agent_x,
@@ -331,6 +351,9 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
         .goal_y = goal_y,
         .step = (uint32_t)env->steps,
         .max_steps = max_steps,
+        .reward = env->last_reward,
+        .done = (uint32_t)env->last_done,
+        .env_kind = (uint32_t)env->kind,
     };
     unsigned char *payload_dst = (unsigned char *)buffer + sizeof(header);
     memcpy(payload_dst, &payload, sizeof(payload));

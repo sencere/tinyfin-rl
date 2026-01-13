@@ -13,7 +13,7 @@ typedef struct {
 } tfrl_render_snapshot_header;
 ```
 
-## maze_rooms payload
+## Payload (v1)
 
 The canonical environment emits:
 
@@ -35,3 +35,17 @@ step, max_steps
 The viewer reads the payload and draws a grid.
 
 `lineworld` uses the same payload but sets `height=1` and has no walls.
+
+## Payload (v2)
+
+The current format uses v2 with extra metadata:
+
+```
+width, height
+agent_x, agent_y
+goal_x, goal_y
+step, max_steps
+reward, done, env_kind
+```
+
+The walls array follows the v2 grid header.

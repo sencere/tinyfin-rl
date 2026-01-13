@@ -99,7 +99,7 @@ Save a policy:
 
 ## PPO
 
-Minimal PPO with a Tinyfin `Linear` policy + value head and clipped ratio loss.
+Minimal PPO with a Tinyfin `Linear` policy + value head, clipped ratio loss, and advantage normalization.
 
 ```bash
 ./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2

@@ -8,7 +8,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define TFRL_SNAPSHOT_API_VERSION 0x0001
+#define TFRL_SNAPSHOT_API_VERSION 0x0002
 
 typedef struct {
     uint32_t api_version;
