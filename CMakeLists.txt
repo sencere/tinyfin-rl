@@ -12,8 +12,16 @@ set(SRC_CORE
     src/core/algo_factory.c
     src/core/algo_random.c
     src/core/algo_dqn.c
+    src/core/algo_rainbow.c
+    src/core/algo_qrdqn.c
+    src/core/algo_a2c.c
+    src/core/algo_trpo.c
+    src/core/algo_sac.c
+    src/core/algo_td3.c
+    src/core/algo_impala.c
     src/core/algo_reinforce.c
     src/core/algo_ppo.c
+    src/core/replay_buffer.c
     src/core/trace.c
 )
 
@@ -46,3 +54,15 @@ endif()
 
 add_library(tfrl_env SHARED src/core/env_example.c)
 target_include_directories(tfrl_env PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+enable_testing()
+
+add_executable(test_replay_buffer tests/test_replay_buffer.c src/core/replay_buffer.c)
+target_include_directories(test_replay_buffer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_replay_buffer m)
+add_test(NAME replay_buffer COMMAND test_replay_buffer)
+
+add_executable(test_point1d_smoke tests/test_point1d_smoke.c src/core/env_example.c)
+target_include_directories(test_point1d_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_point1d_smoke m)
+add_test(NAME point1d_smoke COMMAND test_point1d_smoke)

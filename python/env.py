@@ -1,15 +1,25 @@
 import ctypes
 import os
-from ctypes import c_int32, c_uint64, c_double, c_char_p
+from ctypes import c_int32, c_uint64, c_double, c_char_p, c_float
 from dataclasses import dataclass
+
+TFRL_MAX_BOX_DIMS = 4
 
 
 class TfrlObs(ctypes.Structure):
-    _fields_ = [("index", c_int32)]
+    _fields_ = [
+        ("index", c_int32),
+        ("data_len", c_int32),
+        ("data", c_float * TFRL_MAX_BOX_DIMS),
+    ]
 
 
 class TfrlAction(ctypes.Structure):
-    _fields_ = [("index", c_int32)]
+    _fields_ = [
+        ("index", c_int32),
+        ("data_len", c_int32),
+        ("data", c_float * TFRL_MAX_BOX_DIMS),
+    ]
 
 
 class TfrlStepResult(ctypes.Structure):
@@ -99,14 +109,26 @@ class EnvHandle:
         self._lib = lib
         self._handle = handle
 
-    def reset(self, seed: int = 0) -> int:
+    def reset(self, seed: int = 0) -> int | list[float]:
         obs = self._lib.lib.tfrl_env_reset(self._handle, seed)
+        if obs.data_len > 0:
+            return [float(obs.data[i]) for i in range(obs.data_len)]
         return int(obs.index)
 
-    def step(self, action: int) -> tuple[int, float, bool]:
-        act = TfrlAction(index=action)
+    def step(self, action: int | list[float] | tuple[float, ...]) -> tuple[int | list[float], float, bool]:
+        act = TfrlAction()
+        if isinstance(action, (list, tuple)):
+            act.data_len = min(len(action), TFRL_MAX_BOX_DIMS)
+            for i in range(act.data_len):
+                act.data[i] = float(action[i])
+        else:
+            act.index = int(action)
         res = self._lib.lib.tfrl_env_step(self._handle, act)
-        return int(res.observation.index), float(res.reward), bool(res.done)
+        if res.observation.data_len > 0:
+            obs_val = [float(res.observation.data[i]) for i in range(res.observation.data_len)]
+        else:
+            obs_val = int(res.observation.index)
+        return obs_val, float(res.reward), bool(res.done)
 
     def spec(self) -> EnvSpec:
         ptr = self._lib.lib.tfrl_env_get_spec(self._handle)

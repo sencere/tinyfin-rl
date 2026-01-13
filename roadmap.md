@@ -197,6 +197,33 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 3. Add richer environment suite
 4. Add true parallel stepping (threads)
 
+## Additional Algorithms (Ideas)
+
+- A2C / A3C (shared or separate actor-critic)
+- SAC (continuous)
+- TD3 (continuous)
+- TRPO (trust-region)
+- Rainbow DQN (C51 + PER + dueling + n-step)
+- QR-DQN (distributional)
+- IMPALA / V-trace (scalable off-policy)
+
+## Advanced Vectorization Roadmap
+
+If you want higher throughput beyond simple batching:
+
+1. **Threaded env pool**  
+   Spawn N worker threads, each stepping an env instance, and aggregate into a batch.
+2. **Lock-free ring buffers**  
+   Use single-producer/single-consumer queues to pass obs/actions without mutex overhead.
+3. **Fixed-size batch scheduler**  
+   Always batch up to `B` envs per inference call to keep GPU/CPU utilization consistent.
+4. **Async inference**  
+   Overlap env stepping with Tinyfin forward/backward on separate threads.
+5. **SIMD kernels**  
+   Add a vectorized backend for discrete ops to reduce per-step overhead.
+6. **Replay buffer sharding**  
+   Shard replay across workers to reduce contention and improve sampling speed.
+
 ---
 
 ## Long-Term Vision

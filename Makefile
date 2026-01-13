@@ -17,8 +17,16 @@ SRC_CORE = \
 	src/core/algo_factory.c \
 	src/core/algo_random.c \
 	src/core/algo_dqn.c \
+	src/core/algo_rainbow.c \
+	src/core/algo_qrdqn.c \
+	src/core/algo_a2c.c \
+	src/core/algo_trpo.c \
+	src/core/algo_sac.c \
+	src/core/algo_td3.c \
+	src/core/algo_impala.c \
 	src/core/algo_reinforce.c \
 	src/core/algo_ppo.c \
+	src/core/replay_buffer.c \
 	src/core/trace.c
 
 SRC_APP = \
@@ -32,6 +40,8 @@ SRC_VIEWER_RAYLIB = src/viewer/viewer_raylib.c
 BIN_DIR ?= build
 BIN ?= $(BIN_DIR)/tinyfin-rl
 ENV_LIB ?= $(BIN_DIR)/libtfrl_env.so
+TEST_REPLAY ?= $(BIN_DIR)/test_replay_buffer
+TEST_POINT1D ?= $(BIN_DIR)/test_point1d_smoke
 
 .PHONY: all clean raylib
 
@@ -57,6 +67,14 @@ $(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
 
 $(ENV_LIB): src/core/env_example.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $<
+
+tests: $(TEST_REPLAY) $(TEST_POINT1D)
+
+$(TEST_REPLAY): tests/test_replay_buffer.c src/core/replay_buffer.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
+
+$(TEST_POINT1D): tests/test_point1d_smoke.c src/core/env_example.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
 raylib:
 	$(MAKE) -C $(RAYLIB_DIR)/src

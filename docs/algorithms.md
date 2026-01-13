@@ -3,6 +3,8 @@
 Tinyfin-RL selects algorithms via `--algo`. All algorithms share the
 `tfrl_algo` interface in `src/core/algo_api.h`.
 
+Note: Continuous (box) actions are currently supported by `random`, `sac`, and `td3`.
+
 ## DQN
 
 Discrete-action DQN with a Tinyfin `Linear` policy head.
@@ -16,6 +18,56 @@ Flags:
 - `--gamma`
 - `--lr`
 - `--epsilon`
+- `--replay-size`
+- `--batch-size`
+- `--per-alpha`
+- `--per-beta`
+- `--save PATH` / `--load PATH`
+
+## Random
+
+Baseline random policy (supports discrete and box actions).
+
+```bash
+./build/tinyfin-rl train --algo random --steps 2000
+```
+
+## Rainbow DQN (Minimal)
+
+Rainbow-style DQN with n-step returns and a target network.
+
+```bash
+./build/tinyfin-rl train --algo rainbow --steps 2000
+```
+
+Flags:
+
+- `--gamma`
+- `--lr`
+- `--epsilon`
+- `--replay-size`
+- `--batch-size`
+- `--per-alpha`
+- `--per-beta`
+- `--save PATH` / `--load PATH`
+
+## QR-DQN (Minimal)
+
+Quantile-regression DQN with a fixed set of quantiles per action.
+
+```bash
+./build/tinyfin-rl train --algo qrdqn --steps 2000
+```
+
+Flags:
+
+- `--gamma`
+- `--lr`
+- `--epsilon`
+- `--replay-size`
+- `--batch-size`
+- `--per-alpha`
+- `--per-beta`
 - `--save PATH` / `--load PATH`
 
 ## REINFORCE
@@ -40,8 +92,69 @@ Minimal PPO with a Tinyfin `Linear` policy + value head and clipped ratio loss.
 ./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2
 ```
 
+## A2C (Minimal)
+
+Advantage actor-critic with a shared optimizer for policy + value heads.
+
+```bash
+./build/tinyfin-rl train --algo a2c --steps 2000 --steps-per-batch 64 --entropy-coef 0.01
+```
+
+## TRPO (KL-Penalty, Minimal)
+
+KL-penalized policy updates with a value baseline (approximate TRPO).
+
+```bash
+./build/tinyfin-rl train --algo trpo --steps 2000 --steps-per-batch 64 --clip-eps 0.01
+```
+
+## SAC (Discrete/Continuous, Minimal)
+
+Soft actor-critic for discrete actions with twin Q networks. For box actions, this uses a minimal continuous variant.
+
+```bash
+./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2
+```
+
+Off-policy flags:
+
+- `--replay-size`
+- `--batch-size`
+- `--per-alpha`
+- `--per-beta`
+
+## TD3 (Discrete/Continuous, Minimal)
+
+Twin Q networks with delayed policy updates for discrete actions. For box actions, this uses a minimal continuous variant.
+
+```bash
+./build/tinyfin-rl train --algo td3 --steps 2000
+```
+
+Off-policy flags:
+
+- `--replay-size`
+- `--batch-size`
+- `--per-alpha`
+- `--per-beta`
+
+## IMPALA / V-trace (Minimal)
+
+V-trace corrections over on-policy rollouts (single-process).
+
+```bash
+./build/tinyfin-rl train --algo impala --steps 2000 --steps-per-batch 64 --clip-eps 1.0
+```
+
 Checkpoint format:
 
 - DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
+- Rainbow DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
+- QR-DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
 - REINFORCE: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`
 - PPO: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
+- A2C: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
+- TRPO: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
+- SAC: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
+- TD3: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
+- IMPALA: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`

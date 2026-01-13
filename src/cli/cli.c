@@ -25,13 +25,15 @@ static float arg_float(int argc, char **argv, const char *name, float def) {
 
 void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "usage:\n");
-    fprintf(stderr, "  %s train --algo dqn [--env NAME] [--envs N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
+    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|random [--env NAME] [--envs N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
     fprintf(stderr, "           [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
-    fprintf(stderr, "  %s eval --algo dqn [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
+    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
     fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N]\n", name);
     fprintf(stderr, "algo params:\n");
     fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N (ppo)\n");
+    fprintf(stderr, "  --entropy-coef N (a2c/impala/sac)\n");
+    fprintf(stderr, "  --replay-size N --batch-size N --per-alpha N --per-beta N (dqn)\n");
     fprintf(stderr, "checkpoint params:\n");
     fprintf(stderr, "  --save PATH --load PATH\n");
 }
@@ -60,7 +62,12 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->gamma = arg_float(argc, argv, "--gamma", 0.99f);
     out_cfg->lr = arg_float(argc, argv, "--lr", 0.05f);
     out_cfg->epsilon = arg_float(argc, argv, "--epsilon", 0.1f);
+    out_cfg->entropy_coef = arg_float(argc, argv, "--entropy-coef", 0.0f);
     out_cfg->clip_eps = arg_float(argc, argv, "--clip-eps", 0.2f);
+    out_cfg->replay_size = arg_int(argc, argv, "--replay-size", 1000);
+    out_cfg->batch_size = arg_int(argc, argv, "--batch-size", 32);
+    out_cfg->per_alpha = arg_float(argc, argv, "--per-alpha", 0.0f);
+    out_cfg->per_beta = arg_float(argc, argv, "--per-beta", 0.4f);
     out_cfg->steps_per_batch = arg_int(argc, argv, "--steps-per-batch", 64);
     out_cfg->epochs = arg_int(argc, argv, "--epochs", 2);
     out_cfg->log_every = arg_int(argc, argv, "--log-every", 100);

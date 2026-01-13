@@ -10,17 +10,22 @@
 
 Common flags:
 
-- `--algo dqn|ppo|reinforce`
-- `--env maze_rooms|lineworld`
+- `--algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|random`
+- `--env maze_rooms|lineworld|lineworld_cont|point1d`
 - `--envs N` (vectorized stepping)
 - `--steps N`
 - `--seed N`
 - `--gamma G`
 - `--lr LR`
-- `--epsilon E` (DQN)
+- `--epsilon E` (DQN family)
 - `--clip-eps E` (PPO)
 - `--steps-per-batch N` (PPO/REINFORCE)
 - `--epochs N` (PPO)
+- `--replay-size N` (DQN family, SAC, TD3)
+- `--batch-size N` (DQN family, SAC, TD3)
+- `--per-alpha N` (DQN family, SAC, TD3)
+- `--per-beta N` (DQN family, SAC, TD3)
+- `--entropy-coef N` (A2C/IMPALA/SAC)
 - `--save PATH`
 - `--load PATH`
 - `--log-every N`

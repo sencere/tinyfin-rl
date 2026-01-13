@@ -22,7 +22,12 @@ typedef struct {
     float gamma;
     float lr;
     float epsilon;
+    float entropy_coef;
     float clip_eps;
+    int replay_size;
+    int batch_size;
+    float per_alpha;
+    float per_beta;
     int steps_per_batch;
     int epochs;
     int log_every;
