@@ -16,6 +16,7 @@ requirements.
 - **Tinyfin provides tensors and autograd**
 - **Python is optional and never owns execution**
 - **Rendering is a parameter, not a mode**
+- **Determinism is explicit and documented**
 
 ---
 
@@ -208,11 +209,16 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 ## Near-Term Next Steps
 
 1. Improve PPO stability and add advantage normalization
-2. Extend render snapshot specs for richer environments
-3. Add richer environment suite
-4. Add true parallel stepping (threads)
+2. Add typed config schema + validation per algorithm (fail fast, versioned defaults)
+3. Define determinism contract and add `--deterministic` mode (threading + replay rules)
+4. Golden runs regression suite (lineworld/point1d/maze) with thresholds
 5. Continuous SAC/TD3: add stochastic policy + log-prob entropy
-6. Replay buffer tests and CI wiring
+6. Replay buffer tests, determinism checks, and CI wiring
+
+## Quality Tiers
+
+- **Reference:** tested, documented, stable defaults
+- **Experimental:** builds, may learn, no guarantees
 
 ## Additional Algorithms (Ideas)
 
