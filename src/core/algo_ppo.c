@@ -28,10 +28,13 @@ typedef struct {
     int action_n;
     float gamma;
     float clip_eps;
+    float entropy_coef;
+    float gae_lambda;
     int batch;
     int epochs;
     int count;
     int *obs_idx;
+    int *next_obs_idx;
     int *actions;
     float *rewards;
     int *dones;
@@ -111,6 +114,7 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
     if (!transition) return;
     if (algo->count >= algo->batch) return;
     algo->obs_idx[algo->count] = transition->obs.index;
+    algo->next_obs_idx[algo->count] = transition->next_obs.index;
     algo->actions[algo->count] = transition->action.index;
     algo->rewards[algo->count] = (float)transition->reward;
     algo->dones[algo->count] = transition->done;
@@ -131,16 +135,14 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
 
     float *returns = (float *)calloc((size_t)algo->batch, sizeof(float));
     float *advantages = (float *)calloc((size_t)algo->batch, sizeof(float));
-    if (!returns || !advantages) {
+    float *values = (float *)calloc((size_t)algo->batch, sizeof(float));
+    float *next_values = (float *)calloc((size_t)algo->batch, sizeof(float));
+    if (!returns || !advantages || !values || !next_values) {
         free(returns);
         free(advantages);
+        free(values);
+        free(next_values);
         return;
-    }
-    float g = 0.0f;
-    for (int i = algo->batch - 1; i >= 0; i--) {
-        if (algo->dones[i]) g = 0.0f;
-        g = algo->rewards[i] + algo->gamma * g;
-        returns[i] = g;
     }
 
     float mean = 0.0f;
@@ -148,11 +150,29 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
         Tensor *x = one_hot(algo->obs_n, algo->obs_idx[i]);
         Tensor *v = linear_forward(algo->value, x);
         float v_scalar = tensor_get_f32_at(v, 0);
-        advantages[i] = returns[i] - v_scalar;
-        mean += advantages[i];
+        values[i] = v_scalar;
         tensor_free(v);
         tensor_free(x);
+
+        if (!algo->dones[i]) {
+            Tensor *x_next = one_hot(algo->obs_n, algo->next_obs_idx[i]);
+            Tensor *v_next = linear_forward(algo->value, x_next);
+            next_values[i] = tensor_get_f32_at(v_next, 0);
+            tensor_free(v_next);
+            tensor_free(x_next);
+        }
     }
+
+    float gae = 0.0f;
+    for (int i = algo->batch - 1; i >= 0; i--) {
+        float not_done = algo->dones[i] ? 0.0f : 1.0f;
+        float delta = algo->rewards[i] + algo->gamma * next_values[i] * not_done - values[i];
+        gae = delta + algo->gamma * algo->gae_lambda * not_done * gae;
+        advantages[i] = gae;
+        returns[i] = advantages[i] + values[i];
+        mean += advantages[i];
+    }
+
     mean /= (float)algo->batch;
     float var = 0.0f;
     for (int i = 0; i < algo->batch; i++) {
@@ -204,6 +224,25 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             Tensor *value_loss_scaled = tensor_mul(value_loss, value_coef);
 
             Tensor *total = tensor_add(policy_loss_neg, value_loss_scaled);
+            if (algo->entropy_coef > 0.0f) {
+                Tensor *entropy_raw = tensor_mul(probs_i, logp_i);
+                Tensor *entropy_sum = tensor_sum(entropy_raw);
+                Tensor *neg_one = tensor_new(1, (int[1]){1});
+                tensor_set_f32_at(neg_one, 0, -1.0f);
+                Tensor *entropy = tensor_mul(entropy_sum, neg_one);
+                Tensor *coef = tensor_new(1, (int[1]){1});
+                tensor_set_f32_at(coef, 0, -algo->entropy_coef);
+                Tensor *entropy_term = tensor_mul(entropy, coef);
+                Tensor *total_with_entropy = tensor_add(total, entropy_term);
+                tensor_free(total);
+                total = total_with_entropy;
+                tensor_free(entropy_term);
+                tensor_free(coef);
+                tensor_free(entropy);
+                tensor_free(neg_one);
+                tensor_free(entropy_sum);
+                tensor_free(entropy_raw);
+            }
 
             adam_zero_grad(algo->opt);
             tensor_backward(total);
@@ -235,6 +274,8 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
 
     free(returns);
     free(advantages);
+    free(values);
+    free(next_values);
     algo->count = 0;
 }
 
@@ -249,6 +290,7 @@ static void ppo_destroy(void *ctx) {
     free(algo->policy);
     free(algo->value);
     free(algo->obs_idx);
+    free(algo->next_obs_idx);
     free(algo->actions);
     free(algo->rewards);
     free(algo->dones);
@@ -281,6 +323,8 @@ tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg) {
     algo->action_n = cfg->action_n;
     algo->gamma = cfg->gamma > 0.0f ? cfg->gamma : 0.99f;
     algo->clip_eps = cfg->clip_eps > 0.0f ? cfg->clip_eps : 0.2f;
+    algo->entropy_coef = cfg->entropy_coef > 0.0f ? cfg->entropy_coef : 0.0f;
+    algo->gae_lambda = cfg->gae_lambda > 0.0f ? cfg->gae_lambda : 0.95f;
     algo->batch = cfg->steps_per_batch > 0 ? cfg->steps_per_batch : 64;
     algo->epochs = cfg->epochs > 0 ? cfg->epochs : 2;
     algo->policy = linear_create(algo->obs_n, algo->action_n);
@@ -304,11 +348,12 @@ tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg) {
         return out;
     }
     algo->obs_idx = (int *)calloc((size_t)algo->batch, sizeof(int));
+    algo->next_obs_idx = (int *)calloc((size_t)algo->batch, sizeof(int));
     algo->actions = (int *)calloc((size_t)algo->batch, sizeof(int));
     algo->rewards = (float *)calloc((size_t)algo->batch, sizeof(float));
     algo->dones = (int *)calloc((size_t)algo->batch, sizeof(int));
     algo->old_logp = (float *)calloc((size_t)algo->batch, sizeof(float));
-    if (!algo->obs_idx || !algo->actions || !algo->rewards || !algo->dones || !algo->old_logp) {
+    if (!algo->obs_idx || !algo->next_obs_idx || !algo->actions || !algo->rewards || !algo->dones || !algo->old_logp) {
         ppo_destroy(algo);
         return out;
     }

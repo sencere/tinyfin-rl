@@ -4,8 +4,13 @@ Traces are a sequence of render snapshots stored in a file. The file header:
 
 ```
 magic: "TFT1"
-uint32 version (1)
+uint32 version (2)
+uint32 meta_len
+meta bytes (UTF-8 key=value string, optional)
 ```
+
+For v1 traces, the header ends after the version and contains no metadata. The v2 metadata
+string currently stores the resolved algo config (seed, defaults version, hyperparameters).
 
 Then each frame is written as:
 

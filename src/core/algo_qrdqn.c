@@ -32,6 +32,8 @@ typedef struct {
     int batch_size;
     float per_alpha;
     float per_beta;
+    int seed;
+    int deterministic;
     int step_count;
 } tfrl_qrdqn_algo;
 
@@ -282,7 +284,11 @@ static void qrdqn_update(void *ctx, const tfrl_transition *transition) {
             free(weights);
             return;
         }
-        tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+        if (algo->deterministic) {
+            tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta, (unsigned int)(algo->seed + algo->step_count));
+        } else {
+            tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+        }
         for (int i = 0; i < algo->batch_size; i++) {
             const tfrl_transition *tr = tfrl_replay_get(algo->replay, idx[i]);
             if (!tr) continue;
@@ -340,6 +346,8 @@ tfrl_algo tfrl_algo_qrdqn_create(const tfrl_algo_config *cfg) {
     algo->batch_size = cfg->batch_size > 0 ? cfg->batch_size : 32;
     algo->per_alpha = cfg->per_alpha;
     algo->per_beta = cfg->per_beta;
+    algo->seed = cfg->seed;
+    algo->deterministic = cfg->deterministic;
     if (cfg->replay_size > 0) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }

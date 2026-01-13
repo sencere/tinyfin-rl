@@ -102,10 +102,10 @@ Save a policy:
 ## PPO
 
 Minimal PPO with a Tinyfin `Linear` policy + value head, clipped ratio loss (min of ratio vs clip), advantage normalization,
-and a 0.5 value-loss coefficient.
+GAE(λ), an entropy bonus, and a 0.5 value-loss coefficient.
 
 ```bash
-./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2
+./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01
 ```
 
 ## A2C (Minimal)

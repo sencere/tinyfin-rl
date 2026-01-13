@@ -103,6 +103,17 @@ int main(void) {
         if (!expect(w_a[i] == w_b[i], "det weight match")) return 1;
     }
 
+    int idx_c[4] = {0};
+    float w_c[4] = {0};
+    if (!expect(tfrl_replay_sample_deterministic(prio, 4, idx_c, w_c, 0.4f, 777) == 4, "deterministic sample c")) return 1;
+    int idx_d[4] = {0};
+    float w_d[4] = {0};
+    if (!expect(tfrl_replay_sample_deterministic(prio, 4, idx_d, w_d, 0.4f, 777) == 4, "deterministic sample d")) return 1;
+    for (int i = 0; i < 4; i++) {
+        if (!expect(idx_c[i] == idx_d[i], "deterministic idx match")) return 1;
+        if (!expect(w_c[i] == w_d[i], "deterministic weight match")) return 1;
+    }
+
     tfrl_replay_free(prio);
     return 0;
 }

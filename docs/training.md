@@ -35,7 +35,7 @@ Use replay/PER tuning:
 ## PPO
 
 ```bash
-./build/tinyfin-rl train --algo ppo --env maze_rooms --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2
+./build/tinyfin-rl train --algo ppo --env maze_rooms --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01
 ```
 
 ## A2C / TRPO / IMPALA

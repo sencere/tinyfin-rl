@@ -24,11 +24,14 @@ typedef struct {
     double action_low;
     double action_high;
     int defaults_version;
+    int seed;
+    int deterministic;
     float gamma;
     float lr;
     float epsilon;
     float entropy_coef;
     float clip_eps;
+    float gae_lambda;
     int replay_size;
     int batch_size;
     float per_alpha;
@@ -64,6 +67,7 @@ typedef struct {
 } tfrl_algo;
 
 tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec);
+void tfrl_algo_config_apply_defaults(tfrl_algo_config *cfg);
 void tfrl_algo_destroy(tfrl_algo *algo);
 void tfrl_algo_save(tfrl_algo *algo, const char *path);
 void tfrl_algo_act_batch(tfrl_algo *algo, const tfrl_obs *obs, int count, tfrl_action *out_actions);

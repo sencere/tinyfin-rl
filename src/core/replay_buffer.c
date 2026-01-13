@@ -12,6 +12,15 @@ struct tfrl_replay_buffer {
     float *priorities;
 };
 
+static unsigned int lcg_next(unsigned int *state) {
+    *state = (*state * 1664525u) + 1013904223u;
+    return *state;
+}
+
+static float lcg_uniform(unsigned int *state) {
+    return (lcg_next(state) & 0x00FFFFFFu) / 16777215.0f;
+}
+
 static float replay_priority(const tfrl_replay_buffer *buf, int idx) {
     if (!buf || !buf->priorities) return 1.0f;
     float p = buf->priorities[idx];
@@ -83,6 +92,55 @@ int tfrl_replay_sample(tfrl_replay_buffer *buf, int batch, int *out_idx, float *
     float max_weight = 1e-6f;
     for (int i = 0; i < batch; i++) {
         float r = ((float)rand() / (float)RAND_MAX) * sum;
+        float acc = 0.0f;
+        int idx = 0;
+        for (int j = 0; j < buf->size; j++) {
+            float p = powf(replay_priority(buf, j), buf->alpha);
+            acc += p;
+            if (r <= acc) {
+                idx = j;
+                break;
+            }
+        }
+        out_idx[i] = idx;
+        if (out_weights) {
+            float p = powf(replay_priority(buf, idx), buf->alpha) / sum;
+            float w = powf((float)buf->size * p, -beta);
+            out_weights[i] = w;
+            if (w > max_weight) max_weight = w;
+        }
+    }
+
+    if (out_weights && max_weight > 0.0f) {
+        for (int i = 0; i < batch; i++) {
+            out_weights[i] /= max_weight;
+        }
+    }
+    return batch;
+}
+
+int tfrl_replay_sample_deterministic(tfrl_replay_buffer *buf, int batch, int *out_idx, float *out_weights, float beta, unsigned int seed) {
+    if (!buf || batch <= 0 || !out_idx) return 0;
+    if (buf->size < batch) return 0;
+    unsigned int state = seed;
+    if (!buf->priorities || buf->alpha <= 0.0f) {
+        for (int i = 0; i < batch; i++) {
+            out_idx[i] = (int)(lcg_next(&state) % (unsigned int)buf->size);
+            if (out_weights) out_weights[i] = 1.0f;
+        }
+        return batch;
+    }
+
+    float sum = 0.0f;
+    for (int i = 0; i < buf->size; i++) {
+        float p = replay_priority(buf, i);
+        sum += powf(p, buf->alpha);
+    }
+    if (sum <= 0.0f) return 0;
+
+    float max_weight = 1e-6f;
+    for (int i = 0; i < batch; i++) {
+        float r = lcg_uniform(&state) * sum;
         float acc = 0.0f;
         int idx = 0;
         for (int j = 0; j < buf->size; j++) {

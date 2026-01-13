@@ -167,6 +167,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         .epsilon = cfg->mode == TFRL_MODE_TRAIN ? cfg->epsilon : 0.0f,
         .entropy_coef = cfg->entropy_coef,
         .clip_eps = cfg->clip_eps,
+        .gae_lambda = cfg->gae_lambda,
         .replay_size = cfg->replay_size,
         .batch_size = cfg->batch_size,
         .per_alpha = cfg->per_alpha,
@@ -178,7 +179,10 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         .save_path = cfg->save_path,
         .load_path = cfg->load_path,
         .env_name = cfg->env_name,
+        .seed = seed,
+        .deterministic = cfg->deterministic,
     };
+    tfrl_algo_config_apply_defaults(&algo_cfg);
     tfrl_algo algo = tfrl_algo_create(&algo_cfg, spec);
     if (!algo.ctx) {
         fprintf(stderr, "algo creation failed\n");
@@ -204,8 +208,31 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     }
 
     tfrl_trace_writer *writer = NULL;
+    char trace_meta[512];
+    snprintf(trace_meta, sizeof(trace_meta),
+             "algo=%s defaults=v%d env=%s seed=%d deterministic=%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f "
+             "replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d",
+             algo_cfg.name ? algo_cfg.name : "null",
+             algo_cfg.defaults_version,
+             algo_cfg.env_name ? algo_cfg.env_name : "null",
+             algo_cfg.seed,
+             algo_cfg.deterministic,
+             algo_cfg.gamma,
+             algo_cfg.lr,
+             algo_cfg.epsilon,
+             algo_cfg.entropy_coef,
+             algo_cfg.clip_eps,
+             algo_cfg.gae_lambda,
+             algo_cfg.replay_size,
+             algo_cfg.batch_size,
+             algo_cfg.per_alpha,
+             algo_cfg.per_beta,
+             algo_cfg.steps_per_batch,
+             algo_cfg.epochs,
+             algo_cfg.mcts_sims,
+             algo_cfg.mcts_depth);
     if (cfg->trace_out) {
-        writer = tfrl_trace_writer_open(cfg->trace_out);
+        writer = tfrl_trace_writer_open_with_meta(cfg->trace_out, trace_meta);
         if (!writer) {
             fprintf(stderr, "failed to open trace out: %s\n", cfg->trace_out);
         } else {

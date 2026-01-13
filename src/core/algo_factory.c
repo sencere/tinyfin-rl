@@ -24,6 +24,7 @@ typedef struct {
     float epsilon;
     float entropy_coef;
     float clip_eps;
+    float gae_lambda;
     int replay_size;
     int batch_size;
     float per_alpha;
@@ -42,6 +43,7 @@ static const tfrl_algo_schema ALGO_SCHEMA_DEFAULT = {
     .epsilon = 0.1f,
     .entropy_coef = 0.0f,
     .clip_eps = 0.2f,
+    .gae_lambda = 0.95f,
     .replay_size = 1000,
     .batch_size = 32,
     .per_alpha = 0.0f,
@@ -56,7 +58,7 @@ static const tfrl_algo_schema ALGO_SCHEMAS[] = {
     {.name = "dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "rainbow", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "qrdqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
-    {.name = "ppo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 0.2f, .steps_per_batch = 64, .epochs = 2},
+    {.name = "ppo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .entropy_coef = 0.01f, .clip_eps = 0.2f, .gae_lambda = 0.95f, .steps_per_batch = 64, .epochs = 2},
     {.name = "reinforce", .defaults_version = 1, .gamma = 0.99f, .lr = 0.01f, .steps_per_batch = 64},
     {.name = "a2c", .defaults_version = 1, .gamma = 0.99f, .lr = 0.001f, .entropy_coef = 0.01f, .steps_per_batch = 64},
     {.name = "trpo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 0.01f, .steps_per_batch = 64},
@@ -74,6 +76,10 @@ static const tfrl_algo_schema *algo_schema_for(const char *name) {
         if (strcmp(ALGO_SCHEMAS[i].name, name) == 0) return &ALGO_SCHEMAS[i];
     }
     return &ALGO_SCHEMA_DEFAULT;
+}
+
+void tfrl_algo_config_apply_defaults(tfrl_algo_config *cfg) {
+    apply_algo_defaults(cfg);
 }
 
 static int float_unset_positive(float v) {
@@ -101,6 +107,7 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (float_unset_nonneg(cfg->epsilon)) cfg->epsilon = schema->epsilon;
     if (float_unset_nonneg(cfg->entropy_coef)) cfg->entropy_coef = schema->entropy_coef;
     if (float_unset_positive(cfg->clip_eps)) cfg->clip_eps = schema->clip_eps;
+    if (float_unset_positive(cfg->gae_lambda)) cfg->gae_lambda = schema->gae_lambda;
     if (int_unset_nonneg(cfg->replay_size)) cfg->replay_size = schema->replay_size;
     if (int_unset_nonneg(cfg->batch_size)) cfg->batch_size = schema->batch_size;
     if (float_unset_nonneg(cfg->per_alpha)) cfg->per_alpha = schema->per_alpha;
@@ -115,7 +122,7 @@ static void log_algo_config(const tfrl_algo_config *cfg) {
     if (!cfg) return;
     fprintf(stdout,
             "algo_config name=%s defaults=v%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f "
-            "replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d\n",
+            "gae_lambda=%.3f replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d seed=%d deterministic=%d\n",
             cfg->name ? cfg->name : "null",
             cfg->defaults_version,
             cfg->gamma,
@@ -123,6 +130,7 @@ static void log_algo_config(const tfrl_algo_config *cfg) {
             cfg->epsilon,
             cfg->entropy_coef,
             cfg->clip_eps,
+            cfg->gae_lambda,
             cfg->replay_size,
             cfg->batch_size,
             cfg->per_alpha,
@@ -130,7 +138,9 @@ static void log_algo_config(const tfrl_algo_config *cfg) {
             cfg->steps_per_batch,
             cfg->epochs,
             cfg->mcts_sims,
-            cfg->mcts_depth);
+            cfg->mcts_depth,
+            cfg->seed,
+            cfg->deterministic);
 }
 
 static int require_positive(const char *name, int v) {
@@ -147,6 +157,12 @@ static int require_nonneg(const char *name, int v) {
 
 static int require_float_positive(const char *name, float v) {
     if (v > 0.0f) return 1;
+    fprintf(stderr, "invalid %s: %.6f\n", name, v);
+    return 0;
+}
+
+static int require_float_unit(const char *name, float v) {
+    if (v > 0.0f && v <= 1.0f) return 1;
     fprintf(stderr, "invalid %s: %.6f\n", name, v);
     return 0;
 }
@@ -170,6 +186,7 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
         if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
         if (!require_positive("epochs", cfg->epochs)) return 0;
         if (!require_float_positive("clip_eps", cfg->clip_eps)) return 0;
+        if (!require_float_unit("gae_lambda", cfg->gae_lambda)) return 0;
     } else if (strcmp(cfg->name, "reinforce") == 0) {
         if (!require_discrete("reinforce", cfg)) return 0;
         if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
@@ -200,7 +217,9 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     tfrl_algo out = {0};
     if (!cfg || !spec) return out;
     tfrl_algo_config merged = *cfg;
-    apply_algo_defaults(&merged);
+    if (merged.defaults_version <= 0) {
+        apply_algo_defaults(&merged);
+    }
     log_algo_config(&merged);
     if (!validate_algo_config(&merged)) return out;
     const tfrl_algo_config *cfg_use = &merged;

@@ -212,15 +212,18 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - PPO surrogate min/clipped objective + value-loss scaling
 - Config logging of resolved defaults (`algo_config`)
 - Golden runs now check peak/last returns
+- PPO entropy bonus + GAE(λ)
+- Deterministic replay sampling for off-policy algos
+- Trace headers include per-run config metadata
 
 ---
 
 ## Near-Term Next Steps
 
-1. Add PPO entropy bonus (optional) and GAE(λ)
-2. Add deterministic replay sampling (fixed RNG per update)
-3. Expand golden runs with short curve checks per algo
-4. Add per-algo config dumps to trace headers
+1. Add PPO value clip / trust-region guardrails
+2. Add deterministic replay sampling for epsilon/action noise paths
+3. Expand golden runs to cover TD3 + PPO variants
+4. Add trace metadata viewer overlay
 
 ## Recent Updates
 
@@ -235,6 +238,9 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - PPO clipped surrogate min + value-loss coefficient
 - Config defaults logging per run
 - Golden runs peak/last return gates
+- PPO entropy bonus + GAE(λ)
+- Deterministic replay sampling for replay buffers
+- Trace headers now include config metadata
 
 ## Quality Tiers
 

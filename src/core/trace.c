@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "render_snapshot.h"
 #include "trace.h"
 
 #define TFRL_TRACE_MAGIC "TFT1"
-#define TFRL_TRACE_VERSION 1
+#define TFRL_TRACE_VERSION 2
 
 struct tfrl_trace_writer {
     FILE *fp;
@@ -14,30 +15,63 @@ struct tfrl_trace_writer {
 
 struct tfrl_trace_reader {
     FILE *fp;
+    char *meta;
 };
 
-static int write_header(FILE *fp) {
+static int write_header(FILE *fp, const char *meta) {
     char magic[4] = TFRL_TRACE_MAGIC;
     uint32_t version = TFRL_TRACE_VERSION;
+    uint32_t meta_len = meta ? (uint32_t)strlen(meta) : 0;
     if (fwrite(magic, 1, sizeof(magic), fp) != sizeof(magic)) return 0;
     if (fwrite(&version, sizeof(version), 1, fp) != 1) return 0;
+    if (version >= 2) {
+        if (fwrite(&meta_len, sizeof(meta_len), 1, fp) != 1) return 0;
+        if (meta_len > 0 && fwrite(meta, 1, meta_len, fp) != meta_len) return 0;
+    }
     return 1;
 }
 
-static int read_header(FILE *fp) {
+static int read_header(FILE *fp, char **out_meta) {
     char magic[4];
     uint32_t version = 0;
     if (fread(magic, 1, sizeof(magic), fp) != sizeof(magic)) return 0;
     if (memcmp(magic, TFRL_TRACE_MAGIC, sizeof(magic)) != 0) return 0;
     if (fread(&version, sizeof(version), 1, fp) != 1) return 0;
-    return version == TFRL_TRACE_VERSION;
+    if (version == 1) {
+        if (out_meta) *out_meta = NULL;
+        return 1;
+    }
+    if (version == 2) {
+        uint32_t meta_len = 0;
+        if (fread(&meta_len, sizeof(meta_len), 1, fp) != 1) return 0;
+        if (meta_len > 0 && out_meta) {
+            char *meta = (char *)calloc((size_t)meta_len + 1, 1);
+            if (!meta) return 0;
+            if (fread(meta, 1, meta_len, fp) != meta_len) {
+                free(meta);
+                return 0;
+            }
+            meta[meta_len] = '\0';
+            *out_meta = meta;
+        } else if (meta_len > 0) {
+            if (fseek(fp, (long)meta_len, SEEK_CUR) != 0) return 0;
+        } else if (out_meta) {
+            *out_meta = NULL;
+        }
+        return 1;
+    }
+    return 0;
 }
 
 tfrl_trace_writer *tfrl_trace_writer_open(const char *path) {
+    return tfrl_trace_writer_open_with_meta(path, NULL);
+}
+
+tfrl_trace_writer *tfrl_trace_writer_open_with_meta(const char *path, const char *meta) {
     if (!path) return NULL;
     FILE *fp = fopen(path, "wb");
     if (!fp) return NULL;
-    if (!write_header(fp)) {
+    if (!write_header(fp, meta)) {
         fclose(fp);
         return NULL;
     }
@@ -65,22 +99,26 @@ tfrl_trace_reader *tfrl_trace_reader_open(const char *path) {
     if (!path) return NULL;
     FILE *fp = fopen(path, "rb");
     if (!fp) return NULL;
-    if (!read_header(fp)) {
+    char *meta = NULL;
+    if (!read_header(fp, &meta)) {
         fclose(fp);
         return NULL;
     }
     tfrl_trace_reader *reader = (tfrl_trace_reader *)calloc(1, sizeof(tfrl_trace_reader));
     if (!reader) {
+        free(meta);
         fclose(fp);
         return NULL;
     }
     reader->fp = fp;
+    reader->meta = meta;
     return reader;
 }
 
 void tfrl_trace_reader_close(tfrl_trace_reader *reader) {
     if (!reader) return;
     if (reader->fp) fclose(reader->fp);
+    free(reader->meta);
     free(reader);
 }
 
@@ -94,4 +132,8 @@ int tfrl_trace_reader_next(tfrl_trace_reader *reader, void *buffer, size_t buffe
     if (fread((char *)buffer + sizeof(header), 1, header.payload_bytes, reader->fp) != header.payload_bytes) return 0;
     if (out_len) *out_len = total;
     return 1;
+}
+
+const char *tfrl_trace_reader_meta(const tfrl_trace_reader *reader) {
+    return reader ? reader->meta : NULL;
 }

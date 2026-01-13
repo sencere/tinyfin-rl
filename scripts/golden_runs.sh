@@ -31,5 +31,6 @@ run_case() {
 run_case "lineworld_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld --steps 400 --log-every 1 --deterministic --seed 1" 0.2 0.2 1
 run_case "lineworld_cont_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 400 --log-every 1 --deterministic --seed 1" 0.2 0.2 1
 run_case "lineworld_mcts" "./build/tinyfin-rl train --algo mcts --env lineworld --steps 200 --log-every 1 --deterministic --seed 1 --mcts-sims 200 --mcts-depth 40" 0.2 0.2 1
+run_case "lineworld_ppo" "./build/tinyfin-rl train --algo ppo --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01" -0.2 0.0 1
 run_case "maze_rooms_dqn" "./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 600 --log-every 1 --deterministic --seed 1" -0.2 -0.2 1
 run_case "point1d_sac" "./build/tinyfin-rl train --algo sac --env point1d --steps 600 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" -0.2 -0.2 1

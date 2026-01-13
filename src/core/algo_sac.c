@@ -54,6 +54,8 @@ typedef struct {
     float per_alpha;
     float per_beta;
     int step_count;
+    int seed;
+    int deterministic;
 } tfrl_sac_algo;
 
 static Tensor *one_hot(int n, int idx) {
@@ -386,7 +388,11 @@ static void sac_update(void *ctx, const tfrl_transition *transition) {
             free(weights);
             return;
         }
-        tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+        if (algo->deterministic) {
+            tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta, (unsigned int)(algo->seed + algo->step_count));
+        } else {
+            tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+        }
 
         Tensor *q_loss_sum = NULL;
         Tensor *policy_loss_sum = NULL;
@@ -834,6 +840,8 @@ tfrl_algo tfrl_algo_sac_create(const tfrl_algo_config *cfg) {
     algo->batch_size = cfg->batch_size > 0 ? cfg->batch_size : 32;
     algo->per_alpha = cfg->per_alpha;
     algo->per_beta = cfg->per_beta;
+    algo->seed = cfg->seed;
+    algo->deterministic = cfg->deterministic;
     if (cfg->replay_size > 0) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }
