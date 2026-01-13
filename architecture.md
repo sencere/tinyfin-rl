@@ -1,279 +1,109 @@
-# Tinyfin-RL Abstract Architecture
-**C-first simulation, optional rendering, optional Python**
+# Tinyfin-RL Architecture
 
-This document describes an abstract architecture for Tinyfin-RL that keeps
-**fast C simulation as the source of truth**, makes **raylib rendering optional
-and non-invasive**, and treats **Python as an optional host layer**, not a
-dependency.
+Tinyfin-RL is a **C-first reinforcement learning system** built around a single
+executable, a deterministic environment core, and Tinyfin as the tensor +
+autograd backend. Rendering is optional and never drives simulation.
 
----
+## Design Goals
 
-## Core Principle
+- One executable (`tinyfin-rl`)
+- One control loop (train / eval / replay)
+- Environment is the source of truth
+- Algorithms are configurable (`--algo dqn|ppo|reinforce`)
+- Tinyfin handles math; Tinyfin-RL handles control
+- Rendering is optional and isolated
 
-**Simulation and rendering are separate concerns.**
-
-- **Simulation (C)**  
-  Deterministic, fast, headless by default, and parallelizable.
-
-- **Rendering (raylib in C)**  
-  A *viewer* that can attach to a running environment instance or replay a
-  recorded trace.
-
-- **Python**  
-  Optional orchestration layer for training and analysis.  
-  Never owns raylib, never opens windows.
-
-This guarantees:
-- Maximum simulation speed when rendering is disabled.
-- Safe, debuggable visualization when rendering is enabled.
-- No raylib lifecycle issues inside training loops or Python processes.
-
----
-
-## Layer Overview
+## Core Runtime Flow
 
 ```
-
-+-------------------+
-|   Python Host     |  (optional)
-|  (training, eval) |
-+-------------------+
-|
-v
-+-------------------+
-|     C Core        |  <-- source of truth
-|  Env ABI +        |
-|  Env Metadata     |
-+-------------------+
-|
-v
-+-------------------+
-| Renderer ABI      |  <-- renderer-agnostic
-+-------------------+
-|
-v
-+-------------------+
-| Renderer Plugin   |  (raylib)
-|   / Viewer        |
-+-------------------+
-
+CLI -> Runner -> Env + Algo -> (optional) Trace + Viewer
 ```
 
----
+The runner owns simulation and decides if training, evaluation, or replay is
+executed.
 
-## 1. C Core: Environment ABI (Source of Truth)
+## Environment API
 
-The Environment ABI is minimal and **contains no rendering concepts**.
+Minimal C API for a deterministic, renderer-agnostic environment:
 
-Typical responsibilities:
-- Environment lifecycle
-- State transitions
-- Rewards and termination
-- Observation and action specs
-
-### Key properties
-
-- Stable
-- Small
-- Renderer-agnostic
-- Suitable for high-performance training
-
-Example responsibilities (current):
-- `create / reset / step / destroy`
-- Optional `tfrl_env_metadata_get()` for obs/action metadata (`rl_env_info.h`)
-- Optional: `seed`, `clone`, `serialize`
-
-## 1b. C Core: Trainer ABI (Source of Truth)
-
-Algorithms live in C and are exposed via `rl_train.h` (DQN, PPO). Python bindings call these C trainers; Python does not re-implement the algorithms.
-
----
-
-## 2. C Core: Renderer ABI (No raylib in headers)
-
-Rendering is handled through a small, renderer-agnostic ABI (`rl_render.h`).
-
-The environment provides *data*, not graphics.
-
-### Goal
-
-Allow any renderer to visualize the environment without the environment knowing
-anything about raylib, windows, or GPUs.
-
-### Supported patterns
-
-#### A) Renderer ABI (current)
-
-Renderers export a small set of functions:
-
-- `tfrl_renderer_init(...)`
-- `tfrl_renderer_draw(...)`
-- `tfrl_renderer_should_close()`
-- `tfrl_renderer_close()`
-
-These renderers can use raylib internally while keeping Python and training code free of raylib bindings.
-
-#### B) Render Data Snapshot (planned)
-
-Future snapshot ABI for renderer-agnostic state dumps:
-
-- Entity created / destroyed
-- Agent moved
-- Episode ended
-- Custom debug signals
-
-These snapshots can be recorded to disk and replayed later.
-
-This enables:
-- Offline visualization
-- Deterministic debugging
-- Frame-by-frame inspection
-
----
-
-## 3. Renderer Plugins (C + raylib)
-
-Renderers are **separate shared libraries or binaries**.
-
-They:
-- Own raylib initialization and shutdown
-- Own the window and input loop
-- Translate render data into graphics
-
-They do **not**:
-- Step the environment during training
-- Affect simulation speed unless explicitly attached
-
-### Renderer modes
-
-- **Live attach**  
-  Visualize a running environment instance.
-
-- **Trace replay**  
-  Load a trace file and render it offline.
-
----
-
-## 4. Hosts
-
-### 4.1 C Host (Always Available)
-
-A native C executable acts as the backbone:
-
-Examples:
-- `tfrl-run --env cartpole --steps 1e6 --trace out.tft`
-- `tfrl-view --trace out.tft`
-- `tfrl-view --env cartpole --interactive`
-
-Benefits:
-- No Python required
-- Ideal for debugging and CI
-- Clean separation from training logic
-
----
-
-### 4.2 Python Host (Optional)
-
-Python is a *consumer* of the C core.
-
-It can:
-- Load environment plugins
-- Run training algorithms
-- Collect metrics
-- Write trace files
-
-It cannot:
-- Call raylib
-- Open windows
-- Own rendering logic
-
-This keeps Python safe, portable, and optional.
-
----
-
-## Rendering Workflow (Pufferlib-style)
-
-### Workflow 1: Attach Viewer to Live Env
-
-- Training runs headless across many environments.
-- One environment exposes render snapshots.
-- Viewer periodically reads and displays that snapshot.
-
-Advantages:
-- Minimal overhead
-- No renderer inside training workers
-- Safe for multiprocessing
-
----
-
-### Workflow 2: Record Trace, Replay Later
-
-- Training records render events or snapshots for selected episodes.
-- Viewer replays the trace offline.
-
-Advantages:
-- Deterministic visualization
-- Debuggable frame-by-frame
-- No impact on training speed
-
----
-
-## Recommended Minimal ABI Set (v1)
-
-### Environment ABI
-- `env_create(config)`
-- `env_reset(seed)`
-- `env_step(action)`
-- `env_destroy()`
-- `env_get_spec()`
-
-### Render Data ABI
-- `env_render_bytes_needed(env)`
-- `env_render_write(env, void* dst, size_t len)`
-
-(Render packet is versioned and renderer-agnostic.)
-
-### Renderer ABI
-- `tfrl_renderer_init(...)`
-- `tfrl_renderer_draw(...)` (accepts a `tfrl_value`)
-- `tfrl_renderer_should_close()`
-- `tfrl_renderer_close()`
-
----
-
-## Why This Architecture Works
-
-- Raylib is isolated and optional
-- Simulation stays fast and deterministic
-- Rendering never blocks training
-- Python is not a dependency
-- Offline replay enables serious debugging
-
-This mirrors the architecture of professional simulators and game engines:
-**core simulation first, viewer second, scripting optional**.
-
----
-
-## Recommended v1 Implementation Plan
-
-1. Freeze the Environment ABI.
-2. Implement a versioned Render Snapshot format.
-3. Build a standalone viewer (`tfrl-view`) using raylib.
-4. Add Python bindings only for the Environment ABI.
-5. Add trace recording and replay.
-
----
-
-## Non-Goals
-
-- Python-owned rendering
-- Raylib bindings in Python
-- Rendering inside training loops
-- Python-only environments
-
----
-
-**Design mantra:**  
-> _Fast, headless simulation by default.  
-> Rendering is a tool, not a requirement._
+```c
+tfrl_env *tfrl_env_create(const tfrl_env_config *cfg);
+tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed);
+tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action);
+const tfrl_env_spec *tfrl_env_get_spec(const tfrl_env *env);
 ```
+
+Rendering uses snapshots:
+
+```c
+size_t tfrl_env_render_bytes_needed(const tfrl_env *env);
+size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len);
+```
+
+The environment **does not include raylib** and never opens windows.
+
+## Algorithm API
+
+Algorithms are small C modules chosen at runtime:
+
+```c
+tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec);
+tfrl_action algo_act(tfrl_obs obs);
+void algo_update(const tfrl_transition *transition);
+void algo_save(const char *path);
+```
+
+Algorithms may use Tinyfin for models and optimization. DQN, REINFORCE, and PPO
+use Tinyfin `Linear` layers with SGD/Adam.
+
+## Rendering
+
+Rendering is a viewer module that consumes render snapshots and owns raylib.
+It is optional and only compiled when `USE_RAYLIB=1` (Makefile) or
+`-DTFRL_WITH_RAYLIB=ON` (CMake).
+
+## Vectorized Stepping
+
+The environment API includes a batch stepping helper:
+
+```c
+void tfrl_env_step_batch(tfrl_env **envs, int env_count,
+                         const tfrl_action *actions,
+                         tfrl_step_result *out_steps);
+```
+
+## Trace Replay
+
+Traces are a sequence of render snapshots. `tinyfin-rl replay` reads a trace
+file and feeds frames to the viewer.
+
+## Repository Layout
+
+```
+tinyfin-rl/
+  src/
+    main.c
+    cli/
+    runner/
+    core/
+      env_api.h
+      env_example.c
+      algo_api.h
+      algo_dqn.c
+      trace.c
+      render_snapshot.h
+    viewer/
+      viewer.h
+      viewer_raylib.c
+      viewer_stub.c
+  tinyfin/         # tensor + autograd
+  raylib-src/      # optional raylib
+  roadmap.md
+```
+
+## Current Focus
+
+- One binary running train/eval/replay
+- One canonical environment (`maze_rooms`) + one small validation env (`lineworld`)
+- DQN/REINFORCE/PPO implemented in C with Tinyfin
+- Render snapshots + optional raylib viewer

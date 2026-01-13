@@ -1,0 +1,44 @@
+#ifndef TFRL_RUNNER_H
+#define TFRL_RUNNER_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum {
+    TFRL_MODE_TRAIN = 0,
+    TFRL_MODE_EVAL = 1,
+    TFRL_MODE_REPLAY = 2,
+} tfrl_mode;
+
+typedef struct {
+    tfrl_mode mode;
+    const char *algo;
+    const char *env_name;
+    int envs;
+    int steps;
+    int episodes;
+    int seed;
+    float gamma;
+    float lr;
+    float epsilon;
+    float clip_eps;
+    int steps_per_batch;
+    int epochs;
+    int log_every;
+    int render;
+    int render_every;
+    int render_fps;
+    const char *trace_out;
+    const char *trace_in;
+    const char *save_path;
+    const char *load_path;
+} tfrl_runner_config;
+
+int tfrl_runner_run(const tfrl_runner_config *cfg);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

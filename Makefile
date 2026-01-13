@@ -1,53 +1,61 @@
 CC ?= cc
-CFLAGS ?= -O2 -std=c99 -Wall -Wextra -I.
-LDLIBS ?= -lm
+CFLAGS ?= -O2 -std=c99 -Wall -Wextra
+
 TINYFIN_DIR ?= tinyfin
 TINYFIN_INC ?= $(TINYFIN_DIR)/include
 TINYFIN_LIB ?= $(TINYFIN_DIR)/libtinyfin.so
 TINYFIN_RPATH ?= -Wl,-rpath,$(abspath $(TINYFIN_DIR))
-BUILD_DIR ?= build
 
-.PHONY: all clean c_api_smoke trainer_smoke env_plugin_loader train_dqn train_ppo play_dqn tfrl_train
+USE_RAYLIB ?= 0
+RAYLIB_DIR ?= raylib-src
+RAYLIB_INC ?= $(RAYLIB_DIR)/src
+RAYLIB_LIB ?= $(RAYLIB_DIR)/src/libraylib.so
+RAYLIB_LDFLAGS ?= -L$(RAYLIB_DIR)/src -lraylib -lm -ldl -lpthread -lX11 -lrt
 
-all: c_api_smoke trainer_smoke env_plugin_loader train_dqn train_ppo play_dqn tfrl_train
+SRC_CORE = \
+	src/core/env_example.c \
+	src/core/algo_factory.c \
+	src/core/algo_random.c \
+	src/core/algo_dqn.c \
+	src/core/algo_reinforce.c \
+	src/core/algo_ppo.c \
+	src/core/trace.c
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+SRC_APP = \
+	src/main.c \
+	src/cli/cli.c \
+	src/runner/runner.c
 
-$(BUILD_DIR)/c_api_smoke: tests/c_api_smoke.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $<
+SRC_VIEWER_STUB = src/viewer/viewer_stub.c
+SRC_VIEWER_RAYLIB = src/viewer/viewer_raylib.c
 
-$(BUILD_DIR)/trainer_smoke: examples/c/trainer_smoke.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $< $(LDLIBS)
+BIN_DIR ?= build
+BIN ?= $(BIN_DIR)/tinyfin-rl
 
-$(BUILD_DIR)/env_plugin_loader: examples/c/env_plugin_loader.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $< -ldl
+.PHONY: all clean raylib
 
-$(BUILD_DIR)/libtfrl_train.so: tinyfin_rl/rl_train.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -fPIC -shared -o $@ $< -L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH)
+all: $(BIN)
 
-$(BUILD_DIR)/train_dqn: examples/c/train_dqn.c $(BUILD_DIR)/libtfrl_train.so | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -o $@ $< -L$(BUILD_DIR) -ltfrl_train -L$(TINYFIN_DIR) -ltinyfin -ldl $(TINYFIN_RPATH) -Wl,-rpath,$(abspath $(BUILD_DIR))
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
 
-$(BUILD_DIR)/train_ppo: examples/c/train_ppo.c $(BUILD_DIR)/libtfrl_train.so | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -o $@ $< -L$(BUILD_DIR) -ltfrl_train -L$(TINYFIN_DIR) -ltinyfin -ldl $(TINYFIN_RPATH) -Wl,-rpath,$(abspath $(BUILD_DIR))
+ifeq ($(USE_RAYLIB),1)
+VIEWER_SRC = $(SRC_VIEWER_RAYLIB)
+VIEWER_INC = -I$(RAYLIB_INC)
+VIEWER_LIBS = $(RAYLIB_LDFLAGS)
+else
+VIEWER_SRC = $(SRC_VIEWER_STUB)
+VIEWER_INC =
+VIEWER_LIBS =
+endif
 
-$(BUILD_DIR)/play_dqn: examples/c/play_dqn.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -o $@ $< -L$(TINYFIN_DIR) -ltinyfin -ldl $(TINYFIN_RPATH)
+$(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
+	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -Isrc $(VIEWER_INC) \
+		-o $@ $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) \
+		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) $(VIEWER_LIBS)
 
-c_api_smoke: $(BUILD_DIR)/c_api_smoke
-
-trainer_smoke: $(BUILD_DIR)/trainer_smoke
-
-env_plugin_loader: $(BUILD_DIR)/env_plugin_loader
-
-train_dqn: $(BUILD_DIR)/train_dqn
-
-train_ppo: $(BUILD_DIR)/train_ppo
-
-play_dqn: $(BUILD_DIR)/play_dqn
-
-tfrl_train: $(BUILD_DIR)/libtfrl_train.so
+raylib:
+	$(MAKE) -C $(RAYLIB_DIR)/src
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BIN_DIR)

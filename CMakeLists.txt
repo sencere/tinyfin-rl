@@ -1,30 +1,45 @@
 cmake_minimum_required(VERSION 3.13)
-project(tinyfin_rl_c C)
+project(tinyfin_rl C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_executable(c_api_smoke tests/c_api_smoke.c)
-target_include_directories(c_api_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+option(TFRL_WITH_RAYLIB "Enable raylib viewer" OFF)
+set(TINYFIN_DIR "tinyfin" CACHE PATH "Path to tinyfin")
 
-add_executable(bandit_reinforce examples/c/bandit_reinforce.c)
-target_include_directories(bandit_reinforce PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bandit_reinforce m)
+set(SRC_CORE
+    src/core/env_example.c
+    src/core/algo_factory.c
+    src/core/algo_random.c
+    src/core/algo_dqn.c
+    src/core/algo_reinforce.c
+    src/core/algo_ppo.c
+    src/core/trace.c
+)
 
-add_executable(a2c_bandit examples/c/a2c_bandit.c)
-target_include_directories(a2c_bandit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(a2c_bandit m)
+set(SRC_APP
+    src/main.c
+    src/cli/cli.c
+    src/runner/runner.c
+)
 
-add_executable(ppo_bandit examples/c/ppo_bandit.c)
-target_include_directories(ppo_bandit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(ppo_bandit m)
+if (TFRL_WITH_RAYLIB)
+    set(SRC_VIEWER src/viewer/viewer_raylib.c)
+else()
+    set(SRC_VIEWER src/viewer/viewer_stub.c)
+endif()
 
-add_executable(trainer_smoke examples/c/trainer_smoke.c)
-target_include_directories(trainer_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(trainer_smoke m)
+add_executable(tinyfin-rl ${SRC_CORE} ${SRC_APP} ${SRC_VIEWER})
+target_include_directories(tinyfin-rl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(tinyfin-rl PRIVATE ${TINYFIN_DIR}/include)
 
-add_executable(env_plugin_loader examples/c/env_plugin_loader.c)
-target_include_directories(env_plugin_loader PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-if(UNIX)
-    target_link_libraries(env_plugin_loader dl)
+find_library(TINYFIN_LIB tinyfin PATHS ${TINYFIN_DIR} NO_DEFAULT_PATH)
+if (NOT TINYFIN_LIB)
+    set(TINYFIN_LIB ${TINYFIN_DIR}/libtinyfin.so)
+endif()
+target_link_libraries(tinyfin-rl ${TINYFIN_LIB} m)
+
+if (TFRL_WITH_RAYLIB)
+    target_include_directories(tinyfin-rl PRIVATE raylib-src/src)
+    target_link_libraries(tinyfin-rl raylib)
 endif()

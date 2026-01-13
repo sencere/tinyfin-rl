@@ -4,113 +4,89 @@
   <img src="resources/logo/logo.png" alt="tinyfin logo" />
 </p>
 
+Tinyfin-RL is a **C-first reinforcement learning system** with a single
+executable, a deterministic environment core, and Tinyfin for tensors +
+autograd. Rendering is optional and never drives simulation.
 
-Tinyfin-RL is a modular reinforcement learning library intended to be built around a tensor backend (Tinyfin or another library). The core goal is a C-first, embeddable architecture with clean interfaces, optional backends, and raylib rendering inside C.
+## What’s In Here
 
-## Status
+- `src/` single-binary implementation (`tinyfin-rl`)
+- `tinyfin/` tensor + autograd backend
+- `raylib-src/` optional viewer dependency
+- `architecture.md` and `roadmap.md` for direction
 
-This repository provides foundational building blocks (policies, agents, replay buffer, trainer) plus a C env/plugin ABI and C render ABI. Python is a thin binding layer to load C environments and renderers.
+## Build
 
-## Goals
+Headless build (no raylib):
 
-- Minimal, readable RL primitives that translate to C modules.
-- Optional tensor backend integration without hard coupling.
-- Training visualization via raylib in C renderers.
+```bash
+make
+./build/tinyfin-rl train --algo dqn --steps 1000
+```
 
-## Direction
+With raylib viewer:
 
-This library is intended to be used as a project foundation rather than a small Python-only teaching repo. C environments are the source of truth; Python bindings are optional.
+```bash
+make USE_RAYLIB=1
+./build/tinyfin-rl train --algo dqn --steps 1000 --render live --render-fps 10
+```
 
-## Structure
+Select environment:
 
-- `tinyfin_rl/` core library + C headers
-- `tinyfin/` Tinyfin submodule (tensor core + C backend source)
-- `environments/` standalone environment projects (raylib, etc.)
-- `examples/` C-first training examples
-- `raylib/` raylib-quickstart submodule for C visualization and env prototypes
-- `raylib-src/` raylib source submodule for direct builds without premake
-- `docs/` project notes and usage guides
-- `roadmap.md` milestone plan
- - `tests/` backend parity checks (CPU/CUDA) when Tinyfin is available
+```bash
+./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 1000
+./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
+./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
+```
+
+## Algorithms
+
+```bash
+./build/tinyfin-rl train --algo dqn --steps 2000
+./build/tinyfin-rl train --algo reinforce --steps 2000 --steps-per-batch 512
+./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2
+./build/tinyfin-rl train --algo dqn --steps 2000 --save runs/dqn
+./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
+```
+
+## Modes
+
+Train:
+
+```bash
+./build/tinyfin-rl train --algo dqn --steps 2000 --trace-out runs/run.tft
+```
+
+Eval:
+
+```bash
+./build/tinyfin-rl eval --algo dqn --episodes 10 --render live
+```
+
+Replay:
+
+```bash
+./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
+```
+
+## Notes
+
+- The canonical environment is a four-room grid (`maze_rooms`).
+- A second reference environment (`lineworld`) validates the API shape.
+- DQN/REINFORCE/PPO are implemented in C using Tinyfin.
+- Rendering is optional and uses render snapshots, not env-owned raylib.
 
 ## Docs
 
-- `docs/overview.md` project overview
-- `docs/install.md` setup and optional dependencies
-- `docs/python_bindings.md` Python bindings for C env plugins + renderers
-- `docs/api_conventions.md` API expectations
-- `docs/c_api.md` C API overview
-- `docs/trpo.md` minimal TRPO placeholder
-- `docs/ppo_walkthrough.md` PPO walkthrough
-- `docs/dqn_walkthrough.md` DQN walkthrough
-- `docs/sac_walkthrough.md` SAC walkthrough
-- `docs/adapters.md` Gymnasium + PettingZoo adapters
-- `environments/first-env/README.md` raylib gridworld + training notes
-- `environments/lineworld/README.md` lineworld + Q-learning
-- `environments/maze_rooms/README.md` four-room maze
-- `environments/cliffwalk/README.md` cliff-walking grid
-- `environments/cartpole_simple/README.md` cartpole with box observation
-- `environments/grid_soccer/README.md` single-agent grid soccer
-- `examples/README.md` C-first training examples
-
-## Quickstart (C examples)
-
-Build the C examples and run the deterministic trainer smoke test:
-
-```bash
-cd tinyfin-rl
-make
-./build/trainer_smoke
-```
-
-## C training (DQN/PPO)
-
-```bash
-cd tinyfin-rl
-make train_dqn train_ppo
-./build/train_dqn --env environments/lineworld/liblineworld.so --obs-n 7 --action-n 2
-./build/train_ppo --env environments/first-env/libfirst_env.so --obs-n 100 --action-n 4
-```
-
-## Raylib env (train + autoplay)
-
-Train the Q-learning policy and watch it in the raylib viewer:
-
-```bash
-cd tinyfin-rl/environments/first-env
-make train_q
-./train_q --episodes 2000 --report 200 --out q_table.csv
-make
-./first_env
-```
-
-Press `P` to toggle autoplay and `L` to reload `q_table.csv`.
-
-## Headless env (lineworld)
-
-Train a Q-learning policy in a simple 1D lineworld:
-
-```bash
-cd tinyfin-rl/environments/lineworld
-make
-./train_q --episodes 2000 --report 200 --out q_table.csv
-```
-
-## Python bindings (C envs)
-
-Use Python to drive C environments via the plugin ABI and train via the C trainer ABI. See `docs/python_bindings.md` for full examples.
-
-## Gymnasium examples (Python)
-
-The `examples/python` folder includes CartPole DQN/PPO runs using Gymnasium for clarity.
-
-
-## C backend and Tinyfin
-
-Tinyfin lives in a separate repository and is included here as a submodule. The key requirement is a stable C-facing ABI. The `CBackend` loader is a placeholder for that integration.
-
-Tinyfin provides the C backend used by the C trainers. Python can call the C trainers via bindings when Tinyfin is available.
-
-## License
-
-See `LICENSE`.
+- `docs/overview.md` quickstart and modes
+- `docs/algorithms.md` DQN/REINFORCE/PPO usage
+- `docs/render_snapshot.md` snapshot format
+- `docs/trace.md` trace format
+- `docs/perf.md` batch stepping + benchmark
+- `docs/cli.md` CLI reference
+- `docs/training.md` training recipes
+- `docs/replay.md` trace replay
+- `docs/install.md` build notes
+- `python/README.md` optional Python wrapper
+- `architecture.md` system design
+- `roadmap.md` milestones

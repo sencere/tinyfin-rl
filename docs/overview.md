@@ -1,44 +1,37 @@
-# tinyfin-rl overview
+# Overview
 
-Tinyfin-RL is a modular reinforcement learning toolkit aimed at C-first usage with a tensor backend (Tinyfin or an alternative). The API layers are intentionally small so they can map cleanly to C modules and Python bindings.
+Tinyfin-RL is a C-first RL system with a single executable and a deterministic
+environment core. Tinyfin supplies tensors and autograd; Tinyfin-RL owns the
+control loop.
 
-## Core API
+## Quickstart
 
-- `Env`: minimal environment interface with `reset()` and `step()`.
-- `Space`: action/observation space helpers (`Discrete`, `Box`).
-- `Policy`: inference interface for action selection.
-- `Agent`: glue for policy + replay buffer.
-- `ReplayBuffer`: simple FIFO buffer for off-policy methods.
-- `Trainer`: minimal training loop with optional visualization callbacks.
+```bash
+make
+./build/tinyfin-rl train --algo dqn --steps 1000
+./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
+./build/tinyfin-rl train --algo dqn --steps 1000 --save runs/dqn
+./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
+./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
+```
 
-## Visualization
+With raylib:
 
-Raylib visualization is implemented in C. Python can call the C renderers via `ctypes`, but there are no Python-side raylib bindings.
+```bash
+make USE_RAYLIB=1
+./build/tinyfin-rl train --algo dqn --steps 1000 --render live --render-fps 10
+```
 
-## Env metadata
+## Modes
 
-Environment plugins may expose `tfrl_env_metadata_get()` (see `tinyfin_rl/rl_env_info.h`) for action/observation space introspection in Python.
+```bash
+./build/tinyfin-rl train --algo dqn --steps 2000 --trace-out runs/run.tft
+./build/tinyfin-rl eval --algo dqn --episodes 10 --render live
+./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
+```
 
-## C backend integration
+End-to-end demo:
 
-The `CBackend` class in `tinyfin_rl/backend_c.py` is a placeholder for loading Tinyfin or another tensor backend via a shared library. The intent is to keep the core library backend-agnostic and modular.
-
-Tinyfin is included as a submodule in `tinyfin/` for local builds and C backend integration.
-
-Python bindings for C environments live in `tinyfin_rl/bindings`. See `docs/python_bindings.md` for loading env plugins and raylib renderers from Python.
-
-## C trainers
-
-The C trainer ABI (`tinyfin_rl/rl_train.h`) provides DQN and PPO implementations backed by Tinyfin.
-
-For usage examples, see `docs/training.md`.
-
-## Usability helpers
-
-- Checkpoint helpers for PPO/DQN live in `tinyfin_rl/checkpoint.py`.
-- Deterministic evaluation is available via `tinyfin_rl/eval.py`.
-- Experiment metrics can be logged with `tinyfin_rl/experiment.py`.
-
-## Next steps
-
-Check `roadmap.md` for the planned milestones and upcoming algorithms.
+```bash
+./scripts/run_demo.sh
+```
