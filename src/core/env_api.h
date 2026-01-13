@@ -22,6 +22,16 @@ typedef struct {
     int done;
 } tfrl_step_result;
 
+typedef enum {
+    TFRL_SPACE_DISCRETE = 0,
+    TFRL_SPACE_BOX = 1
+} tfrl_space_type;
+
+typedef enum {
+    TFRL_DTYPE_INT32 = 0,
+    TFRL_DTYPE_FLOAT32 = 1
+} tfrl_dtype;
+
 typedef struct {
     const char *name;
     int obs_n;
@@ -29,6 +39,18 @@ typedef struct {
     int max_steps;
     int width;
     int height;
+    tfrl_space_type obs_type;
+    tfrl_space_type action_type;
+    int obs_dims;
+    int action_dims;
+    int obs_shape[2];
+    int action_shape[2];
+    tfrl_dtype obs_dtype;
+    tfrl_dtype action_dtype;
+    double obs_low;
+    double obs_high;
+    double action_low;
+    double action_high;
 } tfrl_env_spec;
 
 typedef struct {

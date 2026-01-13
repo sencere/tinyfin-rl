@@ -13,6 +13,7 @@ make
 ./build/tinyfin-rl train --algo dqn --steps 1000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
+./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --render live --render-env 0
 ```
 
 With raylib:

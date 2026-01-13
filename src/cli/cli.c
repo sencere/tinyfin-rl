@@ -26,7 +26,7 @@ static float arg_float(int argc, char **argv, const char *name, float def) {
 void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "usage:\n");
     fprintf(stderr, "  %s train --algo dqn [--env NAME] [--envs N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
-    fprintf(stderr, "           [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
+    fprintf(stderr, "           [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
     fprintf(stderr, "  %s eval --algo dqn [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E]\n", name);
     fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N]\n", name);
@@ -66,6 +66,7 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->log_every = arg_int(argc, argv, "--log-every", 100);
     out_cfg->render_every = arg_int(argc, argv, "--render-every", 1);
     out_cfg->render_fps = arg_int(argc, argv, "--render-fps", 60);
+    out_cfg->render_env = arg_int(argc, argv, "--render-env", 0);
     out_cfg->trace_out = arg_str(argc, argv, "--trace-out", NULL);
     out_cfg->trace_in = arg_str(argc, argv, "--trace-in", NULL);
     out_cfg->save_path = arg_str(argc, argv, "--save", NULL);

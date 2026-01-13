@@ -25,6 +25,7 @@ Common flags:
 - `--load PATH`
 - `--log-every N`
 - `--render off|live`
+- `--render-env N`
 - `--render-every N`
 - `--render-fps N`
 - `--trace-out FILE`

@@ -66,8 +66,11 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
 
     seed_rng(cfg->seed);
     int env_count = cfg->envs > 0 ? cfg->envs : 1;
-    if (env_count > 1 && cfg->render) {
-        fprintf(stderr, "render disabled for envs > 1\n");
+    int render_idx = cfg->render_env;
+    if (render_idx < 0) render_idx = 0;
+    if (render_idx >= env_count) {
+        fprintf(stderr, "render-env out of range (0..%d)\n", env_count - 1);
+        return 1;
     }
     tfrl_env **envs = (tfrl_env **)calloc((size_t)env_count, sizeof(tfrl_env *));
     if (!envs) return 1;
@@ -110,13 +113,13 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     tfrl_viewer *viewer = NULL;
     void *render_buf = NULL;
     size_t render_buf_len = 0;
-    if (cfg->render && env_count == 1) {
+    if (cfg->render) {
         tfrl_viewer_config vcfg = {.fps = cfg->render_fps, .title = "tinyfin-rl"};
         viewer = tfrl_viewer_create(&vcfg);
         if (!viewer) {
             fprintf(stderr, "viewer not available (build without raylib?)\n");
         } else {
-            render_buf_len = tfrl_env_render_bytes_needed(envs[0]);
+            render_buf_len = tfrl_env_render_bytes_needed(envs[render_idx]);
             render_buf = calloc(1, render_buf_len);
         }
     }
@@ -128,7 +131,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             fprintf(stderr, "failed to open trace out: %s\n", cfg->trace_out);
         } else {
             if (!render_buf) {
-                render_buf_len = tfrl_env_render_bytes_needed(envs[0]);
+                render_buf_len = tfrl_env_render_bytes_needed(envs[render_idx]);
                 render_buf = calloc(1, render_buf_len);
             }
         }
@@ -159,9 +162,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     if (cfg->mode == TFRL_MODE_TRAIN) {
         int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
         for (int step = 0; step < total_steps; step++) {
-            for (int i = 0; i < env_count; i++) {
-                actions[i] = algo.vtable->act(algo.ctx, obs[i]);
-            }
+            tfrl_algo_act_batch(&algo, obs, env_count, actions);
             if (env_count == 1) {
                 steps[0] = tfrl_env_step(envs[0], actions[0]);
             } else {
@@ -181,7 +182,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             }
 
             if ((viewer || writer) && should_render(step, cfg->render_every)) {
-                size_t written = tfrl_env_render_write(envs[0], render_buf, render_buf_len);
+                size_t written = tfrl_env_render_write(envs[render_idx], render_buf, render_buf_len);
                 if (writer && written > 0) {
                     tfrl_trace_writer_write(writer, render_buf, written);
                 }
@@ -228,7 +229,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 done = steps[0].done;
 
                 if ((viewer || writer) && should_render(step, cfg->render_every)) {
-                    size_t written = tfrl_env_render_write(envs[0], render_buf, render_buf_len);
+                    size_t written = tfrl_env_render_write(envs[render_idx], render_buf, render_buf_len);
                     if (writer && written > 0) {
                         tfrl_trace_writer_write(writer, render_buf, written);
                     }

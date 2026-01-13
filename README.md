@@ -13,6 +13,7 @@ autograd. Rendering is optional and never drives simulation.
 - `src/` single-binary implementation (`tinyfin-rl`)
 - `tinyfin/` tensor + autograd backend
 - `raylib-src/` optional viewer dependency
+- `build/libtfrl_env.so` shared env library for Python bindings
 - `architecture.md` and `roadmap.md` for direction
 
 ## Build
@@ -37,6 +38,7 @@ Select environment:
 ./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 1000
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
+./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --render live --render-env 0
 ```
 
 ## Algorithms
@@ -91,6 +93,7 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 - `docs/training.md` training recipes
 - `docs/replay.md` trace replay
 - `docs/install.md` build notes
+- `docs/env_api.md` env API + Python binding
 - `python/README.md` optional Python wrapper
 - `architecture.md` system design
 - `roadmap.md` milestones

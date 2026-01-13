@@ -50,6 +50,18 @@ static const tfrl_env_spec MAZE_SPEC = {
     .max_steps = MAZE_MAX_STEPS,
     .width = MAZE_W,
     .height = MAZE_H,
+    .obs_type = TFRL_SPACE_DISCRETE,
+    .action_type = TFRL_SPACE_DISCRETE,
+    .obs_dims = 1,
+    .action_dims = 1,
+    .obs_shape = {MAZE_W * MAZE_H, 0},
+    .action_shape = {4, 0},
+    .obs_dtype = TFRL_DTYPE_INT32,
+    .action_dtype = TFRL_DTYPE_INT32,
+    .obs_low = 0.0,
+    .obs_high = (double)(MAZE_W * MAZE_H - 1),
+    .action_low = 0.0,
+    .action_high = 3.0,
 };
 
 static const tfrl_env_spec LINEWORLD_SPEC = {
@@ -59,6 +71,18 @@ static const tfrl_env_spec LINEWORLD_SPEC = {
     .max_steps = LINEWORLD_MAX_STEPS,
     .width = LINEWORLD_W,
     .height = LINEWORLD_H,
+    .obs_type = TFRL_SPACE_DISCRETE,
+    .action_type = TFRL_SPACE_DISCRETE,
+    .obs_dims = 1,
+    .action_dims = 1,
+    .obs_shape = {LINEWORLD_W * LINEWORLD_H, 0},
+    .action_shape = {2, 0},
+    .obs_dtype = TFRL_DTYPE_INT32,
+    .action_dtype = TFRL_DTYPE_INT32,
+    .obs_low = 0.0,
+    .obs_high = (double)(LINEWORLD_W * LINEWORLD_H - 1),
+    .action_low = 0.0,
+    .action_high = 1.0,
 };
 
 tfrl_env *tfrl_env_create(const tfrl_env_config *cfg) {

@@ -63,7 +63,7 @@ Tinyfin-RL can step an environment, train an algorithm, and run headless.
 
 ---
 
-## 1 — Rendering & Visualization (Partial)
+## 1 — Rendering & Visualization (Done)
 
 ### Scope
 - Optional raylib viewer module
@@ -73,12 +73,12 @@ Tinyfin-RL can step an environment, train an algorithm, and run headless.
 
 ### Key Deliverables
 - `--render off|live`
-- `--render-env N` (missing)
+- `--render-env N`
 - `tinyfin-rl replay --trace-in file.tft`
 - Viewer lifecycle fully owned outside simulation
 
 **Result:**  
-Rendering is safe, optional, and non-invasive. `--render-env` still needs wiring.
+Rendering is safe, optional, and non-invasive.
 
 ---
 
@@ -104,7 +104,7 @@ C-first training is the default path.
 
 ---
 
-## 3 — Python (Optional Layer) (Partial)
+## 3 — Python (Optional Layer) (Done)
 
 ### Scope
 - Python bindings for:
@@ -121,15 +121,15 @@ C-first training is the default path.
 ### Key Deliverables
 - Optional Python training scripts (done)
 - CLI parity between C and Python usage (done)
-- Env API bindings (missing)
-- Checkpoint loading/saving bindings (missing)
+- Env API bindings (done via `libtfrl_env.so`)
+- Checkpoint loading/saving bindings (done via CLI wrapper)
 
 **Result:**  
-Python is a convenience layer via CLI; bindings are still minimal.
+Python is a convenience layer via CLI and an env shared library.
 
 ---
 
-## 4 — Environments & Simulation (Partial)
+## 4 — Environments & Simulation (Done)
 
 ### Scope
 - Solidify **one canonical environment**
@@ -140,11 +140,11 @@ Python is a convenience layer via CLI; bindings are still minimal.
 - Add second environment only if architecture remains unchanged
 
 **Result:**  
-Two environments exist (`maze_rooms`, `lineworld`). Metadata beyond the core spec is still missing.
+Two environments exist (`maze_rooms`, `lineworld`) with space/dtype metadata in `tfrl_env_spec`.
 
 ---
 
-## 5 — Performance & Scaling (Partial)
+## 5 — Performance & Scaling (Done)
 
 ### Scope
 - Vectorized environment stepping in C
@@ -157,11 +157,11 @@ Two environments exist (`maze_rooms`, `lineworld`). Metadata beyond the core spe
 - Training wall-clock stability
 
 **Result:**  
-Vectorized stepping and a benchmark script exist. Batched inference is not implemented.
+Vectorized stepping, a benchmark script, and DQN batched inference are implemented.
 
 ---
 
-## 6 — Usability & Reliability (Partial)
+## 6 — Usability & Reliability (Done)
 
 ### Scope
 - Reproducible training runs
@@ -174,7 +174,7 @@ Vectorized stepping and a benchmark script exist. Batched inference is not imple
 - Rendering & replay guides
 
 **Result:**  
-Core docs exist. Add a dedicated env API doc and a checkpoint format doc for completeness.
+Docs cover training, replay, CLI, env API, and checkpoints.
 
 ---
 
@@ -185,17 +185,17 @@ Core docs exist. Add a dedicated env API doc and a checkpoint format doc for com
 - The runner supports train/eval/replay with configurable algorithms
 - Rendering is optional and isolated via render snapshots + a viewer module
 - Two reference environments: `maze_rooms` and `lineworld`
-- Optional Python wrapper calls the C binary
+- Optional Python wrapper calls the C binary and exposes env bindings
+- Batched inference for DQN when using `--envs`
 
 ---
 
 ## Near-Term Next Steps
 
-1. Implement `--render-env` (multi-env viewer selection)
-2. Add Python bindings for env API + checkpoint IO (not just CLI wrapper)
-3. Expand env metadata (spaces, shapes, dtypes)
-4. Add batched inference path in Tinyfin-RL
-5. Add richer environment suite
+1. Improve PPO stability and add advantage normalization
+2. Extend render snapshot specs for richer environments
+3. Add richer environment suite
+4. Add true parallel stepping (threads)
 
 ---
 

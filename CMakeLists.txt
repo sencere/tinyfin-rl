@@ -43,3 +43,6 @@ if (TFRL_WITH_RAYLIB)
     target_include_directories(tinyfin-rl PRIVATE raylib-src/src)
     target_link_libraries(tinyfin-rl raylib)
 endif()
+
+add_library(tfrl_env SHARED src/core/env_example.c)
+target_include_directories(tfrl_env PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

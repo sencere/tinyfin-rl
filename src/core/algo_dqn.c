@@ -110,6 +110,42 @@ static tfrl_action dqn_act(void *ctx, tfrl_obs obs) {
     return action;
 }
 
+static void dqn_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_action *out_actions) {
+    tfrl_dqn_algo *algo = (tfrl_dqn_algo *)ctx;
+    if (!algo || !obs || !out_actions || count <= 0) return;
+
+    int shape[2] = {count, algo->obs_n};
+    Tensor *x = tensor_zeros(2, shape);
+    if (!x) return;
+    for (int i = 0; i < count; i++) {
+        if (obs[i].index >= 0 && obs[i].index < algo->obs_n) {
+            size_t off = (size_t)i * (size_t)algo->obs_n + (size_t)obs[i].index;
+            tensor_set_f32_at(x, off, 1.0f);
+        }
+    }
+
+    Tensor *q_values = linear_forward(algo->q, x);
+    for (int i = 0; i < count; i++) {
+        float r = (float)rand() / (float)RAND_MAX;
+        if (r < algo->epsilon) {
+            out_actions[i].index = rand() % algo->action_n;
+            continue;
+        }
+        int best = 0;
+        float best_v = tensor_get_f32_at(q_values, (size_t)i * (size_t)algo->action_n);
+        for (int j = 1; j < algo->action_n; j++) {
+            float v = tensor_get_f32_at(q_values, (size_t)i * (size_t)algo->action_n + (size_t)j);
+            if (v > best_v) {
+                best_v = v;
+                best = j;
+            }
+        }
+        out_actions[i].index = best;
+    }
+    tensor_free(q_values);
+    tensor_free(x);
+}
+
 static void dqn_update(void *ctx, const tfrl_transition *transition) {
     tfrl_dqn_algo *algo = (tfrl_dqn_algo *)ctx;
     if (!transition) return;
@@ -170,6 +206,7 @@ static void dqn_save(void *ctx, const char *path) {
 
 static const tfrl_algo_vtable DQN_VTABLE = {
     .act = dqn_act,
+    .act_batch = dqn_act_batch,
     .update = dqn_update,
     .save = dqn_save,
     .destroy = dqn_destroy,

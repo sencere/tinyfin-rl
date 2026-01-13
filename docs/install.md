@@ -18,6 +18,13 @@ With raylib:
 make USE_RAYLIB=1
 ```
 
+Env shared library for Python bindings:
+
+```bash
+make
+ls build/libtfrl_env.so
+```
+
 ## CMake (optional)
 
 ```bash

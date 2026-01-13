@@ -38,3 +38,14 @@ void tfrl_algo_save(tfrl_algo *algo, const char *path) {
     if (!algo || !algo->vtable || !algo->vtable->save) return;
     algo->vtable->save(algo->ctx, path);
 }
+
+void tfrl_algo_act_batch(tfrl_algo *algo, const tfrl_obs *obs, int count, tfrl_action *out_actions) {
+    if (!algo || !algo->vtable || count <= 0 || !out_actions) return;
+    if (algo->vtable->act_batch) {
+        algo->vtable->act_batch(algo->ctx, obs, count, out_actions);
+        return;
+    }
+    for (int i = 0; i < count; i++) {
+        out_actions[i] = algo->vtable->act(algo->ctx, obs[i]);
+    }
+}

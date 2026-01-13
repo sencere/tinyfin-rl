@@ -26,6 +26,7 @@ static void random_destroy(void *ctx) {
 
 static const tfrl_algo_vtable RANDOM_VTABLE = {
     .act = random_act,
+    .act_batch = NULL,
     .update = random_update,
     .save = NULL,
     .destroy = random_destroy,

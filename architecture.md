@@ -33,6 +33,9 @@ tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action);
 const tfrl_env_spec *tfrl_env_get_spec(const tfrl_env *env);
 ```
 
+`tfrl_env_spec` includes space types, shapes, dtypes, and bounds for both
+observations and actions.
+
 Rendering uses snapshots:
 
 ```c
@@ -49,6 +52,7 @@ Algorithms are small C modules chosen at runtime:
 ```c
 tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec);
 tfrl_action algo_act(tfrl_obs obs);
+void algo_act_batch(const tfrl_obs *obs, int count, tfrl_action *out_actions);
 void algo_update(const tfrl_transition *transition);
 void algo_save(const char *path);
 ```
@@ -71,6 +75,8 @@ void tfrl_env_step_batch(tfrl_env **envs, int env_count,
                          const tfrl_action *actions,
                          tfrl_step_result *out_steps);
 ```
+
+Algorithms may implement `act_batch` for batched inference (DQN does).
 
 ## Trace Replay
 

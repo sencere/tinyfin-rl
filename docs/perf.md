@@ -17,3 +17,5 @@ Use vectorized env stepping for throughput:
 ```bash
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 32 --steps 200000 --render off
 ```
+
+Batched inference is enabled for DQN when `--envs > 1` via `act_batch`.

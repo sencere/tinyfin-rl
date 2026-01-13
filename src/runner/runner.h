@@ -29,6 +29,7 @@ typedef struct {
     int render;
     int render_every;
     int render_fps;
+    int render_env;
     const char *trace_out;
     const char *trace_in;
     const char *save_path;

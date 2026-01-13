@@ -179,6 +179,7 @@ static void reinforce_save(void *ctx, const char *path) {
 
 static const tfrl_algo_vtable REINFORCE_VTABLE = {
     .act = reinforce_act,
+    .act_batch = NULL,
     .update = reinforce_update,
     .save = reinforce_save,
     .destroy = reinforce_destroy,

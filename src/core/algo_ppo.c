@@ -222,6 +222,7 @@ static void ppo_save(void *ctx, const char *path) {
 
 static const tfrl_algo_vtable PPO_VTABLE = {
     .act = ppo_act,
+    .act_batch = NULL,
     .update = ppo_update,
     .save = ppo_save,
     .destroy = ppo_destroy,
