@@ -205,23 +205,23 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Threaded env stepping via `--threads`
 - Deterministic mode via `--deterministic`
 - Golden runs regression script
+- Continuous SAC uses a stochastic policy with log-prob entropy
 
 ---
 
 ## Near-Term Next Steps
 
-1. Improve PPO stability and add advantage normalization
-2. Add typed config schema + validation per algorithm (fail fast, versioned defaults)
-3. Define determinism contract and add `--deterministic` mode (threading + replay rules)
-4. Golden runs regression suite (lineworld/point1d/maze) with thresholds
-5. Continuous SAC/TD3: add stochastic policy + log-prob entropy
-6. Replay buffer tests, determinism checks, and CI wiring
+1. Finish typed config schema + versioned defaults for algorithms
+2. Expand determinism docs (threading, replay sampling, batch ordering)
+3. Replay buffer tests, determinism checks, and CI wiring
+4. Continuous TD3 improvements (target policy noise + clipped smoothing)
 
 ## Recent Updates
 
 - Config validation for algorithm params and space constraints
 - Deterministic mode and fixed seeding behavior
 - Golden runs regression script
+- Stochastic continuous SAC with tanh log-prob correction
 
 ## Quality Tiers
 

@@ -123,7 +123,8 @@ KL-penalized policy updates with a value baseline (approximate TRPO).
 
 ## SAC (Discrete/Continuous, Minimal)
 
-Soft actor-critic for discrete actions with twin Q networks. For box actions, this uses a minimal continuous variant.
+Soft actor-critic for discrete actions with twin Q networks. For box actions, this uses a stochastic Gaussian policy
+(mean/log-std head) with tanh squashing and log-prob correction for the entropy term.
 
 ```bash
 ./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2
@@ -138,7 +139,8 @@ Off-policy flags:
 
 ## TD3 (Discrete/Continuous, Minimal)
 
-Twin Q networks with delayed policy updates for discrete actions. For box actions, this uses a minimal continuous variant.
+Twin Q networks with delayed policy updates for discrete actions. For box actions, this uses a minimal continuous variant
+with deterministic actions (no entropy term).
 
 ```bash
 ./build/tinyfin-rl train --algo td3 --steps 2000

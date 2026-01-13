@@ -49,9 +49,14 @@ Use replay/PER tuning:
 ## SAC / TD3 (Continuous)
 
 ```bash
-./build/tinyfin-rl train --algo sac --env point1d --steps 2000 --replay-size 10000 --batch-size 64
+./build/tinyfin-rl train --algo sac --env point1d --steps 2000 --replay-size 10000 --batch-size 64 --entropy-coef 0.2
 ./build/tinyfin-rl train --algo td3 --env point1d --steps 2000 --replay-size 10000 --batch-size 64
 ```
+
+Notes:
+
+- SAC uses a stochastic Gaussian policy with tanh squashing and log-prob correction for entropy.
+- TD3 remains deterministic for continuous actions.
 
 ## MCTS (Planner)
 
