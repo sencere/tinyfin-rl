@@ -96,6 +96,17 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 - DQN/REINFORCE/PPO plus A2C/TRPO/IMPALA/Rainbow/QR-DQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
 
+## Python Env Bridge (Sockets)
+
+The Python bridge lets the C runner drive Gymnasium/PettingZoo/Retro via a UNIX
+socket server.
+
+```bash
+python3 python/bridge_server.py --socket /tmp/tfrl_py_bridge.sock
+export TFRL_PY_BRIDGE=/tmp/tfrl_py_bridge.sock
+./build/tinyfin-rl train --algo dqn --env py:gymnasium:CartPole-v1 --steps 2000
+```
+
 ## Docs
 
 - `docs/overview.md` quickstart and modes
