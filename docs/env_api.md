@@ -45,6 +45,7 @@ int got = tfrl_env_step_multi(env, actions, agents, steps, 2);
 - `lineworld_cont`
 - `point1d`
 - `coin_maze`
+- `coin_maze_duo`
 
 ## Python
 

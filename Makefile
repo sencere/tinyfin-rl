@@ -44,6 +44,7 @@ ENV_LIB ?= $(BIN_DIR)/libtfrl_env.so
 TEST_REPLAY ?= $(BIN_DIR)/test_replay_buffer
 TEST_POINT1D ?= $(BIN_DIR)/test_point1d_smoke
 TEST_LINEWORLD_DUO ?= $(BIN_DIR)/test_lineworld_duo_smoke
+TEST_COIN_MAZE_DUO ?= $(BIN_DIR)/test_coin_maze_duo_smoke
 
 .PHONY: all clean raylib
 
@@ -70,7 +71,7 @@ $(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
 $(ENV_LIB): src/core/env_example.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $<
 
-tests: $(TEST_REPLAY) $(TEST_POINT1D) $(TEST_LINEWORLD_DUO)
+tests: $(TEST_REPLAY) $(TEST_POINT1D) $(TEST_LINEWORLD_DUO) $(TEST_COIN_MAZE_DUO)
 
 $(TEST_REPLAY): tests/test_replay_buffer.c src/core/replay_buffer.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
@@ -79,6 +80,9 @@ $(TEST_POINT1D): tests/test_point1d_smoke.c src/core/env_example.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
 $(TEST_LINEWORLD_DUO): tests/test_lineworld_duo_smoke.c src/core/env_example.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
+
+$(TEST_COIN_MAZE_DUO): tests/test_coin_maze_duo_smoke.c src/core/env_example.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
 raylib:

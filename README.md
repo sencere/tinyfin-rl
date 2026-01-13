@@ -38,6 +38,7 @@ Select environment:
 ./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 1000
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 500
+./build/tinyfin-rl train --algo dqn --env coin_maze_duo --steps 500 --share-policy
 ./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 500
 ./build/tinyfin-rl train --algo random --env point1d --steps 500
 ./build/tinyfin-rl train --algo dqn --env coin_maze --steps 500
@@ -91,7 +92,7 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 
 - The canonical environment is a four-room grid (`maze_rooms`).
 - Reference environments: `lineworld`, `lineworld_cont`, `point1d`, `coin_maze`.
-- Multi-agent environment: `lineworld_duo`.
+- Multi-agent environments: `lineworld_duo`, `coin_maze_duo`.
 - DQN/REINFORCE/PPO plus A2C/TRPO/IMPALA/Rainbow/QR-DQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
 

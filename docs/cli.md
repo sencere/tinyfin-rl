@@ -11,9 +11,10 @@
 Common flags:
 
 - `--algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random`
-- `--env maze_rooms|lineworld|lineworld_duo|lineworld_cont|point1d|coin_maze`
+- `--env maze_rooms|lineworld|lineworld_duo|lineworld_cont|point1d|coin_maze|coin_maze_duo`
 - `--envs N` (vectorized stepping)
 - `--threads N` (parallel stepping)
+- `--agents N` (expected agent count; validates env)
 - `--steps N`
 - `--seed N`
 - `--gamma G`
@@ -39,6 +40,7 @@ Common flags:
 - `--render-fps N`
 - `--trace-out FILE`
 - `--deterministic` (single-thread stepping + fixed seed when `--seed` is 0)
+- `--share-policy` (use one policy for all agents)
 
 Defaults:
 

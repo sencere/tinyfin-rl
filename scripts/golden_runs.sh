@@ -36,3 +36,4 @@ run_case "lineworld_ppo_clip01" "./build/tinyfin-rl train --algo ppo --env linew
 run_case "maze_rooms_dqn" "./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 600 --log-every 1 --deterministic --seed 1" -0.2 -0.2 1
 run_case "point1d_sac" "./build/tinyfin-rl train --algo sac --env point1d --steps 600 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" -0.2 -0.2 1
 run_case "point1d_td3" "./build/tinyfin-rl train --algo td3 --env point1d --steps 600 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" -0.2 -0.2 1
+run_case "coin_maze_duo_dqn" "./build/tinyfin-rl train --algo dqn --env coin_maze_duo --steps 600 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32 --share-policy" -0.2 -0.2 1

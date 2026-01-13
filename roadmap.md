@@ -220,6 +220,9 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Golden runs expanded for PPO/TD3 variants
 - Trace metadata overlay in viewer
 - Multi-agent env API + lineworld_duo example
+- Multi-agent policy sharing and agent-count validation
+- coin_maze_duo cooperative environment + golden run
+- Replay CLI prints trace metadata
 
 ---
 
@@ -252,6 +255,9 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Golden runs PPO/TD3 variants
 - Trace metadata overlay in viewer
 - Multi-agent env API with per-agent policies + lineworld_duo
+- Multi-agent share-policy flag and agent-count validation
+- coin_maze_duo cooperative env + golden run
+- Replay CLI prints trace metadata
 
 ## Quality Tiers
 

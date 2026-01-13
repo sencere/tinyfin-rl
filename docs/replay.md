@@ -20,3 +20,5 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 
 If the trace was recorded with metadata (v2 header), the viewer displays the
 resolved config line at the bottom.
+
+The replay CLI also prints the trace metadata to stdout when available.

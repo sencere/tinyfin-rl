@@ -33,9 +33,9 @@ static float arg_float(int argc, char **argv, const char *name, float def) {
 void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "usage:\n");
     fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
-    fprintf(stderr, "           [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
+    fprintf(stderr, "           [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
-    fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE]\n");
+    fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N]\n", name);
     fprintf(stderr, "algo params:\n");
     fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N --gae-lambda N (ppo)\n");
@@ -91,6 +91,8 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->trace_in = arg_str(argc, argv, "--trace-in", NULL);
     out_cfg->save_path = arg_str(argc, argv, "--save", NULL);
     out_cfg->load_path = arg_str(argc, argv, "--load", NULL);
+    out_cfg->agents_expected = arg_int(argc, argv, "--agents", 0);
+    out_cfg->share_policy = arg_flag(argc, argv, "--share-policy");
 
     const char *render = arg_str(argc, argv, "--render", "off");
     out_cfg->render = (strcmp(render, "live") == 0);

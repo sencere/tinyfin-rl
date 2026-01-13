@@ -72,3 +72,8 @@ add_executable(test_lineworld_duo_smoke tests/test_lineworld_duo_smoke.c src/cor
 target_include_directories(test_lineworld_duo_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_lineworld_duo_smoke m)
 add_test(NAME lineworld_duo_smoke COMMAND test_lineworld_duo_smoke)
+
+add_executable(test_coin_maze_duo_smoke tests/test_coin_maze_duo_smoke.c src/core/env_example.c)
+target_include_directories(test_coin_maze_duo_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_coin_maze_duo_smoke m)
+add_test(NAME coin_maze_duo_smoke COMMAND test_coin_maze_duo_smoke)

@@ -44,6 +44,12 @@ Use replay/PER tuning:
 ./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 2000 --replay-size 10000 --batch-size 64
 ```
 
+## Multi-Agent (Coin Maze Duo)
+
+```bash
+./build/tinyfin-rl train --algo dqn --env coin_maze_duo --steps 2000 --replay-size 10000 --batch-size 64 --share-policy
+```
+
 ## A2C / TRPO / IMPALA
 
 ```bash

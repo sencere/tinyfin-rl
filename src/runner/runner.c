@@ -82,6 +82,9 @@ static int run_replay(const tfrl_runner_config *cfg) {
         return 1;
     }
     const char *meta = tfrl_trace_reader_meta(reader);
+    if (meta && meta[0] != '\0') {
+        fprintf(stdout, "trace_meta: %s\n", meta);
+    }
     tfrl_viewer_config vcfg = {.fps = cfg->render_fps, .title = "tinyfin-rl replay", .meta = meta};
     tfrl_viewer *viewer = tfrl_viewer_create(&vcfg);
     if (!viewer) {
@@ -166,6 +169,14 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             return 1;
         }
     }
+    if (cfg->agents_expected > 0 && cfg->agents_expected != agent_count) {
+        fprintf(stderr, "env agent count mismatch (expected %d got %d)\n", cfg->agents_expected, agent_count);
+        for (int i = 0; i < env_count; i++) {
+            tfrl_env_destroy(envs[i]);
+        }
+        free(envs);
+        return 1;
+    }
     tfrl_algo_config algo_cfg = {
         .name = cfg->algo ? cfg->algo : "dqn",
         .obs_n = spec->obs_n,
@@ -203,11 +214,12 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         .deterministic = cfg->deterministic,
     };
     tfrl_algo_config_apply_defaults(&algo_cfg);
-    tfrl_algo algos[agent_count];
-    char load_paths[agent_count][256];
-    for (int a = 0; a < agent_count; a++) {
+    int policy_count = cfg->share_policy ? 1 : agent_count;
+    tfrl_algo algos[policy_count];
+    char load_paths[policy_count][256];
+    for (int a = 0; a < policy_count; a++) {
         tfrl_algo_config cfg_agent = algo_cfg;
-        if (cfg->load_path && agent_count > 1) {
+        if (cfg->load_path && policy_count > 1) {
             snprintf(load_paths[a], sizeof(load_paths[a]), "%s.agent%d", cfg->load_path, a);
             cfg_agent.load_path = load_paths[a];
         }
@@ -242,12 +254,13 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     tfrl_trace_writer *writer = NULL;
     char trace_meta[512];
     snprintf(trace_meta, sizeof(trace_meta),
-             "algo=%s defaults=v%d env=%s agents=%d seed=%d deterministic=%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f "
+             "algo=%s defaults=v%d env=%s agents=%d share_policy=%d seed=%d deterministic=%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f "
              "replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d",
              algo_cfg.name ? algo_cfg.name : "null",
              algo_cfg.defaults_version,
              algo_cfg.env_name ? algo_cfg.env_name : "null",
              agent_count,
+             cfg->share_policy ? 1 : 0,
              algo_cfg.seed,
              algo_cfg.deterministic,
              algo_cfg.gamma,
@@ -344,7 +357,8 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 for (int i = 0; i < env_count; i++) {
                     obs_batch[i] = obs[i * agent_count + a];
                 }
-                tfrl_algo_act_batch(&algos[a], obs_batch, env_count, act_batch);
+                int algo_idx = cfg->share_policy ? 0 : a;
+                tfrl_algo_act_batch(&algos[algo_idx], obs_batch, env_count, act_batch);
                 for (int i = 0; i < env_count; i++) {
                     actions[i * agent_count + a] = act_batch[i];
                 }
@@ -367,7 +381,8 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                         .next_obs = steps[idx].observation,
                         .done = steps[idx].done,
                     };
-                    algos[a].vtable->update(algos[a].ctx, &transition);
+                    int algo_idx = cfg->share_policy ? 0 : a;
+                    algos[algo_idx].vtable->update(algos[algo_idx].ctx, &transition);
                     obs[idx] = steps[idx].observation;
                     episode_returns[idx] += steps[idx].reward;
                 }
@@ -433,7 +448,8 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             int step = 0;
             while (!done) {
                 for (int a = 0; a < agent_count; a++) {
-                    actions[a] = algos[a].vtable->act(algos[a].ctx, obs[a]);
+                    int algo_idx = cfg->share_policy ? 0 : a;
+                    actions[a] = algos[algo_idx].vtable->act(algos[algo_idx].ctx, obs[a]);
                 }
                 if (tfrl_env_step_multi(envs[0], actions, agent_count, steps, agent_count) != agent_count) {
                     fprintf(stderr, "env step failed\n");
@@ -467,17 +483,17 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     if (viewer) tfrl_viewer_destroy(viewer);
     free(render_buf);
     if (cfg->save_path) {
-        if (agent_count == 1) {
+        if (policy_count == 1) {
             tfrl_algo_save(&algos[0], cfg->save_path);
         } else {
-            for (int a = 0; a < agent_count; a++) {
+            for (int a = 0; a < policy_count; a++) {
                 char path[256];
                 snprintf(path, sizeof(path), "%s.agent%d", cfg->save_path, a);
                 tfrl_algo_save(&algos[a], path);
             }
         }
     }
-    for (int a = 0; a < agent_count; a++) {
+    for (int a = 0; a < policy_count; a++) {
         tfrl_algo_destroy(&algos[a]);
     }
     for (int i = 0; i < env_count; i++) {
