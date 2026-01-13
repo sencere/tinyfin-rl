@@ -12,10 +12,11 @@ make
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 500
 ./build/tinyfin-rl train --algo random --env point1d --steps 500
+./build/tinyfin-rl train --algo dqn --env coin_maze --steps 500
 ./build/tinyfin-rl train --algo dqn --steps 1000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
-./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --render live --render-env 0
+./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --threads 4 --render live --render-env 0
 ```
 
 With raylib:

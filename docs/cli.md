@@ -11,8 +11,9 @@
 Common flags:
 
 - `--algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random`
-- `--env maze_rooms|lineworld|lineworld_cont|point1d`
+- `--env maze_rooms|lineworld|lineworld_cont|point1d|coin_maze`
 - `--envs N` (vectorized stepping)
+- `--threads N` (parallel stepping)
 - `--steps N`
 - `--seed N`
 - `--gamma G`

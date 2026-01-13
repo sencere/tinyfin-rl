@@ -41,6 +41,7 @@ typedef struct {
     const char *trace_in;
     const char *save_path;
     const char *load_path;
+    int threads;
 } tfrl_runner_config;
 
 int tfrl_runner_run(const tfrl_runner_config *cfg);

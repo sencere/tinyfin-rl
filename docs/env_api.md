@@ -26,6 +26,14 @@ action.data_len = 1;
 action.data[0] = 0.25f;
 ```
 
+## Environments
+
+- `maze_rooms`
+- `lineworld`
+- `lineworld_cont`
+- `point1d`
+- `coin_maze`
+
 ## Python
 
 Python can load the shared library:

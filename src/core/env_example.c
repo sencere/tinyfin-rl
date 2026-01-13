@@ -9,6 +9,7 @@ typedef enum {
     TFRL_ENV_LINEWORLD = 1,
     TFRL_ENV_POINT1D = 2,
     TFRL_ENV_LINEWORLD_CONT = 3,
+    TFRL_ENV_COIN_MAZE = 4,
 } tfrl_env_kind;
 
 #define MAZE_W 10
@@ -24,12 +25,20 @@ typedef enum {
 #define POINT1D_MAX_STEPS 100
 #define POINT1D_STEP_SCALE 0.1f
 
+#define COIN_MAZE_W 10
+#define COIN_MAZE_H 10
+#define COIN_MAZE_MAX_STEPS 200
+#define COIN_MAZE_COINS 4
+
 struct tfrl_env {
     tfrl_env_kind kind;
     int x;
     int y;
     float pos;
     int steps;
+    int coins_x[COIN_MAZE_COINS];
+    int coins_y[COIN_MAZE_COINS];
+    int coins_collected[COIN_MAZE_COINS];
     float last_reward;
     int last_done;
     uint32_t frame_index;
@@ -59,6 +68,28 @@ typedef struct {
     uint32_t done;
     uint32_t env_kind;
 } tfrl_grid_snapshot_v2;
+
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t agent_x;
+    uint32_t agent_y;
+    uint32_t goal_x;
+    uint32_t goal_y;
+    uint32_t step;
+    uint32_t max_steps;
+    float reward;
+    uint32_t done;
+    uint32_t env_kind;
+    uint32_t entity_count;
+} tfrl_grid_snapshot_v3;
+
+typedef struct {
+    uint32_t type;
+    float x;
+    float y;
+    float value;
+} tfrl_entity_snapshot;
 
 static int is_wall_maze(int x, int y) {
     if (x < 0 || x >= MAZE_W || y < 0 || y >= MAZE_H) return 1;
@@ -151,6 +182,27 @@ static const tfrl_env_spec LINEWORLD_CONT_SPEC = {
     .action_high = 1.0,
 };
 
+static const tfrl_env_spec COIN_MAZE_SPEC = {
+    .name = "coin_maze",
+    .obs_n = COIN_MAZE_W * COIN_MAZE_H,
+    .action_n = 4,
+    .max_steps = COIN_MAZE_MAX_STEPS,
+    .width = COIN_MAZE_W,
+    .height = COIN_MAZE_H,
+    .obs_type = TFRL_SPACE_DISCRETE,
+    .action_type = TFRL_SPACE_DISCRETE,
+    .obs_dims = 1,
+    .action_dims = 1,
+    .obs_shape = {COIN_MAZE_W * COIN_MAZE_H, 0},
+    .action_shape = {4, 0},
+    .obs_dtype = TFRL_DTYPE_INT32,
+    .action_dtype = TFRL_DTYPE_INT32,
+    .obs_low = 0.0,
+    .obs_high = (double)(COIN_MAZE_W * COIN_MAZE_H - 1),
+    .action_low = 0.0,
+    .action_high = 3.0,
+};
+
 tfrl_env *tfrl_env_create(const tfrl_env_config *cfg) {
     tfrl_env *env = (tfrl_env *)calloc(1, sizeof(tfrl_env));
     if (!env) return NULL;
@@ -160,6 +212,8 @@ tfrl_env *tfrl_env_create(const tfrl_env_config *cfg) {
         env->kind = TFRL_ENV_LINEWORLD_CONT;
     } else if (cfg && cfg->name && strcmp(cfg->name, "point1d") == 0) {
         env->kind = TFRL_ENV_POINT1D;
+    } else if (cfg && cfg->name && strcmp(cfg->name, "coin_maze") == 0) {
+        env->kind = TFRL_ENV_COIN_MAZE;
     } else {
         env->kind = TFRL_ENV_MAZE;
     }
@@ -177,6 +231,17 @@ tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed) {
     env->y = 0;
     env->pos = -1.0f;
     env->steps = 0;
+    for (int i = 0; i < COIN_MAZE_COINS; i++) {
+        env->coins_collected[i] = 0;
+    }
+    env->coins_x[0] = 1;
+    env->coins_y[0] = 1;
+    env->coins_x[1] = 3;
+    env->coins_y[1] = 2;
+    env->coins_x[2] = 6;
+    env->coins_y[2] = 5;
+    env->coins_x[3] = 8;
+    env->coins_y[3] = 7;
     env->last_reward = 0.0f;
     env->last_done = 0;
     env->frame_index = 0;
@@ -189,6 +254,8 @@ tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed) {
     } else if (env->kind == TFRL_ENV_POINT1D) {
         obs.data_len = 1;
         obs.data[0] = env->pos;
+    } else if (env->kind == TFRL_ENV_COIN_MAZE) {
+        obs.index = env->y * COIN_MAZE_W + env->x;
     } else {
         obs.index = env->y * MAZE_W + env->x;
     }
@@ -215,6 +282,17 @@ tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action) {
         env->pos += a * POINT1D_STEP_SCALE;
         if (env->pos < -1.0f) env->pos = -1.0f;
         if (env->pos > 1.0f) env->pos = 1.0f;
+    } else if (env->kind == TFRL_ENV_COIN_MAZE) {
+        if (act == 0) ny -= 1;
+        else if (act == 1) ny += 1;
+        else if (act == 2) nx -= 1;
+        else if (act == 3) nx += 1;
+        if (nx < 0) nx = 0;
+        if (ny < 0) ny = 0;
+        if (nx >= COIN_MAZE_W) nx = COIN_MAZE_W - 1;
+        if (ny >= COIN_MAZE_H) ny = COIN_MAZE_H - 1;
+        env->x = nx;
+        env->y = ny;
     } else {
         if (act == 0) ny -= 1;
         else if (act == 1) ny += 1;
@@ -237,6 +315,16 @@ tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action) {
     } else if (env->kind == TFRL_ENV_POINT1D) {
         reached = (env->pos >= 0.95f);
         done = reached || (env->steps >= POINT1D_MAX_STEPS);
+    } else if (env->kind == TFRL_ENV_COIN_MAZE) {
+        int all = 1;
+        for (int i = 0; i < COIN_MAZE_COINS; i++) {
+            if (!env->coins_collected[i]) {
+                all = 0;
+                break;
+            }
+        }
+        reached = all && (env->x == COIN_MAZE_W - 1 && env->y == COIN_MAZE_H - 1);
+        done = reached || (env->steps >= COIN_MAZE_MAX_STEPS);
     } else {
         reached = (env->x == MAZE_W - 1 && env->y == MAZE_H - 1);
         done = reached || (env->steps >= MAZE_MAX_STEPS);
@@ -251,6 +339,8 @@ tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action) {
     } else if (env->kind == TFRL_ENV_POINT1D) {
         out.observation.data_len = 1;
         out.observation.data[0] = env->pos;
+    } else if (env->kind == TFRL_ENV_COIN_MAZE) {
+        out.observation.index = env->y * COIN_MAZE_W + env->x;
     } else {
         out.observation.index = env->y * MAZE_W + env->x;
     }
@@ -258,6 +348,16 @@ tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action) {
         float dist = 1.0f - env->pos;
         if (dist < 0.0f) dist = -dist;
         out.reward = reached ? 1.0 : -dist;
+    } else if (env->kind == TFRL_ENV_COIN_MAZE) {
+        float reward = -0.01f;
+        for (int i = 0; i < COIN_MAZE_COINS; i++) {
+            if (!env->coins_collected[i] && env->x == env->coins_x[i] && env->y == env->coins_y[i]) {
+                env->coins_collected[i] = 1;
+                reward += 0.2f;
+            }
+        }
+        if (reached) reward += 1.0f;
+        out.reward = reward;
     } else {
         out.reward = reached ? 1.0 : -0.01;
     }
@@ -276,6 +376,9 @@ const tfrl_env_spec *tfrl_env_get_spec(const tfrl_env *env) {
     }
     if (env->kind == TFRL_ENV_POINT1D) {
         return &POINT1D_SPEC;
+    }
+    if (env->kind == TFRL_ENV_COIN_MAZE) {
+        return &COIN_MAZE_SPEC;
     }
     return &MAZE_SPEC;
 }
@@ -296,8 +399,17 @@ size_t tfrl_env_render_bytes_needed(const tfrl_env *env) {
     } else if (env->kind == TFRL_ENV_POINT1D) {
         w = POINT1D_W;
         h = POINT1D_H;
+    } else if (env->kind == TFRL_ENV_COIN_MAZE) {
+        w = COIN_MAZE_W;
+        h = COIN_MAZE_H;
     }
-    size_t payload_bytes = sizeof(tfrl_grid_snapshot_v2) + (w * h);
+    int entity_count = 0;
+    if (env->kind == TFRL_ENV_COIN_MAZE) {
+        for (int i = 0; i < COIN_MAZE_COINS; i++) {
+            if (!env->coins_collected[i]) entity_count++;
+        }
+    }
+    size_t payload_bytes = sizeof(tfrl_grid_snapshot_v3) + (w * h) + (entity_count * sizeof(tfrl_entity_snapshot));
     return sizeof(tfrl_render_snapshot_header) + payload_bytes;
 }
 
@@ -311,8 +423,17 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
     } else if (env->kind == TFRL_ENV_POINT1D) {
         w = POINT1D_W;
         h = POINT1D_H;
+    } else if (env->kind == TFRL_ENV_COIN_MAZE) {
+        w = COIN_MAZE_W;
+        h = COIN_MAZE_H;
     }
-    size_t payload_bytes = sizeof(tfrl_grid_snapshot_v2) + (w * h);
+    int entity_count = 0;
+    if (env->kind == TFRL_ENV_COIN_MAZE) {
+        for (int i = 0; i < COIN_MAZE_COINS; i++) {
+            if (!env->coins_collected[i]) entity_count++;
+        }
+    }
+    size_t payload_bytes = sizeof(tfrl_grid_snapshot_v3) + (w * h) + (entity_count * sizeof(tfrl_entity_snapshot));
     size_t total = sizeof(tfrl_render_snapshot_header) + payload_bytes;
     if (buffer_len < total) return 0;
 
@@ -342,7 +463,7 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
         goal_y = 0;
     }
 
-    tfrl_grid_snapshot_v2 payload = {
+    tfrl_grid_snapshot_v3 payload = {
         .width = (uint32_t)w,
         .height = (uint32_t)h,
         .agent_x = agent_x,
@@ -354,6 +475,7 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
         .reward = env->last_reward,
         .done = (uint32_t)env->last_done,
         .env_kind = (uint32_t)env->kind,
+        .entity_count = (uint32_t)entity_count,
     };
     unsigned char *payload_dst = (unsigned char *)buffer + sizeof(header);
     memcpy(payload_dst, &payload, sizeof(payload));
@@ -361,11 +483,23 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
     unsigned char *walls = payload_dst + sizeof(payload);
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
-            if (env->kind == TFRL_ENV_LINEWORLD || env->kind == TFRL_ENV_LINEWORLD_CONT || env->kind == TFRL_ENV_POINT1D) {
+            if (env->kind == TFRL_ENV_LINEWORLD || env->kind == TFRL_ENV_LINEWORLD_CONT || env->kind == TFRL_ENV_POINT1D || env->kind == TFRL_ENV_COIN_MAZE) {
                 walls[y * w + x] = 0;
             } else {
                 walls[y * w + x] = (unsigned char)(is_wall_maze(x, y) ? 1 : 0);
             }
+        }
+    }
+    tfrl_entity_snapshot *entities = (tfrl_entity_snapshot *)(walls + (w * h));
+    if (env->kind == TFRL_ENV_COIN_MAZE) {
+        int idx = 0;
+        for (int i = 0; i < COIN_MAZE_COINS; i++) {
+            if (env->coins_collected[i]) continue;
+            entities[idx].type = 1;
+            entities[idx].x = (float)env->coins_x[i];
+            entities[idx].y = (float)env->coins_y[i];
+            entities[idx].value = 1.0f;
+            idx++;
         }
     }
     env->frame_index++;

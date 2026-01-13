@@ -20,6 +20,12 @@ Use replay/PER tuning:
 ./build/tinyfin-rl train --algo qrdqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
 ```
 
+## Coin Maze (DQN)
+
+```bash
+./build/tinyfin-rl train --algo dqn --env coin_maze --steps 2000 --replay-size 10000 --batch-size 64
+```
+
 ## REINFORCE
 
 ```bash

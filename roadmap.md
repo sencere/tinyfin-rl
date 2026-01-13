@@ -80,6 +80,9 @@ Tinyfin-RL can step an environment, train an algorithm, and run headless.
 **Result:**  
 Rendering is safe, optional, and non-invasive.
 
+**Update:**  
+Render snapshots now include v3 metadata and entity lists for richer environments.
+
 ---
 
 ## 2 — Algorithms (Done)
@@ -148,7 +151,7 @@ Python is a convenience layer via CLI and an env shared library.
 - Add second environment only if architecture remains unchanged
 
 **Result:**  
-Environments include `maze_rooms`, `lineworld`, `lineworld_cont`, and `point1d` with space/dtype metadata in `tfrl_env_spec`.
+Environments include `maze_rooms`, `lineworld`, `lineworld_cont`, `point1d`, and `coin_maze` with space/dtype metadata in `tfrl_env_spec`.
 
 ---
 
@@ -165,7 +168,7 @@ Environments include `maze_rooms`, `lineworld`, `lineworld_cont`, and `point1d` 
 - Training wall-clock stability
 
 **Result:**  
-Vectorized stepping, a benchmark script, and DQN batched inference are implemented.
+Vectorized stepping, threaded stepping, a benchmark script, and DQN batched inference are implemented.
 
 ---
 
@@ -192,11 +195,13 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Tinyfin-RL now builds a single `tinyfin-rl` binary from `src/`
 - The runner supports train/eval/replay with configurable algorithms
 - Rendering is optional and isolated via render snapshots + a viewer module
-- Reference environments: `maze_rooms`, `lineworld`, `lineworld_cont`, `point1d`
+- Reference environments: `maze_rooms`, `lineworld`, `lineworld_cont`, `point1d`, `coin_maze`
 - Optional Python wrapper calls the C binary and exposes env bindings
 - Batched inference for DQN when using `--envs`
 - Replay buffer + PER support for DQN family, SAC, and TD3
 - MCTS planner for `maze_rooms` and `lineworld`
+- Render snapshots v3 with entity lists and richer metadata
+- Threaded env stepping via `--threads`
 
 ---
 

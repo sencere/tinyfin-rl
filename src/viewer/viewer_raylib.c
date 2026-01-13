@@ -34,6 +34,28 @@ typedef struct {
     uint32_t env_kind;
 } tfrl_grid_snapshot_v2;
 
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t agent_x;
+    uint32_t agent_y;
+    uint32_t goal_x;
+    uint32_t goal_y;
+    uint32_t step;
+    uint32_t max_steps;
+    float reward;
+    uint32_t done;
+    uint32_t env_kind;
+    uint32_t entity_count;
+} tfrl_grid_snapshot_v3;
+
+typedef struct {
+    uint32_t type;
+    float x;
+    float y;
+    float value;
+} tfrl_entity_snapshot;
+
 struct tfrl_viewer {
     int init;
     int fps;
@@ -69,8 +91,15 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
     const unsigned char *payload = bytes + sizeof(tfrl_render_snapshot_header);
     const tfrl_grid_snapshot *grid = NULL;
     tfrl_grid_snapshot_v2 grid_v2 = {0};
+    tfrl_grid_snapshot_v3 grid_v3 = {0};
     size_t payload_header_size = 0;
-    if (header->api_version == 0x0002) {
+    if (header->api_version == 0x0003) {
+        if (header->payload_bytes < sizeof(tfrl_grid_snapshot_v3)) return;
+        const tfrl_grid_snapshot_v3 *grid_ptr = (const tfrl_grid_snapshot_v3 *)payload;
+        grid_v3 = *grid_ptr;
+        grid = (const tfrl_grid_snapshot *)&grid_v3;
+        payload_header_size = sizeof(tfrl_grid_snapshot_v3);
+    } else if (header->api_version == 0x0002) {
         if (header->payload_bytes < sizeof(tfrl_grid_snapshot_v2)) return;
         const tfrl_grid_snapshot_v2 *grid_ptr = (const tfrl_grid_snapshot_v2 *)payload;
         grid_v2 = *grid_ptr;
@@ -84,6 +113,15 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
     size_t walls_bytes = header->payload_bytes - payload_header_size;
     if (walls_bytes < (size_t)(grid->width * grid->height)) return;
     const unsigned char *walls = payload + payload_header_size;
+    const tfrl_entity_snapshot *entities = NULL;
+    size_t entity_count = 0;
+    if (header->api_version == 0x0003) {
+        size_t entities_offset = (size_t)(grid->width * grid->height);
+        size_t entities_bytes = walls_bytes - entities_offset;
+        entity_count = grid_v3.entity_count;
+        if (entities_bytes < entity_count * sizeof(tfrl_entity_snapshot)) return;
+        entities = (const tfrl_entity_snapshot *)(walls + entities_offset);
+    }
 
     if (!ensure_init(viewer, (int)grid->width, (int)grid->height)) return;
     if (WindowShouldClose()) return;
@@ -103,10 +141,21 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
     }
     DrawRectangle((int)grid->goal_x * CELL_SIZE, (int)grid->goal_y * CELL_SIZE, CELL_SIZE, CELL_SIZE, (Color){255, 210, 120, 255});
     DrawRectangle((int)grid->agent_x * CELL_SIZE, (int)grid->agent_y * CELL_SIZE, CELL_SIZE, CELL_SIZE, (Color){70, 130, 255, 255});
+    if (entities) {
+        for (size_t i = 0; i < entity_count; i++) {
+            int cx = (int)entities[i].x * CELL_SIZE + CELL_SIZE / 2;
+            int cy = (int)entities[i].y * CELL_SIZE + CELL_SIZE / 2;
+            DrawCircle(cx, cy, CELL_SIZE * 0.2f, (Color){255, 215, 0, 255});
+        }
+    }
 
     int text_y = (int)grid->height * CELL_SIZE + 10;
     DrawText(TextFormat("step: %u / %u", grid->step, grid->max_steps), 10, text_y, 18, DARKGRAY);
-    if (header->api_version == 0x0002) {
+    if (header->api_version == 0x0003) {
+        DrawText(TextFormat("reward: %.3f", grid_v3.reward), 200, text_y, 18, DARKGRAY);
+        DrawText(TextFormat("done: %u", grid_v3.done), 360, text_y, 18, DARKGRAY);
+        DrawText(TextFormat("entities: %u", grid_v3.entity_count), 470, text_y, 18, DARKGRAY);
+    } else if (header->api_version == 0x0002) {
         DrawText(TextFormat("reward: %.3f", grid_v2.reward), 200, text_y, 18, DARKGRAY);
         DrawText(TextFormat("done: %u", grid_v2.done), 360, text_y, 18, DARKGRAY);
     }

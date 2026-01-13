@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,59 @@ static void seed_rng(int seed) {
 static int should_render(int step, int render_every) {
     if (render_every <= 1) return 1;
     return (step % render_every) == 0;
+}
+
+typedef struct {
+    tfrl_env **envs;
+    const tfrl_action *actions;
+    tfrl_step_result *steps;
+    int start;
+    int count;
+} tfrl_step_job;
+
+static void *step_worker(void *arg) {
+    tfrl_step_job *job = (tfrl_step_job *)arg;
+    int end = job->start + job->count;
+    for (int i = job->start; i < end; i++) {
+        job->steps[i] = tfrl_env_step(job->envs[i], job->actions[i]);
+    }
+    return NULL;
+}
+
+static void step_envs_threaded(tfrl_env **envs, int env_count, const tfrl_action *actions, tfrl_step_result *steps, int threads) {
+    if (env_count <= 0) return;
+    if (threads <= 1 || env_count == 1) {
+        tfrl_env_step_batch(envs, env_count, actions, steps);
+        return;
+    }
+    if (threads > env_count) threads = env_count;
+    pthread_t *tids = (pthread_t *)calloc((size_t)threads, sizeof(pthread_t));
+    tfrl_step_job *jobs = (tfrl_step_job *)calloc((size_t)threads, sizeof(tfrl_step_job));
+    if (!tids || !jobs) {
+        free(tids);
+        free(jobs);
+        tfrl_env_step_batch(envs, env_count, actions, steps);
+        return;
+    }
+
+    int base = env_count / threads;
+    int extra = env_count % threads;
+    int start = 0;
+    for (int t = 0; t < threads; t++) {
+        int count = base + (t < extra ? 1 : 0);
+        jobs[t].envs = envs;
+        jobs[t].actions = actions;
+        jobs[t].steps = steps;
+        jobs[t].start = start;
+        jobs[t].count = count;
+        pthread_create(&tids[t], NULL, step_worker, &jobs[t]);
+        start += count;
+    }
+    for (int t = 0; t < threads; t++) {
+        pthread_join(tids[t], NULL);
+    }
+    free(tids);
+    free(jobs);
 }
 
 static int run_replay(const tfrl_runner_config *cfg) {
@@ -181,12 +235,13 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
 
     if (cfg->mode == TFRL_MODE_TRAIN) {
         int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
+        int thread_count = cfg->threads > 0 ? cfg->threads : env_count;
         for (int step = 0; step < total_steps; step++) {
             tfrl_algo_act_batch(&algo, obs, env_count, actions);
             if (env_count == 1) {
                 steps[0] = tfrl_env_step(envs[0], actions[0]);
             } else {
-                tfrl_env_step_batch(envs, env_count, actions, steps);
+                step_envs_threaded(envs, env_count, actions, steps, thread_count);
             }
             for (int i = 0; i < env_count; i++) {
                 tfrl_transition transition = {

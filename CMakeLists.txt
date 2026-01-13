@@ -46,7 +46,7 @@ find_library(TINYFIN_LIB tinyfin PATHS ${TINYFIN_DIR} NO_DEFAULT_PATH)
 if (NOT TINYFIN_LIB)
     set(TINYFIN_LIB ${TINYFIN_DIR}/libtinyfin.so)
 endif()
-target_link_libraries(tinyfin-rl ${TINYFIN_LIB} m)
+target_link_libraries(tinyfin-rl ${TINYFIN_LIB} m pthread)
 
 if (TFRL_WITH_RAYLIB)
     target_include_directories(tinyfin-rl PRIVATE raylib-src/src)

@@ -14,5 +14,5 @@ tfrl_render_snapshot_header
 payload bytes
 ```
 
-Replay reads frames and feeds them to the viewer. Current snapshots use v2 with
-`reward`, `done`, and `env_kind` in the payload header (see `docs/render_snapshot.md`).
+Replay reads frames and feeds them to the viewer. Current snapshots use v3 with
+`reward`, `done`, `env_kind`, and `entity_count` in the payload header (see `docs/render_snapshot.md`).
