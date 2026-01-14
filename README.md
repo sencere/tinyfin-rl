@@ -125,6 +125,7 @@ export TFRL_PY_BRIDGE=/tmp/tfrl_py_bridge.sock
 - `scripts/run_tests.sh` lightweight test runner
 - `scripts/golden_runs.sh` golden run regression script
 - `scripts/ci.sh` build + tests + golden runs
+- `scripts/bridge_smoke.sh` optional Gymnasium bridge smoke test
 - `python/README.md` optional Python wrapper
 - `architecture.md` system design
 - `roadmap.md` milestones

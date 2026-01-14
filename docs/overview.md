@@ -67,6 +67,12 @@ CI smoke:
 ./scripts/ci.sh
 ```
 
+Bridge smoke (optional):
+
+```bash
+./scripts/bridge_smoke.sh
+```
+
 ## Determinism
 
 For strict reproducibility, use `--deterministic` (single-thread stepping +

@@ -300,6 +300,7 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
         }
         if (algo->kl_target > 0.0f && kl_count > 0) {
             float avg_kl = kl_sum / (float)kl_count;
+            fprintf(stdout, "ppo kl: epoch=%d avg=%.6f target=%.6f\n", e, avg_kl, algo->kl_target);
             if (avg_kl > algo->kl_target) {
                 fprintf(stdout, "ppo early stop: kl=%.6f target=%.6f\n", avg_kl, algo->kl_target);
                 stop_early = 1;

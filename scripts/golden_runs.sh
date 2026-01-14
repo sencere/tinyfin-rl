@@ -29,6 +29,7 @@ run_case() {
 }
 
 run_case "lineworld_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld --steps 400 --log-every 1 --deterministic --seed 1" 0.2 0.2 1
+run_case "lineworld_duo_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 400 --log-every 1 --deterministic --seed 1 --agents 2 --share-policy --replay-size 2000 --batch-size 32" 0.2 0.2 1
 run_case "lineworld_rainbow" "./build/tinyfin-rl train --algo rainbow --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" 0.2 0.2 1
 run_case "lineworld_qrdqn" "./build/tinyfin-rl train --algo qrdqn --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" 0.2 0.2 1
 run_case "lineworld_cont_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 400 --log-every 1 --deterministic --seed 1" 0.2 0.2 1
