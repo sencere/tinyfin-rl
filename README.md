@@ -4,7 +4,7 @@
   <img src="resources/logo/logo.png" alt="tinyfin logo" />
 </p>
 
-## DQN Demo agent
+## Demo DQN Agent
 
 ![tinyfin-rl agent demo](resources/demo/agent.gif)
 
