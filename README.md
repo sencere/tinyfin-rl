@@ -4,6 +4,8 @@
   <img src="resources/logo/logo.png" alt="tinyfin logo" />
 </p>
 
+## DQN Demo agent
+
 ![tinyfin-rl agent demo](resources/demo/agent.gif)
 
 Tinyfin-RL is a **C-first reinforcement learning system** with a single
