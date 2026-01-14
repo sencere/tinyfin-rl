@@ -176,3 +176,79 @@ Checkpoint format:
 - SAC: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
 - TD3: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
 - IMPALA: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
+
+---
+
+## Additional Algorithms (Design Plan)
+
+This section outlines a scoped design plan for future algorithm extensions.
+
+### Goals
+
+- Add A3C (async actor-critic), Rainbow DQN C51 + dueling, distributional variants beyond QR-DQN, and an IMPALA-scale actor/learner split.
+- Keep the core runner/trace contract stable; prefer new modules over invasive refactors.
+
+### Non-Goals
+
+- New environments or UI changes.
+- Major changes to the Tinyfin tensor core.
+- Distributed deployment beyond a single host.
+
+### Baseline Assumptions
+
+- Algorithms implement `tfrl_algo` and are selected via `--algo`.
+- Replay buffers already support PER for DQN-family off-policy algorithms.
+- IMPALA exists in a single-process V-trace form; PPO/A2C already provide policy/value heads.
+
+### A3C (Async Actor-Critic)
+
+- **Architecture:** N env workers, each with local rollouts; shared global params.
+- **Update Flow:** worker computes gradients on its local batch and applies to shared optimizer.
+- **Minimal Infra:** add a thread-safe optimizer step or a gradient queue with a learner thread.
+- **Config:** `--threads` controls actor count; add `--async` or a new `--algo a3c`.
+- **Diagnostics:** per-worker return stats, update lag, gradient norm.
+
+### Rainbow DQN Extensions (C51 + Dueling)
+
+- **Model:** split into value stream V(s) and advantage stream A(s, a) combined as `Q = V + (A - mean(A))`.
+- **Distributional Head:** categorical logits over fixed support atoms (C51).
+- **Loss:** cross-entropy between projected target distribution and predicted atoms.
+- **Replay:** reuse PER; TD error becomes KL/cross-entropy for priorities.
+- **Config:** `--atoms`, `--v-min`, `--v-max` (defaults aligned with DQN scale).
+
+### Distributional Beyond QR-DQN
+
+- **Candidate:** IQN (implicit quantile networks) or FQF (fully parameterized quantile function).
+- **Model:** quantile embeddings + shared trunk + action head.
+- **Loss:** quantile regression with Huber for sampled taus.
+- **Replay:** same PER path; priority from quantile TD error.
+- **Scope:** pick one variant (IQN preferred) to avoid parallel abstractions.
+
+### IMPALA-Scale Actor/Learner Split
+
+- **Topology:** actor threads/processes collect rollouts; a learner consumes batches.
+- **Transport:** shared-memory ring buffer first; optional socket/pipe framing later.
+- **Backpressure:** bounded queue with drop or block strategy; expose queue depth.
+- **Learner:** uses V-trace; optionally batches across actors for throughput.
+- **Config:** `--actor-count`, `--learner-batch`, `--queue-capacity`.
+
+### Shared Infrastructure Changes
+
+- New model components (dueling head, categorical support, quantile embeddings).
+- Replay buffer metadata for distributional loss (optional).
+- Lightweight threading/queue utilities for async and actor/learner split.
+- Algo diagnostics surface (trace metadata + stdout summaries).
+
+### Testing Plan
+
+- Unit tests for C51 projection and quantile loss.
+- Deterministic smoke tests with fixed seeds.
+- Replay buffer tests for distributional priority updates.
+- Minimal convergence checks (short runs, sanity curves).
+
+### Rollout Order
+
+1. Rainbow C51 + dueling (most contained).
+2. IQN (or FQF) distributional variant.
+3. A3C async (threading).
+4. IMPALA-scale actor/learner split (queues/process separation).
