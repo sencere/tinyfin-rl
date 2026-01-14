@@ -228,7 +228,7 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - Deterministic SAC/TD3 policy sampling notes
 - Golden runs expanded for Rainbow/QRDQN
 - Rainbow C51 + dueling heads
-- IQN distributional variant
+- IQN distributional variant (unstable; segfaults under backward)
 - A3C async runner
 - IMPALA actor/learner split
 - PPO KL logging per epoch

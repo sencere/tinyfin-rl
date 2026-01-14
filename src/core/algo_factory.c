@@ -18,6 +18,8 @@ tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_iqn_create(const tfrl_algo_config *cfg);
 
+static void apply_algo_defaults(tfrl_algo_config *cfg);
+
 typedef struct {
     const char *name;
     int defaults_version;

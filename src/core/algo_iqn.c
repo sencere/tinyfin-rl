@@ -8,6 +8,7 @@
 #include "tinyfin/ops_add.h"
 #include "tinyfin/ops_huber.h"
 #include "tinyfin/ops_mul.h"
+#include "tinyfin/ops_reduce.h"
 #include "tinyfin/tensor.h"
 
 #include "algo_api.h"
@@ -37,6 +38,16 @@ typedef struct {
     int tau_samples;
 } tfrl_iqn_algo;
 
+static Tensor *one_hot(int n, int idx) {
+    int shape[2] = {1, n};
+    Tensor *t = tensor_zeros(2, shape);
+    if (!t) return NULL;
+    if (idx >= 0 && idx < n) {
+        tensor_set_f32_at(t, (size_t)idx, 1.0f);
+    }
+    return t;
+}
+
 static unsigned int iqn_lcg_next(unsigned int *state) {
     *state = (*state * 1664525u) + 1013904223u;
     return *state;
@@ -55,16 +66,6 @@ static int iqn_rand_int(tfrl_iqn_algo *algo, int max) {
         return (int)(iqn_lcg_next(&algo->rng_state) % (unsigned int)max);
     }
     return rand() % max;
-}
-
-static Tensor *one_hot(int n, int idx) {
-    int shape[2] = {1, n};
-    Tensor *t = tensor_zeros(2, shape);
-    if (!t) return NULL;
-    if (idx >= 0 && idx < n) {
-        tensor_set_f32_at(t, (size_t)idx, 1.0f);
-    }
-    return t;
 }
 
 static Tensor *obs_tau_to_tensor(const tfrl_iqn_algo *algo, tfrl_obs obs, float tau) {
@@ -151,9 +152,12 @@ static int iqn_argmax(tfrl_iqn_algo *algo, tfrl_obs obs) {
         for (int k = 0; k < algo->quantiles; k++) {
             float tau = iqn_rand_uniform(algo);
             Tensor *x = obs_tau_to_tensor(algo, obs, tau);
+            if (!x) continue;
             Tensor *q = linear_forward(algo->q, x);
-            sum += tensor_get_f32_at(q, (size_t)a);
-            tensor_free(q);
+            if (q) {
+                sum += tensor_get_f32_at(q, (size_t)a);
+                tensor_free(q);
+            }
             tensor_free(x);
         }
         float mean = sum / (float)algo->quantiles;
@@ -197,27 +201,63 @@ static float iqn_apply_update(tfrl_iqn_algo *algo, const tfrl_transition *transi
     }
 
     float td_err = 0.0f;
-    Tensor *loss_sum = NULL;
+    adam_zero_grad(algo->opt);
     for (int k = 0; k < algo->tau_samples; k++) {
         float tau = iqn_rand_uniform(algo);
         Tensor *x = obs_tau_to_tensor(algo, transition->obs, tau);
         Tensor *q = linear_forward(algo->q, x);
-        Tensor *q_sel = tensor_new(1, (int[1]){1});
-        tensor_set_f32_at(q_sel, 0, tensor_get_f32_at(q, (size_t)transition->action.index));
+        if (!q) {
+            tensor_free(x);
+            continue;
+        }
+        Tensor *action_one = one_hot(algo->action_n, transition->action.index);
+        if (!action_one) {
+            tensor_free(q);
+            tensor_free(x);
+            continue;
+        }
+        Tensor *q_sel = tensor_mul(q, action_one);
+        if (!q_sel) {
+            tensor_free(action_one);
+            tensor_free(q);
+            tensor_free(x);
+            continue;
+        }
+        Tensor *q_val = tensor_sum(q_sel);
+        if (!q_val) {
+            tensor_free(q_sel);
+            tensor_free(action_one);
+            tensor_free(q);
+            tensor_free(x);
+            continue;
+        }
 
         float target_v = (float)transition->reward;
         if (!transition->done) {
             Tensor *x_next = obs_tau_to_tensor(algo, transition->next_obs, tau);
-            Tensor *q_next = linear_forward(algo->target_q, x_next);
-            target_v += algo->gamma * tensor_get_f32_at(q_next, (size_t)next_action);
-            tensor_free(q_next);
-            tensor_free(x_next);
+            if (x_next) {
+                Tensor *q_next = linear_forward(algo->target_q, x_next);
+                if (q_next) {
+                    target_v += algo->gamma * tensor_get_f32_at(q_next, (size_t)next_action);
+                    tensor_free(q_next);
+                }
+                tensor_free(x_next);
+            }
         }
 
         Tensor *target_t = tensor_new(1, (int[1]){1});
         tensor_set_f32_at(target_t, 0, target_v);
-        Tensor *loss = tensor_huber_loss(q_sel, target_t, 1.0f, 0);
-        float q_pred = tensor_get_f32_at(q_sel, 0);
+        Tensor *loss = tensor_huber_loss(q_val, target_t, 1.0f, 0);
+        if (!loss) {
+            tensor_free(target_t);
+            tensor_free(q_val);
+            tensor_free(q_sel);
+            tensor_free(action_one);
+            tensor_free(q);
+            tensor_free(x);
+            continue;
+        }
+        float q_pred = tensor_get_f32_at(q_val, 0);
         float td = target_v - q_pred;
         td_err += td >= 0.0f ? td : -td;
 
@@ -230,27 +270,17 @@ static float iqn_apply_update(tfrl_iqn_algo *algo, const tfrl_transition *transi
             loss = weighted;
         }
 
-        if (!loss_sum) {
-            loss_sum = loss;
-        } else {
-            Tensor *tmp = tensor_add(loss_sum, loss);
-            tensor_free(loss_sum);
-            tensor_free(loss);
-            loss_sum = tmp;
-        }
-
+        tensor_backward(loss);
+        tensor_free(loss);
         tensor_free(target_t);
+        tensor_free(q_val);
         tensor_free(q_sel);
+        tensor_free(action_one);
         tensor_free(q);
         tensor_free(x);
     }
 
-    if (loss_sum) {
-        adam_zero_grad(algo->opt);
-        tensor_backward(loss_sum);
-        adam_step(algo->opt, 0.0f);
-        tensor_free(loss_sum);
-    }
+    adam_step(algo->opt, 0.0f);
 
     algo->step_count++;
     if (algo->step_count % IQN_TARGET_UPDATE == 0) {

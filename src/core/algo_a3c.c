@@ -136,7 +136,7 @@ static void a3c_update(void *ctx, const tfrl_transition *transition) {
         returns[i] = g;
     }
 
-    Tensor *loss_sum = NULL;
+    adam_zero_grad(algo->opt);
     for (int i = 0; i < n; i++) {
         Tensor *x = one_hot(algo->obs_n, algo->obs_idx[i]);
         Tensor *logits = linear_forward(algo->policy, x);
@@ -181,14 +181,8 @@ static void a3c_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(entropy);
         }
 
-        if (!loss_sum) {
-            loss_sum = loss;
-        } else {
-            Tensor *tmp = tensor_add(loss_sum, loss);
-            tensor_free(loss_sum);
-            tensor_free(loss);
-            loss_sum = tmp;
-        }
+        tensor_backward(loss);
+        tensor_free(loss);
 
         tensor_free(value_loss);
         tensor_free(vdiff);
@@ -206,13 +200,7 @@ static void a3c_update(void *ctx, const tfrl_transition *transition) {
         tensor_free(logits);
         tensor_free(x);
     }
-
-    if (loss_sum) {
-        adam_zero_grad(algo->opt);
-        tensor_backward(loss_sum);
-        adam_step(algo->opt, 0.0f);
-        tensor_free(loss_sum);
-    }
+    adam_step(algo->opt, 0.0f);
 
     free(returns);
     algo->count = 0;

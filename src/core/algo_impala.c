@@ -186,7 +186,7 @@ static void impala_update(void *ctx, const tfrl_transition *transition) {
         adv[i] = adv_t;
     }
 
-    Tensor *loss_sum = NULL;
+    adam_zero_grad(algo->opt);
     for (int i = 0; i < n; i++) {
         Tensor *x_i = one_hot(algo->obs_n, algo->obs_idx[i]);
         Tensor *logits_i = linear_forward(algo->policy, x_i);
@@ -229,14 +229,8 @@ static void impala_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(entropy);
         }
 
-        if (!loss_sum) {
-            loss_sum = loss;
-        } else {
-            Tensor *tmp = tensor_add(loss_sum, loss);
-            tensor_free(loss_sum);
-            tensor_free(loss);
-            loss_sum = tmp;
-        }
+        tensor_backward(loss);
+        tensor_free(loss);
 
         tensor_free(value_loss);
         tensor_free(vdiff);
@@ -254,13 +248,7 @@ static void impala_update(void *ctx, const tfrl_transition *transition) {
         tensor_free(logits_i);
         tensor_free(x_i);
     }
-
-    if (loss_sum) {
-        adam_zero_grad(algo->opt);
-        tensor_backward(loss_sum);
-        adam_step(algo->opt, 0.0f);
-        tensor_free(loss_sum);
-    }
+    adam_step(algo->opt, 0.0f);
 
     free(values);
     free(next_values);

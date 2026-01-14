@@ -78,6 +78,7 @@ Flags:
 ## IQN (Minimal)
 
 Implicit quantile regression with sampled taus appended to the input features.
+Note: the current IQN implementation can segfault during backward; treat as experimental.
 
 ```bash
 ./build/tinyfin-rl train --algo iqn --steps 2000
