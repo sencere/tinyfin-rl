@@ -22,6 +22,127 @@ static int should_render(int step, int render_every) {
     return (step % render_every) == 0;
 }
 
+static void json_write_string(FILE *out, const char *s, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        switch (c) {
+            case '\"':
+                fputs("\\\"", out);
+                break;
+            case '\\':
+                fputs("\\\\", out);
+                break;
+            case '\n':
+                fputs("\\n", out);
+                break;
+            case '\r':
+                fputs("\\r", out);
+                break;
+            case '\t':
+                fputs("\\t", out);
+                break;
+            default:
+                if (c < 0x20) {
+                    fprintf(out, "\\u%04x", c);
+                } else {
+                    fputc(c, out);
+                }
+                break;
+        }
+    }
+}
+
+static int json_is_number(const char *s, size_t len) {
+    if (len == 0 || len >= 64) return 0;
+    char tmp[64];
+    memcpy(tmp, s, len);
+    tmp[len] = '\0';
+    char *end = NULL;
+    (void)strtod(tmp, &end);
+    return end && *end == '\0';
+}
+
+static void dump_meta_json(const char *meta, FILE *out) {
+    fputc('{', out);
+    if (!meta || meta[0] == '\0') {
+        fputs("}\n", out);
+        return;
+    }
+    int first = 1;
+    const char *p = meta;
+    while (*p) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        const char *key_start = p;
+        while (*p && *p != '=' && *p != ' ') p++;
+        if (*p != '=') {
+            while (*p && *p != ' ') p++;
+            continue;
+        }
+        size_t key_len = (size_t)(p - key_start);
+        p++;
+        const char *val_start = p;
+        while (*p && *p != ' ') p++;
+        size_t val_len = (size_t)(p - val_start);
+        if (key_len == 0) continue;
+        if (!first) fputc(',', out);
+        fputc('\"', out);
+        json_write_string(out, key_start, key_len);
+        fputc('\"', out);
+        fputc(':', out);
+        if (json_is_number(val_start, val_len)) {
+            fwrite(val_start, 1, val_len, out);
+        } else {
+            fputc('\"', out);
+            json_write_string(out, val_start, val_len);
+            fputc('\"', out);
+        }
+        first = 0;
+    }
+    fputs("}\n", out);
+}
+
+static void build_trace_meta(char *buffer,
+                             size_t buffer_len,
+                             const tfrl_algo_config *cfg,
+                             int agent_count,
+                             int share_policy,
+                             const char *diag) {
+    if (!buffer || buffer_len == 0 || !cfg) return;
+    snprintf(buffer,
+             buffer_len,
+             "algo=%s defaults=v%d env=%s agents=%d share_policy=%d seed=%d deterministic=%d gamma=%.3f lr=%.6f "
+             "epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f replay=%d batch=%d per_alpha=%.3f "
+             "per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d",
+             cfg->name ? cfg->name : "null",
+             cfg->defaults_version,
+             cfg->env_name ? cfg->env_name : "null",
+             agent_count,
+             share_policy,
+             cfg->seed,
+             cfg->deterministic,
+             cfg->gamma,
+             cfg->lr,
+             cfg->epsilon,
+             cfg->entropy_coef,
+             cfg->clip_eps,
+             cfg->gae_lambda,
+             cfg->replay_size,
+             cfg->batch_size,
+             cfg->per_alpha,
+             cfg->per_beta,
+             cfg->steps_per_batch,
+             cfg->epochs,
+             cfg->mcts_sims,
+             cfg->mcts_depth);
+    if (diag && diag[0] != '\0') {
+        size_t len = strlen(buffer);
+        if (len < buffer_len - 1) {
+            snprintf(buffer + len, buffer_len - len, " %s", diag);
+        }
+    }
+}
+
 typedef struct {
     tfrl_env **envs;
     const tfrl_action *actions;
@@ -82,6 +203,11 @@ static int run_replay(const tfrl_runner_config *cfg) {
         return 1;
     }
     const char *meta = tfrl_trace_reader_meta(reader);
+    if (cfg->dump_meta_json) {
+        dump_meta_json(meta, stdout);
+        tfrl_trace_reader_close(reader);
+        return 0;
+    }
     if (meta && meta[0] != '\0') {
         fprintf(stdout, "trace_meta: %s\n", meta);
     }
@@ -253,31 +379,13 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     }
 
     tfrl_trace_writer *writer = NULL;
-    char trace_meta[512];
-    snprintf(trace_meta, sizeof(trace_meta),
-             "algo=%s defaults=v%d env=%s agents=%d share_policy=%d seed=%d deterministic=%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f "
-             "replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d",
-             algo_cfg.name ? algo_cfg.name : "null",
-             algo_cfg.defaults_version,
-             algo_cfg.env_name ? algo_cfg.env_name : "null",
-             agent_count,
-             cfg->share_policy ? 1 : 0,
-             algo_cfg.seed,
-             algo_cfg.deterministic,
-             algo_cfg.gamma,
-             algo_cfg.lr,
-             algo_cfg.epsilon,
-             algo_cfg.entropy_coef,
-             algo_cfg.clip_eps,
-             algo_cfg.gae_lambda,
-             algo_cfg.replay_size,
-             algo_cfg.batch_size,
-             algo_cfg.per_alpha,
-             algo_cfg.per_beta,
-             algo_cfg.steps_per_batch,
-             algo_cfg.epochs,
-             algo_cfg.mcts_sims,
-             algo_cfg.mcts_depth);
+    char trace_meta[768];
+    char diag_meta[256];
+    diag_meta[0] = '\0';
+    if (policy_count > 0) {
+        tfrl_algo_diagnostics(&algos[0], diag_meta, sizeof(diag_meta));
+    }
+    build_trace_meta(trace_meta, sizeof(trace_meta), &algo_cfg, agent_count, cfg->share_policy ? 1 : 0, diag_meta);
     if (cfg->trace_out) {
         writer = tfrl_trace_writer_open_with_meta(cfg->trace_out, trace_meta);
         if (!writer) {
@@ -480,6 +588,15 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         }
     }
 
+    if (writer && policy_count > 0) {
+        char diag_update[256];
+        diag_update[0] = '\0';
+        if (tfrl_algo_diagnostics(&algos[0], diag_update, sizeof(diag_update))) {
+            char trace_meta_update[768];
+            build_trace_meta(trace_meta_update, sizeof(trace_meta_update), &algo_cfg, agent_count, cfg->share_policy ? 1 : 0, diag_update);
+            tfrl_trace_writer_update_meta(writer, trace_meta_update);
+        }
+    }
     if (writer) tfrl_trace_writer_close(writer);
     if (viewer) tfrl_viewer_destroy(viewer);
     free(render_buf);

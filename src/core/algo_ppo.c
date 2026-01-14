@@ -42,6 +42,12 @@ typedef struct {
     float *old_logp;
     float *old_values;
     float *old_next_values;
+    double kl_sum;
+    double kl_sum_sq;
+    float kl_min;
+    float kl_max;
+    float kl_last;
+    int kl_updates;
 } tfrl_ppo_algo;
 
 static Tensor *one_hot(int n, int idx) {
@@ -298,12 +304,25 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(logits_i);
             tensor_free(x_i);
         }
-        if (algo->kl_target > 0.0f && kl_count > 0) {
+        if (kl_count > 0) {
             float avg_kl = kl_sum / (float)kl_count;
-            fprintf(stdout, "ppo kl: epoch=%d avg=%.6f target=%.6f\n", e, avg_kl, algo->kl_target);
-            if (avg_kl > algo->kl_target) {
-                fprintf(stdout, "ppo early stop: kl=%.6f target=%.6f\n", avg_kl, algo->kl_target);
-                stop_early = 1;
+            algo->kl_last = avg_kl;
+            algo->kl_sum += avg_kl;
+            algo->kl_sum_sq += (double)avg_kl * (double)avg_kl;
+            algo->kl_updates += 1;
+            if (algo->kl_updates == 1) {
+                algo->kl_min = avg_kl;
+                algo->kl_max = avg_kl;
+            } else {
+                if (avg_kl < algo->kl_min) algo->kl_min = avg_kl;
+                if (avg_kl > algo->kl_max) algo->kl_max = avg_kl;
+            }
+            if (algo->kl_target > 0.0f) {
+                fprintf(stdout, "ppo kl: epoch=%d avg=%.6f target=%.6f\n", e, avg_kl, algo->kl_target);
+                if (avg_kl > algo->kl_target) {
+                    fprintf(stdout, "ppo early stop: kl=%.6f target=%.6f\n", avg_kl, algo->kl_target);
+                    stop_early = 1;
+                }
             }
         }
     }
@@ -343,12 +362,44 @@ static void ppo_save(void *ctx, const char *path) {
     save_linear(algo->value, path, "v");
 }
 
+static int ppo_diagnostics(void *ctx, char *buffer, size_t buffer_len) {
+    tfrl_ppo_algo *algo = (tfrl_ppo_algo *)ctx;
+    if (!algo || !buffer || buffer_len == 0) return 0;
+    double mean = 0.0;
+    double std = 0.0;
+    float kl_min = 0.0f;
+    float kl_max = 0.0f;
+    float kl_last = 0.0f;
+    int updates = algo->kl_updates;
+    if (updates > 0) {
+        mean = algo->kl_sum / (double)updates;
+        double var = (algo->kl_sum_sq / (double)updates) - mean * mean;
+        if (var < 0.0) var = 0.0;
+        std = sqrt(var);
+        kl_min = algo->kl_min;
+        kl_max = algo->kl_max;
+        kl_last = algo->kl_last;
+    }
+    int written = snprintf(buffer,
+                           buffer_len,
+                           "ppo_kl_mean=%+012.6f ppo_kl_std=%+012.6f ppo_kl_min=%+012.6f "
+                           "ppo_kl_max=%+012.6f ppo_kl_last=%+012.6f ppo_kl_updates=%08d",
+                           (float)mean,
+                           (float)std,
+                           kl_min,
+                           kl_max,
+                           kl_last,
+                           updates);
+    return written > 0 && (size_t)written < buffer_len;
+}
+
 static const tfrl_algo_vtable PPO_VTABLE = {
     .act = ppo_act,
     .act_batch = NULL,
     .update = ppo_update,
     .save = ppo_save,
     .destroy = ppo_destroy,
+    .diagnostics = ppo_diagnostics,
 };
 
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg) {

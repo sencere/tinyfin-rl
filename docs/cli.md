@@ -62,4 +62,5 @@ Defaults:
 
 ```bash
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
+./build/tinyfin-rl replay --trace-in runs/run.tft --dump-meta-json
 ```

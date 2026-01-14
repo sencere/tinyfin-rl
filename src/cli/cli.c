@@ -36,7 +36,7 @@ void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "           [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
-    fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N]\n", name);
+    fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N] [--dump-meta-json]\n", name);
     fprintf(stderr, "algo params:\n");
     fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N --gae-lambda N --kl-target N (ppo)\n");
     fprintf(stderr, "  --entropy-coef N (a2c/impala/sac)\n");
@@ -90,6 +90,7 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->render_env = arg_int(argc, argv, "--render-env", 0);
     out_cfg->trace_out = arg_str(argc, argv, "--trace-out", NULL);
     out_cfg->trace_in = arg_str(argc, argv, "--trace-in", NULL);
+    out_cfg->dump_meta_json = arg_flag(argc, argv, "--dump-meta-json");
     out_cfg->save_path = arg_str(argc, argv, "--save", NULL);
     out_cfg->load_path = arg_str(argc, argv, "--load", NULL);
     out_cfg->agents_expected = arg_int(argc, argv, "--agents", 0);

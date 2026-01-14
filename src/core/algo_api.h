@@ -60,6 +60,7 @@ typedef struct tfrl_algo_vtable {
     void (*update)(void *ctx, const tfrl_transition *transition);
     void (*save)(void *ctx, const char *path);
     void (*destroy)(void *ctx);
+    int (*diagnostics)(void *ctx, char *buffer, size_t buffer_len);
 } tfrl_algo_vtable;
 
 typedef struct {
@@ -72,6 +73,7 @@ void tfrl_algo_config_apply_defaults(tfrl_algo_config *cfg);
 void tfrl_algo_destroy(tfrl_algo *algo);
 void tfrl_algo_save(tfrl_algo *algo, const char *path);
 void tfrl_algo_act_batch(tfrl_algo *algo, const tfrl_obs *obs, int count, tfrl_action *out_actions);
+int tfrl_algo_diagnostics(tfrl_algo *algo, char *buffer, size_t buffer_len);
 
 #ifdef __cplusplus
 }

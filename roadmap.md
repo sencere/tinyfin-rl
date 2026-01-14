@@ -241,8 +241,8 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 1. Add PPO KL diagnostics logging per epoch (done)
 2. Expand golden runs for multi-agent baselines (done)
 3. Add optional Python bridge smoke test in CI (done)
-4. Add PPO KL diagnostics summary in trace metadata
-5. Add replay CLI command to dump metadata as JSON
+4. Add PPO KL diagnostics summary in trace metadata (done)
+5. Add replay CLI command to dump metadata as JSON (done)
 
 ## Recent Updates
 

@@ -41,6 +41,7 @@ typedef struct {
     int render_env;
     const char *trace_out;
     const char *trace_in;
+    int dump_meta_json;
     const char *save_path;
     const char *load_path;
     int threads;

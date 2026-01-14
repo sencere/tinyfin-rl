@@ -12,6 +12,8 @@ meta bytes (UTF-8 key=value string, optional)
 For v1 traces, the header ends after the version and contains no metadata. The v2 metadata
 string currently stores the resolved algo config (seed, defaults version, hyperparameters).
 
+The metadata string can also include PPO KL summary keys like `ppo_kl_mean` and `ppo_kl_std`.
+
 Then each frame is written as:
 
 ```

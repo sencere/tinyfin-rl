@@ -304,3 +304,8 @@ void tfrl_algo_act_batch(tfrl_algo *algo, const tfrl_obs *obs, int count, tfrl_a
         out_actions[i] = algo->vtable->act(algo->ctx, obs[i]);
     }
 }
+
+int tfrl_algo_diagnostics(tfrl_algo *algo, char *buffer, size_t buffer_len) {
+    if (!algo || !algo->vtable || !algo->vtable->diagnostics) return 0;
+    return algo->vtable->diagnostics(algo->ctx, buffer, buffer_len);
+}
