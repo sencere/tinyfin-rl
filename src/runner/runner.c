@@ -1,14 +1,19 @@
+#include <ctype.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "runner/runner.h"
 #include "core/algo_api.h"
 #include "core/env_api.h"
 #include "core/trace.h"
 #include "viewer/viewer.h"
+#include "tinyfin/backend.h"
+#include "tinyfin/tensor.h"
 
 static void seed_rng(int seed) {
     if (seed <= 0) {
@@ -20,6 +25,125 @@ static void seed_rng(int seed) {
 static int should_render(int step, int render_every) {
     if (render_every <= 1) return 1;
     return (step % render_every) == 0;
+}
+
+static int parse_device_name(const char *name, int *out_device) {
+    if (!name || !out_device) return 0;
+    if (strcmp(name, "0") == 0 || strcmp(name, "cpu") == 0) {
+        *out_device = DEVICE_CPU;
+        return 1;
+    }
+    if (strcmp(name, "1") == 0) {
+        *out_device = DEVICE_GPU;
+        return 1;
+    }
+    char buf[16];
+    size_t n = strlen(name);
+    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
+    for (size_t i = 0; i < n; i++) buf[i] = (char)tolower((unsigned char)name[i]);
+    buf[n] = '\0';
+    if (strcmp(buf, "gpu") == 0 || strcmp(buf, "cuda") == 0) {
+        *out_device = DEVICE_GPU;
+        return 1;
+    }
+    if (strcmp(buf, "cpu") == 0) {
+        *out_device = DEVICE_CPU;
+        return 1;
+    }
+    return 0;
+}
+
+static void configure_tinyfin(const tfrl_runner_config *cfg) {
+    if (!cfg) return;
+    if (cfg->backend && cfg->backend[0]) {
+        if (!backend_set_by_name(cfg->backend)) {
+            fprintf(stderr, "unknown backend '%s' (expected cpu|cuda)\n", cfg->backend);
+        }
+    }
+    if (cfg->device && cfg->device[0]) {
+        int device = DEVICE_CPU;
+        if (!parse_device_name(cfg->device, &device)) {
+            fprintf(stderr, "unknown device '%s' (expected cpu|gpu)\n", cfg->device);
+        } else {
+            tensor_set_default_device(device);
+        }
+    } else if (cfg->backend && strcmp(cfg->backend, "cuda") == 0) {
+        tensor_set_default_device(DEVICE_GPU);
+    }
+}
+
+static void append_meta_kv(char *buffer, size_t buffer_len, const char *key, const char *value) {
+    if (!buffer || buffer_len == 0 || !key || !value) return;
+    size_t len = strlen(buffer);
+    if (len >= buffer_len - 1) return;
+    int wrote = snprintf(buffer + len, buffer_len - len, "%s%s=%s", len ? " " : "", key, value);
+    if (wrote < 0) buffer[buffer_len - 1] = '\0';
+}
+
+static double now_seconds(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1e6;
+}
+
+static int dashboard_enabled(void) {
+    const char *env = getenv("TFRL_DASHBOARD");
+    if (env && strcmp(env, "0") == 0) return 0;
+    if (env && strcmp(env, "1") == 0) return 1;
+    return isatty(fileno(stdout));
+}
+
+static void dashboard_render(const tfrl_runner_config *cfg,
+                             int step,
+                             int total_steps,
+                             int env_count,
+                             int agent_count,
+                             int total_episodes,
+                             double total_return_sum,
+                             double last_return,
+                             double elapsed_seconds,
+                             double env_seconds,
+                             double update_seconds,
+                             double render_seconds) {
+    long long total_env_steps = (long long)(step + 1) * env_count * agent_count;
+    double steps_per_sec = elapsed_seconds > 0.0 ? (double)(step + 1) / elapsed_seconds : 0.0;
+    double samples_per_sec = elapsed_seconds > 0.0 ? (double)total_env_steps / elapsed_seconds : 0.0;
+    double avg_return = total_episodes > 0 ? total_return_sum / (double)total_episodes : 0.0;
+    double avg_ep_len = total_episodes > 0 ? (double)total_env_steps / (double)total_episodes : 0.0;
+    double est_eps_left = 0.0;
+    if (avg_ep_len > 0.0 && total_steps > step + 1) {
+        long long remaining_env_steps = (long long)(total_steps - (step + 1)) * env_count * agent_count;
+        est_eps_left = (double)remaining_env_steps / avg_ep_len;
+    }
+    double progress = total_steps > 0 ? (double)(step + 1) * 100.0 / (double)total_steps : 0.0;
+    int steps_left = total_steps - (step + 1);
+
+    fprintf(stdout, "\033[2J\033[H");
+    fprintf(stdout, "\033[1;34mT I N Y F I N - R L\033[0m\n");
+    fprintf(stdout, "progress: %6.2f%%  steps: %d/%d  left: %d\n",
+            progress, step + 1, total_steps, steps_left);
+    fprintf(stdout, "episodes: %d  est_left: %.0f  last_return: %.4f  avg_return: %.4f\n",
+            total_episodes, est_eps_left, last_return, avg_return);
+    fprintf(stdout, "perf: elapsed %.1fs  steps/s %.1f  sps %.1f\n",
+            elapsed_seconds, steps_per_sec, samples_per_sec);
+    if (elapsed_seconds > 0.0) {
+        double other = elapsed_seconds - env_seconds - update_seconds - render_seconds;
+        if (other < 0.0) other = 0.0;
+        fprintf(stdout, "timers: env %.1fs (%.0f%%)  update %.1fs (%.0f%%)  render %.1fs (%.0f%%)  other %.1fs (%.0f%%)\n",
+                env_seconds, (env_seconds / elapsed_seconds) * 100.0,
+                update_seconds, (update_seconds / elapsed_seconds) * 100.0,
+                render_seconds, (render_seconds / elapsed_seconds) * 100.0,
+                other, (other / elapsed_seconds) * 100.0);
+    }
+    fprintf(stdout, "config: algo=%s env=%s envs=%d agents=%d threads=%d backend=%s device=%s\n",
+            cfg->algo ? cfg->algo : "dqn",
+            cfg->env_name ? cfg->env_name : "maze_rooms",
+            env_count,
+            agent_count,
+            cfg->threads > 0 ? cfg->threads : env_count,
+            cfg->backend ? cfg->backend : "cpu",
+            cfg->device ? cfg->device : "cpu");
+    fflush(stdout);
 }
 
 static void json_write_string(FILE *out, const char *s, size_t len) {
@@ -534,6 +658,7 @@ static int run_replay(const tfrl_runner_config *cfg) {
 
 int tfrl_runner_run(const tfrl_runner_config *cfg) {
     if (!cfg) return 1;
+    configure_tinyfin(cfg);
     if (cfg->mode == TFRL_MODE_REPLAY) {
         if (!cfg->trace_in) {
             fprintf(stderr, "replay requires --trace-in\n");
@@ -687,6 +812,9 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     if (policy_count > 0) {
         tfrl_algo_diagnostics(&algos[0], diag_meta, sizeof(diag_meta));
     }
+    append_meta_kv(diag_meta, sizeof(diag_meta), "backend", backend_name());
+    append_meta_kv(diag_meta, sizeof(diag_meta), "device",
+                   tensor_get_default_device() == DEVICE_GPU ? "gpu" : "cpu");
     build_trace_meta(trace_meta, sizeof(trace_meta), &algo_cfg, agent_count, cfg->share_policy ? 1 : 0, diag_meta);
     if (cfg->trace_out) {
         writer = tfrl_trace_writer_open_with_meta(cfg->trace_out, trace_meta);
@@ -797,6 +925,19 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
         int thread_count = cfg->threads > 0 ? cfg->threads : env_count;
         if (cfg->deterministic) thread_count = 1;
+        int use_dashboard = dashboard_enabled();
+        int dashboard_every = cfg->log_every > 0 ? cfg->log_every : 100;
+        double start_time = now_seconds();
+        double env_seconds = 0.0;
+        double update_seconds = 0.0;
+        double render_seconds = 0.0;
+        double total_return_sum = 0.0;
+        double last_return = 0.0;
+        int total_episode_count = 0;
+        if (use_dashboard) {
+            fprintf(stdout, "\033[?25l");
+            fflush(stdout);
+        }
         tfrl_obs *obs_batch = (tfrl_obs *)calloc((size_t)env_count, sizeof(tfrl_obs));
         tfrl_action *act_batch = (tfrl_action *)calloc((size_t)env_count, sizeof(tfrl_action));
         if (!obs_batch || !act_batch) {
@@ -828,32 +969,46 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                     actions[i * agent_count + a] = act_batch[i];
                 }
             }
-            for (int i = 0; i < env_count; i++) {
-                int got = tfrl_env_step_multi(envs[i], &actions[i * agent_count], agent_count, &steps[i * agent_count], agent_count);
-                if (got != agent_count) {
-                    fprintf(stderr, "env step failed\n");
-                    step = total_steps;
-                    break;
+            {
+                double t0 = now_seconds();
+                if (agent_count == 1) {
+                    step_envs_threaded(envs, env_count, actions, steps, thread_count);
+                } else {
+                    for (int i = 0; i < env_count; i++) {
+                        int got = tfrl_env_step_multi(envs[i], &actions[i * agent_count], agent_count,
+                                                      &steps[i * agent_count], agent_count);
+                        if (got != agent_count) {
+                            fprintf(stderr, "env step failed\n");
+                            step = total_steps;
+                            break;
+                        }
+                    }
                 }
+                env_seconds += now_seconds() - t0;
             }
-            for (int i = 0; i < env_count; i++) {
-                for (int a = 0; a < agent_count; a++) {
-                    int idx = i * agent_count + a;
-                    tfrl_transition transition = {
-                        .obs = obs[idx],
-                        .action = actions[idx],
-                        .reward = steps[idx].reward,
-                        .next_obs = steps[idx].observation,
-                        .done = steps[idx].done,
-                    };
-                    int algo_idx = cfg->share_policy ? 0 : a;
-                    algos[algo_idx].vtable->update(algos[algo_idx].ctx, &transition);
-                    obs[idx] = steps[idx].observation;
-                    episode_returns[idx] += steps[idx].reward;
+            {
+                double t0 = now_seconds();
+                for (int i = 0; i < env_count; i++) {
+                    for (int a = 0; a < agent_count; a++) {
+                        int idx = i * agent_count + a;
+                        tfrl_transition transition = {
+                            .obs = obs[idx],
+                            .action = actions[idx],
+                            .reward = steps[idx].reward,
+                            .next_obs = steps[idx].observation,
+                            .done = steps[idx].done,
+                        };
+                        int algo_idx = cfg->share_policy ? 0 : a;
+                        algos[algo_idx].vtable->update(algos[algo_idx].ctx, &transition);
+                        obs[idx] = steps[idx].observation;
+                        episode_returns[idx] += steps[idx].reward;
+                    }
                 }
+                update_seconds += now_seconds() - t0;
             }
 
             if ((viewer || writer) && should_render(step, cfg->render_every)) {
+                double t0 = now_seconds();
                 size_t written = tfrl_env_render_write(envs[render_idx], render_buf, render_buf_len);
                 if (writer && written > 0) {
                     tfrl_trace_writer_write(writer, render_buf, written);
@@ -861,6 +1016,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 if (viewer && written > 0) {
                     tfrl_viewer_draw(viewer, render_buf, written);
                 }
+                render_seconds += now_seconds() - t0;
             }
 
             for (int i = 0; i < env_count; i++) {
@@ -873,7 +1029,10 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                     for (int a = 0; a < agent_count; a++) {
                         int idx = i * agent_count + a;
                         episode_counts[idx] += 1;
-                        if (cfg->log_every > 0 && (episode_counts[idx] % cfg->log_every) == 0) {
+                        total_episode_count += 1;
+                        total_return_sum += episode_returns[idx];
+                        last_return = episode_returns[idx];
+                        if (!use_dashboard && cfg->log_every > 0 && (episode_counts[idx] % cfg->log_every) == 0) {
                             fprintf(stdout, "env=%d agent=%d episode=%d return=%.4f\n", i, a, episode_counts[idx], episode_returns[idx]);
                         }
                         episode_returns[idx] = 0.0;
@@ -888,6 +1047,20 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             if (viewer && tfrl_viewer_should_close(viewer)) {
                 break;
             }
+            if (use_dashboard && (step % dashboard_every) == 0) {
+                double elapsed = now_seconds() - start_time;
+                dashboard_render(cfg, step, total_steps, env_count, agent_count,
+                                 total_episode_count, total_return_sum, last_return, elapsed,
+                                 env_seconds, update_seconds, render_seconds);
+            }
+        }
+        if (use_dashboard) {
+            double elapsed = now_seconds() - start_time;
+            dashboard_render(cfg, total_steps - 1, total_steps, env_count, agent_count,
+                             total_episode_count, total_return_sum, last_return, elapsed,
+                             env_seconds, update_seconds, render_seconds);
+            fprintf(stdout, "\033[?25h");
+            fflush(stdout);
         }
         if (env_count > 1 || agent_count > 1) {
             double sum = 0.0;

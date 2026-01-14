@@ -53,6 +53,19 @@ static int dqn_rand_int(tfrl_dqn_algo *algo, int max) {
     return rand() % max;
 }
 
+static int dqn_temp_push(Tensor ***temps, size_t *count, size_t *cap, Tensor *t) {
+    if (!t) return 1;
+    if (*count >= *cap) {
+        size_t new_cap = *cap ? (*cap * 2) : 64;
+        Tensor **tmp = (Tensor **)realloc(*temps, sizeof(**temps) * new_cap);
+        if (!tmp) return 0;
+        *temps = tmp;
+        *cap = new_cap;
+    }
+    (*temps)[(*count)++] = t;
+    return 1;
+}
+
 static Tensor *one_hot(int n, int idx) {
     int shape[2] = {1, n};
     Tensor *t = tensor_zeros(2, shape);
@@ -219,13 +232,19 @@ static void dqn_update(void *ctx, const tfrl_transition *transition) {
             tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
         }
 
+        Tensor **temps = NULL;
+        size_t temp_count = 0;
+        size_t temp_cap = 0;
         Tensor *loss_sum = NULL;
+        int ok = 1;
         for (int i = 0; i < algo->batch_size; i++) {
             const tfrl_transition *tr = tfrl_replay_get(algo->replay, idx[i]);
             if (!tr) continue;
 
             Tensor *x = obs_to_tensor(algo, tr->obs);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, x)) { ok = 0; break; }
             Tensor *q_values = linear_forward(algo->q, x);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_values)) { ok = 0; break; }
             int action = tr->action.index;
 
             float target = (float)tr->reward;
@@ -245,42 +264,42 @@ static void dqn_update(void *ctx, const tfrl_transition *transition) {
             tfrl_replay_update_priority(algo->replay, idx[i], priority + 1e-3f);
 
             Tensor *action_one = one_hot(algo->action_n, action);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, action_one)) { ok = 0; break; }
             Tensor *q_sel = tensor_mul(q_values, action_one);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_sel)) { ok = 0; break; }
             Tensor *q_val = tensor_sum(q_sel);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_val)) { ok = 0; break; }
             Tensor *target_t = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(target_t, 0, target);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, target_t)) { ok = 0; break; }
             Tensor *diff = tensor_sub(q_val, target_t);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, diff)) { ok = 0; break; }
             Tensor *loss = tensor_mul(diff, diff);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, loss)) { ok = 0; break; }
             Tensor *weight_t = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(weight_t, 0, weights[i]);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, weight_t)) { ok = 0; break; }
             Tensor *weighted = tensor_mul(loss, weight_t);
+            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, weighted)) { ok = 0; break; }
 
             if (!loss_sum) {
                 loss_sum = weighted;
             } else {
                 Tensor *tmp = tensor_add(loss_sum, weighted);
-                tensor_free(loss_sum);
-                tensor_free(weighted);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, tmp)) { ok = 0; break; }
                 loss_sum = tmp;
             }
-
-            tensor_free(weight_t);
-            tensor_free(loss);
-            tensor_free(diff);
-            tensor_free(target_t);
-            tensor_free(q_val);
-            tensor_free(q_sel);
-            tensor_free(action_one);
-            tensor_free(q_values);
-            tensor_free(x);
         }
 
-        if (loss_sum) {
+        if (ok && loss_sum) {
             sgd_zero_grad(algo->opt);
             tensor_backward(loss_sum);
             sgd_step(algo->opt, 0.0f);
-            tensor_free(loss_sum);
         }
+        for (size_t i = 0; i < temp_count; i++) {
+            tensor_free(temps[i]);
+        }
+        free(temps);
         free(idx);
         free(weights);
         algo->step_count++;

@@ -54,6 +54,8 @@ typedef struct {
     const char *load_path;
     int threads;
     int deterministic;
+    const char *backend;
+    const char *device;
     int agents_expected;
     int share_policy;
 } tfrl_runner_config;

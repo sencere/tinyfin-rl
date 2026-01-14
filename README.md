@@ -4,6 +4,8 @@
   <img src="resources/logo/logo.png" alt="tinyfin logo" />
 </p>
 
+![tinyfin-rl agent demo](resources/demo/agent.gif)
+
 Tinyfin-RL is a **C-first reinforcement learning system** with a single
 executable, a deterministic environment core, and Tinyfin for tensors +
 autograd. Rendering is optional and never drives simulation.

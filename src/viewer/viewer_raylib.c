@@ -67,6 +67,15 @@ struct tfrl_viewer {
     int height;
 };
 
+static char *tfrl_strdup(const char *s) {
+    if (!s) return NULL;
+    size_t len = strlen(s) + 1;
+    char *out = (char *)malloc(len);
+    if (!out) return NULL;
+    memcpy(out, s, len);
+    return out;
+}
+
 static int ensure_init(tfrl_viewer *viewer, int width, int height) {
     if (viewer->init) return 1;
     int w = width * CELL_SIZE;
@@ -85,7 +94,7 @@ tfrl_viewer *tfrl_viewer_create(const tfrl_viewer_config *cfg) {
     viewer->fps = cfg ? cfg->fps : 60;
     viewer->title = cfg ? cfg->title : NULL;
     if (cfg && cfg->meta) {
-        viewer->meta = strdup(cfg->meta);
+        viewer->meta = tfrl_strdup(cfg->meta);
     }
     return viewer;
 }

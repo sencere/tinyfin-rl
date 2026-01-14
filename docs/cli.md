@@ -53,12 +53,19 @@ Common flags:
 - `--trace-out FILE`
 - `--deterministic` (single-thread stepping + fixed seed when `--seed` is 0)
 - `--share-policy` (use one policy for all agents)
+- `--backend cpu|cuda`
+- `--device cpu|gpu`
 
 Defaults:
 
 - Algorithm defaults are applied from the schema in `src/core/algo_factory.c` (defaults v1).
 - Omitted flags fall back to per-algo defaults rather than global CLI values.
 - Resolved defaults are logged at startup as an `algo_config` line.
+
+CUDA backend:
+
+- Build Tinyfin with CUDA support (`ENABLE_CUDA=1`) and run with `--backend cuda --device gpu`.
+- You can also set `TINYFIN_BACKEND=cuda` and `TINYFIN_DEVICE=gpu` in the environment.
 
 ## Eval
 
