@@ -38,7 +38,7 @@ void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N]\n", name);
     fprintf(stderr, "algo params:\n");
-    fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N --gae-lambda N (ppo)\n");
+    fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N --gae-lambda N --kl-target N (ppo)\n");
     fprintf(stderr, "  --entropy-coef N (a2c/impala/sac)\n");
     fprintf(stderr, "  --replay-size N --batch-size N --per-alpha N --per-beta N (dqn)\n");
     fprintf(stderr, "  --mcts-sims N --mcts-depth N (mcts)\n");
@@ -74,6 +74,7 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->epsilon = arg_float(argc, argv, "--epsilon", -1.0f);
     out_cfg->entropy_coef = arg_float(argc, argv, "--entropy-coef", -1.0f);
     out_cfg->clip_eps = arg_float(argc, argv, "--clip-eps", -1.0f);
+    out_cfg->kl_target = arg_float(argc, argv, "--kl-target", -1.0f);
     out_cfg->gae_lambda = arg_float(argc, argv, "--gae-lambda", -1.0f);
     out_cfg->replay_size = arg_int(argc, argv, "--replay-size", -1);
     out_cfg->batch_size = arg_int(argc, argv, "--batch-size", -1);

@@ -24,6 +24,7 @@ Common flags:
 - `--lr LR`
 - `--epsilon E` (DQN family)
 - `--clip-eps E` (PPO)
+- `--kl-target K` (PPO)
 - `--gae-lambda L` (PPO)
 - `--steps-per-batch N` (PPO/REINFORCE)
 - `--epochs N` (PPO)

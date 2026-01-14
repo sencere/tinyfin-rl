@@ -198,6 +198,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         .epsilon = cfg->mode == TFRL_MODE_TRAIN ? cfg->epsilon : 0.0f,
         .entropy_coef = cfg->entropy_coef,
         .clip_eps = cfg->clip_eps,
+        .kl_target = cfg->kl_target,
         .gae_lambda = cfg->gae_lambda,
         .replay_size = cfg->replay_size,
         .batch_size = cfg->batch_size,

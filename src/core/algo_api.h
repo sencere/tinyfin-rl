@@ -31,6 +31,7 @@ typedef struct {
     float epsilon;
     float entropy_coef;
     float clip_eps;
+    float kl_target;
     float gae_lambda;
     int replay_size;
     int batch_size;

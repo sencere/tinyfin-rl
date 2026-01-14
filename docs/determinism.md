@@ -30,6 +30,7 @@ If you keep all parameters identical, results should be reproducible.
 - Different binaries or compiler settings can change floating-point behavior.
  - Replay sampling uses deterministic RNG only when `--deterministic` is set.
  - Epsilon policies and action-noise paths use deterministic RNG only when `--deterministic` is set.
+ - SAC/TD3 stochastic policy sampling uses deterministic RNG only when `--deterministic` is set.
 
 ## Recommended Practice
 

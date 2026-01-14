@@ -53,7 +53,7 @@ Select environment:
 ./build/tinyfin-rl train --algo rainbow --steps 2000
 ./build/tinyfin-rl train --algo qrdqn --steps 2000
 ./build/tinyfin-rl train --algo reinforce --steps 2000 --steps-per-batch 512
-./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01
+./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01 --kl-target 0.01
 ./build/tinyfin-rl train --algo a2c --steps 2000 --steps-per-batch 64
 ./build/tinyfin-rl train --algo trpo --steps 2000 --steps-per-batch 64 --clip-eps 0.01
 ./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2

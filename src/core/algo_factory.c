@@ -24,6 +24,7 @@ typedef struct {
     float epsilon;
     float entropy_coef;
     float clip_eps;
+    float kl_target;
     float gae_lambda;
     int replay_size;
     int batch_size;
@@ -43,6 +44,7 @@ static const tfrl_algo_schema ALGO_SCHEMA_DEFAULT = {
     .epsilon = 0.1f,
     .entropy_coef = 0.0f,
     .clip_eps = 0.2f,
+    .kl_target = 0.01f,
     .gae_lambda = 0.95f,
     .replay_size = 1000,
     .batch_size = 32,
@@ -58,7 +60,7 @@ static const tfrl_algo_schema ALGO_SCHEMAS[] = {
     {.name = "dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "rainbow", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "qrdqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
-    {.name = "ppo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .entropy_coef = 0.01f, .clip_eps = 0.2f, .gae_lambda = 0.95f, .steps_per_batch = 64, .epochs = 2},
+    {.name = "ppo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .entropy_coef = 0.01f, .clip_eps = 0.2f, .kl_target = 0.01f, .gae_lambda = 0.95f, .steps_per_batch = 64, .epochs = 2},
     {.name = "reinforce", .defaults_version = 1, .gamma = 0.99f, .lr = 0.01f, .steps_per_batch = 64},
     {.name = "a2c", .defaults_version = 1, .gamma = 0.99f, .lr = 0.001f, .entropy_coef = 0.01f, .steps_per_batch = 64},
     {.name = "trpo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 0.01f, .steps_per_batch = 64},
@@ -107,6 +109,7 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (float_unset_nonneg(cfg->epsilon)) cfg->epsilon = schema->epsilon;
     if (float_unset_nonneg(cfg->entropy_coef)) cfg->entropy_coef = schema->entropy_coef;
     if (float_unset_positive(cfg->clip_eps)) cfg->clip_eps = schema->clip_eps;
+    if (float_unset_nonneg(cfg->kl_target)) cfg->kl_target = schema->kl_target;
     if (float_unset_positive(cfg->gae_lambda)) cfg->gae_lambda = schema->gae_lambda;
     if (int_unset_nonneg(cfg->replay_size)) cfg->replay_size = schema->replay_size;
     if (int_unset_nonneg(cfg->batch_size)) cfg->batch_size = schema->batch_size;
@@ -121,7 +124,7 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
 static void log_algo_config(const tfrl_algo_config *cfg) {
     if (!cfg) return;
     fprintf(stdout,
-            "algo_config name=%s defaults=v%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f "
+            "algo_config name=%s defaults=v%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f kl_target=%.3f "
             "gae_lambda=%.3f replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d seed=%d deterministic=%d\n",
             cfg->name ? cfg->name : "null",
             cfg->defaults_version,
@@ -130,6 +133,7 @@ static void log_algo_config(const tfrl_algo_config *cfg) {
             cfg->epsilon,
             cfg->entropy_coef,
             cfg->clip_eps,
+            cfg->kl_target,
             cfg->gae_lambda,
             cfg->replay_size,
             cfg->batch_size,

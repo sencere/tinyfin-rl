@@ -224,14 +224,20 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - coin_maze_duo cooperative environment + golden run
 - Replay CLI prints trace metadata
 - Python env bridge for Gymnasium/PettingZoo/Retro
+- PPO KL diagnostics + early stopping
+- Deterministic SAC/TD3 policy sampling notes
+- Golden runs expanded for Rainbow/QRDQN
+- PPO KL diagnostics + early stopping
+- Deterministic SAC/TD3 policy sampling doc notes
+- Golden runs expanded for Rainbow/QRDQN
 
 ---
 
 ## Near-Term Next Steps
 
-1. Add PPO KL diagnostics and early stopping
-2. Add deterministic RNG coverage to SAC/TD3 policy sampling docs
-3. Expand golden runs for Rainbow/QRDQN baselines
+1. Add PPO KL diagnostics and early stopping (done)
+2. Add deterministic RNG coverage to SAC/TD3 policy sampling docs (done)
+3. Expand golden runs for Rainbow/QRDQN baselines (done)
 4. Add trace metadata dump in replay CLI
 5. Multi-agent support (multi-agent env API + per-agent policies + trace updates)
 6. Python env proxy for Gymnasium/PettingZoo/Gym-Retro (C runner owns loop)

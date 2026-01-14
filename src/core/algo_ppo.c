@@ -30,6 +30,7 @@ typedef struct {
     float clip_eps;
     float entropy_coef;
     float gae_lambda;
+    float kl_target;
     int batch;
     int epochs;
     int count;
@@ -190,7 +191,10 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
     }
 
     int epochs = algo->epochs > 0 ? algo->epochs : 2;
-    for (int e = 0; e < epochs; e++) {
+    int stop_early = 0;
+    for (int e = 0; e < epochs && !stop_early; e++) {
+        float kl_sum = 0.0f;
+        int kl_count = 0;
         for (int i = 0; i < algo->batch; i++) {
             Tensor *x_i = one_hot(algo->obs_n, algo->obs_idx[i]);
             Tensor *logits_i = linear_forward(algo->policy, x_i);
@@ -199,6 +203,9 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             Tensor *action_one = one_hot(algo->action_n, algo->actions[i]);
             Tensor *logp_sel = tensor_mul(logp_i, action_one);
             Tensor *logp = tensor_sum(logp_sel);
+            float new_lp = tensor_get_f32_at(logp, 0);
+            kl_sum += (algo->old_logp[i] - new_lp);
+            kl_count += 1;
             Tensor *old_lp_t = tensor_new(1, (int[1]){1});
             tensor_set_f32_at(old_lp_t, 0, algo->old_logp[i]);
             Tensor *ratio = tensor_exp(tensor_sub(logp, old_lp_t));
@@ -291,6 +298,13 @@ static void ppo_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(logits_i);
             tensor_free(x_i);
         }
+        if (algo->kl_target > 0.0f && kl_count > 0) {
+            float avg_kl = kl_sum / (float)kl_count;
+            if (avg_kl > algo->kl_target) {
+                fprintf(stdout, "ppo early stop: kl=%.6f target=%.6f\n", avg_kl, algo->kl_target);
+                stop_early = 1;
+            }
+        }
     }
 
     free(returns);
@@ -348,6 +362,7 @@ tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg) {
     algo->clip_eps = cfg->clip_eps > 0.0f ? cfg->clip_eps : 0.2f;
     algo->entropy_coef = cfg->entropy_coef > 0.0f ? cfg->entropy_coef : 0.0f;
     algo->gae_lambda = cfg->gae_lambda > 0.0f ? cfg->gae_lambda : 0.95f;
+    algo->kl_target = cfg->kl_target > 0.0f ? cfg->kl_target : 0.0f;
     algo->batch = cfg->steps_per_batch > 0 ? cfg->steps_per_batch : 64;
     algo->epochs = cfg->epochs > 0 ? cfg->epochs : 2;
     algo->policy = linear_create(algo->obs_n, algo->action_n);
