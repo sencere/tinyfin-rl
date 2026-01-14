@@ -10,7 +10,7 @@
 
 Common flags:
 
-- `--algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random`
+- `--algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random`
 - `--env maze_rooms|lineworld|lineworld_duo|lineworld_cont|point1d|coin_maze|coin_maze_duo`
 - `--env py:gymnasium:ENV_ID` (Python bridge)
 - `--env py:pettingzoo:MODULE` (Python bridge, e.g. `py:pettingzoo:butterfly.pistonball_v6`)
@@ -32,6 +32,14 @@ Common flags:
 - `--batch-size N` (DQN family, SAC, TD3)
 - `--per-alpha N` (DQN family, SAC, TD3)
 - `--per-beta N` (DQN family, SAC, TD3)
+- `--c51-atoms N` (Rainbow)
+- `--c51-vmin V` (Rainbow)
+- `--c51-vmax V` (Rainbow)
+- `--iqn-quantiles N` (IQN)
+- `--iqn-tau-samples N` (IQN)
+- `--actor-count N` (IMPALA split)
+- `--learner-batch N` (IMPALA split)
+- `--queue-capacity N` (IMPALA split)
 - `--mcts-sims N` (MCTS)
 - `--mcts-depth N` (MCTS)
 - `--entropy-coef N` (A2C/IMPALA/SAC)

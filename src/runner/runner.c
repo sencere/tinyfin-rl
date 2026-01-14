@@ -113,7 +113,8 @@ static void build_trace_meta(char *buffer,
              buffer_len,
              "algo=%s defaults=v%d env=%s agents=%d share_policy=%d seed=%d deterministic=%d gamma=%.3f lr=%.6f "
              "epsilon=%.3f entropy=%.3f clip_eps=%.3f gae_lambda=%.3f replay=%d batch=%d per_alpha=%.3f "
-             "per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d",
+             "per_beta=%.3f steps_per_batch=%d epochs=%d c51_atoms=%d c51_vmin=%.3f c51_vmax=%.3f iqn_quantiles=%d "
+             "iqn_tau_samples=%d mcts_sims=%d mcts_depth=%d",
              cfg->name ? cfg->name : "null",
              cfg->defaults_version,
              cfg->env_name ? cfg->env_name : "null",
@@ -133,6 +134,11 @@ static void build_trace_meta(char *buffer,
              cfg->per_beta,
              cfg->steps_per_batch,
              cfg->epochs,
+             cfg->c51_atoms,
+             cfg->c51_vmin,
+             cfg->c51_vmax,
+             cfg->iqn_quantiles,
+             cfg->iqn_tau_samples,
              cfg->mcts_sims,
              cfg->mcts_depth);
     if (diag && diag[0] != '\0') {
@@ -196,6 +202,294 @@ static void step_envs_threaded(tfrl_env **envs, int env_count, const tfrl_action
     free(jobs);
 }
 
+typedef struct {
+    tfrl_env *env;
+    tfrl_algo *algo;
+    int total_steps;
+    int *steps_done;
+    pthread_mutex_t *step_lock;
+    uint64_t seed;
+} tfrl_a3c_worker;
+
+typedef struct {
+    tfrl_transition *items;
+    int capacity;
+    int head;
+    int tail;
+    int count;
+    int closed;
+    pthread_mutex_t lock;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+} tfrl_transition_queue;
+
+static int queue_init(tfrl_transition_queue *q, int capacity) {
+    if (!q || capacity <= 0) return 0;
+    q->items = (tfrl_transition *)calloc((size_t)capacity, sizeof(tfrl_transition));
+    if (!q->items) return 0;
+    q->capacity = capacity;
+    q->head = 0;
+    q->tail = 0;
+    q->count = 0;
+    q->closed = 0;
+    pthread_mutex_init(&q->lock, NULL);
+    pthread_cond_init(&q->not_empty, NULL);
+    pthread_cond_init(&q->not_full, NULL);
+    return 1;
+}
+
+static void queue_close(tfrl_transition_queue *q) {
+    pthread_mutex_lock(&q->lock);
+    q->closed = 1;
+    pthread_cond_broadcast(&q->not_empty);
+    pthread_cond_broadcast(&q->not_full);
+    pthread_mutex_unlock(&q->lock);
+}
+
+static void queue_destroy(tfrl_transition_queue *q) {
+    if (!q) return;
+    queue_close(q);
+    pthread_mutex_destroy(&q->lock);
+    pthread_cond_destroy(&q->not_empty);
+    pthread_cond_destroy(&q->not_full);
+    free(q->items);
+}
+
+static int queue_push(tfrl_transition_queue *q, const tfrl_transition *tr) {
+    pthread_mutex_lock(&q->lock);
+    while (!q->closed && q->count == q->capacity) {
+        pthread_cond_wait(&q->not_full, &q->lock);
+    }
+    if (q->closed) {
+        pthread_mutex_unlock(&q->lock);
+        return 0;
+    }
+    q->items[q->tail] = *tr;
+    q->tail = (q->tail + 1) % q->capacity;
+    q->count++;
+    pthread_cond_signal(&q->not_empty);
+    pthread_mutex_unlock(&q->lock);
+    return 1;
+}
+
+static int queue_pop(tfrl_transition_queue *q, tfrl_transition *out) {
+    pthread_mutex_lock(&q->lock);
+    while (!q->closed && q->count == 0) {
+        pthread_cond_wait(&q->not_empty, &q->lock);
+    }
+    if (q->count == 0 && q->closed) {
+        pthread_mutex_unlock(&q->lock);
+        return 0;
+    }
+    *out = q->items[q->head];
+    q->head = (q->head + 1) % q->capacity;
+    q->count--;
+    pthread_cond_signal(&q->not_full);
+    pthread_mutex_unlock(&q->lock);
+    return 1;
+}
+
+static void *a3c_worker_main(void *arg) {
+    tfrl_a3c_worker *worker = (tfrl_a3c_worker *)arg;
+    int local_steps = 0;
+    tfrl_obs obs = tfrl_env_reset(worker->env, worker->seed);
+    while (1) {
+        pthread_mutex_lock(worker->step_lock);
+        if (*worker->steps_done >= worker->total_steps) {
+            pthread_mutex_unlock(worker->step_lock);
+            break;
+        }
+        (*worker->steps_done)++;
+        pthread_mutex_unlock(worker->step_lock);
+
+        tfrl_action action = worker->algo->vtable->act(worker->algo->ctx, obs);
+        tfrl_step_result step = tfrl_env_step(worker->env, action);
+        tfrl_transition transition = {
+            .obs = obs,
+            .action = action,
+            .reward = step.reward,
+            .next_obs = step.observation,
+            .done = step.done,
+        };
+        worker->algo->vtable->update(worker->algo->ctx, &transition);
+        obs = step.observation;
+        local_steps++;
+        if (step.done) {
+            obs = tfrl_env_reset(worker->env, worker->seed + (uint64_t)local_steps + 1u);
+        }
+    }
+    return NULL;
+}
+
+static int run_a3c_async(const tfrl_runner_config *cfg,
+                         tfrl_env **envs,
+                         int env_count,
+                         tfrl_algo *algo) {
+    if (env_count <= 0 || !algo) return 1;
+    int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
+    int steps_done = 0;
+    pthread_mutex_t step_lock;
+    pthread_mutex_init(&step_lock, NULL);
+
+    pthread_t *threads = (pthread_t *)calloc((size_t)env_count, sizeof(pthread_t));
+    tfrl_a3c_worker *workers = (tfrl_a3c_worker *)calloc((size_t)env_count, sizeof(tfrl_a3c_worker));
+    if (!threads || !workers) {
+        free(threads);
+        free(workers);
+        pthread_mutex_destroy(&step_lock);
+        return 1;
+    }
+
+    for (int i = 0; i < env_count; i++) {
+        workers[i].env = envs[i];
+        workers[i].algo = algo;
+        workers[i].total_steps = total_steps;
+        workers[i].steps_done = &steps_done;
+        workers[i].step_lock = &step_lock;
+        workers[i].seed = (uint64_t)(cfg->seed + i + 1);
+        pthread_create(&threads[i], NULL, a3c_worker_main, &workers[i]);
+    }
+
+    for (int i = 0; i < env_count; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    free(threads);
+    free(workers);
+    pthread_mutex_destroy(&step_lock);
+    return 0;
+}
+
+typedef struct {
+    tfrl_env *env;
+    tfrl_algo *algo;
+    tfrl_transition_queue *queue;
+    int total_steps;
+    int *steps_done;
+    pthread_mutex_t *step_lock;
+    pthread_mutex_t *policy_lock;
+    uint64_t seed;
+} tfrl_impala_actor;
+
+static void *impala_actor_main(void *arg) {
+    tfrl_impala_actor *actor = (tfrl_impala_actor *)arg;
+    tfrl_obs obs = tfrl_env_reset(actor->env, actor->seed);
+    while (1) {
+        pthread_mutex_lock(actor->step_lock);
+        if (*actor->steps_done >= actor->total_steps) {
+            pthread_mutex_unlock(actor->step_lock);
+            break;
+        }
+        (*actor->steps_done)++;
+        pthread_mutex_unlock(actor->step_lock);
+
+        pthread_mutex_lock(actor->policy_lock);
+        tfrl_action action = actor->algo->vtable->act(actor->algo->ctx, obs);
+        pthread_mutex_unlock(actor->policy_lock);
+        tfrl_step_result step = tfrl_env_step(actor->env, action);
+        tfrl_transition transition = {
+            .obs = obs,
+            .action = action,
+            .reward = step.reward,
+            .next_obs = step.observation,
+            .done = step.done,
+        };
+        if (!queue_push(actor->queue, &transition)) break;
+        obs = step.observation;
+        if (step.done) {
+            obs = tfrl_env_reset(actor->env, actor->seed + 1u);
+        }
+    }
+    return NULL;
+}
+
+typedef struct {
+    tfrl_algo *algo;
+    tfrl_transition_queue *queue;
+    int total_steps;
+    pthread_mutex_t *policy_lock;
+    int learner_batch;
+} tfrl_impala_learner;
+
+static void *impala_learner_main(void *arg) {
+    tfrl_impala_learner *learner = (tfrl_impala_learner *)arg;
+    int processed = 0;
+    tfrl_transition tr;
+    int batch = learner->learner_batch > 0 ? learner->learner_batch : 1;
+    while (processed < learner->total_steps) {
+        for (int i = 0; i < batch && processed < learner->total_steps; i++) {
+            if (!queue_pop(learner->queue, &tr)) return NULL;
+            pthread_mutex_lock(learner->policy_lock);
+            learner->algo->vtable->update(learner->algo->ctx, &tr);
+            pthread_mutex_unlock(learner->policy_lock);
+            processed++;
+        }
+    }
+    return NULL;
+}
+
+static int run_impala_split(const tfrl_runner_config *cfg,
+                            tfrl_env **envs,
+                            int env_count,
+                            tfrl_algo *algo) {
+    int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
+    int steps_done = 0;
+    int queue_capacity = cfg->queue_capacity > 0 ? cfg->queue_capacity : 1024;
+    tfrl_transition_queue queue;
+    if (!queue_init(&queue, queue_capacity)) return 1;
+
+    pthread_mutex_t step_lock;
+    pthread_mutex_t policy_lock;
+    pthread_mutex_init(&step_lock, NULL);
+    pthread_mutex_init(&policy_lock, NULL);
+
+    pthread_t *actors = (pthread_t *)calloc((size_t)env_count, sizeof(pthread_t));
+    tfrl_impala_actor *actor_cfg = (tfrl_impala_actor *)calloc((size_t)env_count, sizeof(tfrl_impala_actor));
+    if (!actors || !actor_cfg) {
+        free(actors);
+        free(actor_cfg);
+        queue_destroy(&queue);
+        pthread_mutex_destroy(&step_lock);
+        pthread_mutex_destroy(&policy_lock);
+        return 1;
+    }
+
+    for (int i = 0; i < env_count; i++) {
+        actor_cfg[i].env = envs[i];
+        actor_cfg[i].algo = algo;
+        actor_cfg[i].queue = &queue;
+        actor_cfg[i].total_steps = total_steps;
+        actor_cfg[i].steps_done = &steps_done;
+        actor_cfg[i].step_lock = &step_lock;
+        actor_cfg[i].policy_lock = &policy_lock;
+        actor_cfg[i].seed = (uint64_t)(cfg->seed + i + 1);
+        pthread_create(&actors[i], NULL, impala_actor_main, &actor_cfg[i]);
+    }
+
+    pthread_t learner_thread;
+    tfrl_impala_learner learner = {
+        .algo = algo,
+        .queue = &queue,
+        .total_steps = total_steps,
+        .policy_lock = &policy_lock,
+        .learner_batch = cfg->learner_batch > 0 ? cfg->learner_batch : 1,
+    };
+    pthread_create(&learner_thread, NULL, impala_learner_main, &learner);
+
+    for (int i = 0; i < env_count; i++) {
+        pthread_join(actors[i], NULL);
+    }
+    queue_close(&queue);
+    pthread_join(learner_thread, NULL);
+
+    free(actors);
+    free(actor_cfg);
+    queue_destroy(&queue);
+    pthread_mutex_destroy(&step_lock);
+    pthread_mutex_destroy(&policy_lock);
+    return 0;
+}
+
 static int run_replay(const tfrl_runner_config *cfg) {
     tfrl_trace_reader *reader = tfrl_trace_reader_open(cfg->trace_in);
     if (!reader) {
@@ -255,6 +549,9 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     }
     seed_rng(seed);
     int env_count = cfg->envs > 0 ? cfg->envs : 1;
+    if (cfg->actor_count > 0 && cfg->algo && strcmp(cfg->algo, "impala") == 0) {
+        env_count = cfg->actor_count;
+    }
     int render_idx = cfg->render_env;
     if (render_idx < 0) render_idx = 0;
     if (render_idx >= env_count) {
@@ -334,6 +631,11 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         .mcts_depth = cfg->mcts_depth,
         .steps_per_batch = cfg->steps_per_batch,
         .epochs = cfg->epochs,
+        .c51_atoms = cfg->c51_atoms,
+        .c51_vmin = cfg->c51_vmin,
+        .c51_vmax = cfg->c51_vmax,
+        .iqn_quantiles = cfg->iqn_quantiles,
+        .iqn_tau_samples = cfg->iqn_tau_samples,
         .save_path = cfg->save_path,
         .load_path = cfg->load_path,
         .env_name = cfg->env_name,
@@ -435,6 +737,60 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             free(episode_counts);
             return 1;
         }
+    }
+
+    if (cfg->mode == TFRL_MODE_TRAIN && cfg->algo && strcmp(cfg->algo, "a3c") == 0) {
+        if (agent_count != 1) {
+            fprintf(stderr, "a3c requires single-agent environments\n");
+            return 1;
+        }
+        if (cfg->render || cfg->trace_out) {
+            fprintf(stderr, "a3c async runner disables render/trace output\n");
+        }
+        int rc = run_a3c_async(cfg, envs, env_count, &algos[0]);
+        if (writer) tfrl_trace_writer_close(writer);
+        if (viewer) tfrl_viewer_destroy(viewer);
+        free(render_buf);
+        for (int a = 0; a < policy_count; a++) {
+            tfrl_algo_destroy(&algos[a]);
+        }
+        for (int i = 0; i < env_count; i++) {
+            tfrl_env_destroy(envs[i]);
+        }
+        free(envs);
+        free(obs);
+        free(actions);
+        free(steps);
+        free(episode_returns);
+        free(episode_counts);
+        return rc;
+    }
+
+    if (cfg->mode == TFRL_MODE_TRAIN && cfg->algo && strcmp(cfg->algo, "impala") == 0 && cfg->actor_count > 1) {
+        if (agent_count != 1) {
+            fprintf(stderr, "impala split requires single-agent environments\n");
+            return 1;
+        }
+        if (cfg->render || cfg->trace_out) {
+            fprintf(stderr, "impala split runner disables render/trace output\n");
+        }
+        int rc = run_impala_split(cfg, envs, env_count, &algos[0]);
+        if (writer) tfrl_trace_writer_close(writer);
+        if (viewer) tfrl_viewer_destroy(viewer);
+        free(render_buf);
+        for (int a = 0; a < policy_count; a++) {
+            tfrl_algo_destroy(&algos[a]);
+        }
+        for (int i = 0; i < env_count; i++) {
+            tfrl_env_destroy(envs[i]);
+        }
+        free(envs);
+        free(obs);
+        free(actions);
+        free(steps);
+        free(episode_returns);
+        free(episode_counts);
+        return rc;
     }
 
     if (cfg->mode == TFRL_MODE_TRAIN) {

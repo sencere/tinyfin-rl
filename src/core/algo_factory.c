@@ -8,6 +8,7 @@ tfrl_algo tfrl_algo_dqn_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_rainbow_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_qrdqn_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_a2c_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_a3c_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_trpo_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_sac_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_td3_create(const tfrl_algo_config *cfg);
@@ -15,6 +16,7 @@ tfrl_algo tfrl_algo_impala_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_mcts_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_iqn_create(const tfrl_algo_config *cfg);
 
 typedef struct {
     const char *name;
@@ -34,6 +36,11 @@ typedef struct {
     int mcts_depth;
     int steps_per_batch;
     int epochs;
+    int c51_atoms;
+    float c51_vmin;
+    float c51_vmax;
+    int iqn_quantiles;
+    int iqn_tau_samples;
 } tfrl_algo_schema;
 
 static const tfrl_algo_schema ALGO_SCHEMA_DEFAULT = {
@@ -54,15 +61,22 @@ static const tfrl_algo_schema ALGO_SCHEMA_DEFAULT = {
     .mcts_depth = 50,
     .steps_per_batch = 64,
     .epochs = 2,
+    .c51_atoms = 51,
+    .c51_vmin = -10.0f,
+    .c51_vmax = 10.0f,
+    .iqn_quantiles = 32,
+    .iqn_tau_samples = 32,
 };
 
 static const tfrl_algo_schema ALGO_SCHEMAS[] = {
     {.name = "dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
-    {.name = "rainbow", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "rainbow", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f, .c51_atoms = 51, .c51_vmin = -10.0f, .c51_vmax = 10.0f},
     {.name = "qrdqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "iqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f, .iqn_quantiles = 32, .iqn_tau_samples = 32},
     {.name = "ppo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .entropy_coef = 0.01f, .clip_eps = 0.2f, .kl_target = 0.01f, .gae_lambda = 0.95f, .steps_per_batch = 64, .epochs = 2},
     {.name = "reinforce", .defaults_version = 1, .gamma = 0.99f, .lr = 0.01f, .steps_per_batch = 64},
     {.name = "a2c", .defaults_version = 1, .gamma = 0.99f, .lr = 0.001f, .entropy_coef = 0.01f, .steps_per_batch = 64},
+    {.name = "a3c", .defaults_version = 1, .gamma = 0.99f, .lr = 0.001f, .entropy_coef = 0.01f, .steps_per_batch = 64},
     {.name = "trpo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 0.01f, .steps_per_batch = 64},
     {.name = "impala", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .clip_eps = 1.0f, .entropy_coef = 0.01f, .steps_per_batch = 64},
     {.name = "sac", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .entropy_coef = 0.2f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
@@ -92,6 +106,10 @@ static int float_unset_nonneg(float v) {
     return v < 0.0f;
 }
 
+static int float_unset_sentinel(float v) {
+    return v < -1.0e20f;
+}
+
 static int int_unset_positive(int v) {
     return v <= 0;
 }
@@ -119,13 +137,20 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (int_unset_positive(cfg->mcts_depth)) cfg->mcts_depth = schema->mcts_depth;
     if (int_unset_positive(cfg->steps_per_batch)) cfg->steps_per_batch = schema->steps_per_batch;
     if (int_unset_positive(cfg->epochs)) cfg->epochs = schema->epochs;
+    if (int_unset_positive(cfg->c51_atoms)) cfg->c51_atoms = schema->c51_atoms;
+    if (float_unset_sentinel(cfg->c51_vmin) || float_unset_sentinel(cfg->c51_vmax)) {
+        cfg->c51_vmin = schema->c51_vmin;
+        cfg->c51_vmax = schema->c51_vmax;
+    }
+    if (int_unset_positive(cfg->iqn_quantiles)) cfg->iqn_quantiles = schema->iqn_quantiles;
+    if (int_unset_positive(cfg->iqn_tau_samples)) cfg->iqn_tau_samples = schema->iqn_tau_samples;
 }
 
 static void log_algo_config(const tfrl_algo_config *cfg) {
     if (!cfg) return;
     fprintf(stdout,
             "algo_config name=%s defaults=v%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f kl_target=%.3f "
-            "gae_lambda=%.3f replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d mcts_sims=%d mcts_depth=%d seed=%d deterministic=%d\n",
+            "gae_lambda=%.3f replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d c51_atoms=%d c51_vmin=%.3f c51_vmax=%.3f iqn_quantiles=%d iqn_tau_samples=%d mcts_sims=%d mcts_depth=%d seed=%d deterministic=%d\n",
             cfg->name ? cfg->name : "null",
             cfg->defaults_version,
             cfg->gamma,
@@ -141,6 +166,11 @@ static void log_algo_config(const tfrl_algo_config *cfg) {
             cfg->per_beta,
             cfg->steps_per_batch,
             cfg->epochs,
+            cfg->c51_atoms,
+            cfg->c51_vmin,
+            cfg->c51_vmax,
+            cfg->iqn_quantiles,
+            cfg->iqn_tau_samples,
             cfg->mcts_sims,
             cfg->mcts_depth,
             cfg->seed,
@@ -194,15 +224,22 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
     } else if (strcmp(cfg->name, "reinforce") == 0) {
         if (!require_discrete("reinforce", cfg)) return 0;
         if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
-    } else if (strcmp(cfg->name, "a2c") == 0 || strcmp(cfg->name, "trpo") == 0 || strcmp(cfg->name, "impala") == 0) {
+    } else if (strcmp(cfg->name, "a2c") == 0 || strcmp(cfg->name, "a3c") == 0 || strcmp(cfg->name, "trpo") == 0 || strcmp(cfg->name, "impala") == 0) {
         if (!require_discrete(cfg->name, cfg)) return 0;
         if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
-    } else if (strcmp(cfg->name, "dqn") == 0 || strcmp(cfg->name, "rainbow") == 0 || strcmp(cfg->name, "qrdqn") == 0) {
+    } else if (strcmp(cfg->name, "dqn") == 0 || strcmp(cfg->name, "rainbow") == 0 || strcmp(cfg->name, "qrdqn") == 0 || strcmp(cfg->name, "iqn") == 0) {
         if (cfg->action_type != TFRL_SPACE_DISCRETE) {
             fprintf(stderr, "%s requires discrete action space\n", cfg->name);
             return 0;
         }
         if (!require_positive("batch_size", cfg->batch_size)) return 0;
+        if ((strcmp(cfg->name, "rainbow") == 0) && !require_positive("c51_atoms", cfg->c51_atoms)) return 0;
+        if ((strcmp(cfg->name, "rainbow") == 0) && !(cfg->c51_vmax > cfg->c51_vmin)) {
+            fprintf(stderr, "invalid c51 support: vmin=%.3f vmax=%.3f\n", cfg->c51_vmin, cfg->c51_vmax);
+            return 0;
+        }
+        if ((strcmp(cfg->name, "iqn") == 0) && !require_positive("iqn_quantiles", cfg->iqn_quantiles)) return 0;
+        if ((strcmp(cfg->name, "iqn") == 0) && !require_positive("iqn_tau_samples", cfg->iqn_tau_samples)) return 0;
     } else if (strcmp(cfg->name, "sac") == 0 || strcmp(cfg->name, "td3") == 0) {
         if (!require_positive("batch_size", cfg->batch_size)) return 0;
     } else if (strcmp(cfg->name, "mcts") == 0) {
@@ -272,11 +309,17 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     if (strcmp(cfg_use->name, "impala") == 0) {
         return tfrl_algo_impala_create(cfg_use);
     }
+    if (strcmp(cfg_use->name, "a3c") == 0) {
+        return tfrl_algo_a3c_create(cfg_use);
+    }
     if (strcmp(cfg_use->name, "reinforce") == 0) {
         return tfrl_algo_reinforce_create(cfg_use);
     }
     if (strcmp(cfg_use->name, "ppo") == 0) {
         return tfrl_algo_ppo_create(cfg_use);
+    }
+    if (strcmp(cfg_use->name, "iqn") == 0) {
+        return tfrl_algo_iqn_create(cfg_use);
     }
     fprintf(stderr, "unknown algo '%s'; using random policy\n", cfg_use->name);
     return tfrl_algo_random_create(cfg_use);

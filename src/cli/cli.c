@@ -32,15 +32,18 @@ static float arg_float(int argc, char **argv, const char *name, float def) {
 
 void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "usage:\n");
-    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "           [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
-    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|ppo|reinforce|a2c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "          [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N] [--dump-meta-json]\n", name);
     fprintf(stderr, "algo params:\n");
     fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N --gae-lambda N --kl-target N (ppo)\n");
     fprintf(stderr, "  --entropy-coef N (a2c/impala/sac)\n");
     fprintf(stderr, "  --replay-size N --batch-size N --per-alpha N --per-beta N (dqn)\n");
+    fprintf(stderr, "  --c51-atoms N --c51-vmin V --c51-vmax V (rainbow)\n");
+    fprintf(stderr, "  --iqn-quantiles N --iqn-tau-samples N (iqn)\n");
+    fprintf(stderr, "  --actor-count N --learner-batch N --queue-capacity N (impala split)\n");
     fprintf(stderr, "  --mcts-sims N --mcts-depth N (mcts)\n");
     fprintf(stderr, "checkpoint params:\n");
     fprintf(stderr, "  --save PATH --load PATH\n");
@@ -84,6 +87,11 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->mcts_depth = arg_int(argc, argv, "--mcts-depth", -1);
     out_cfg->steps_per_batch = arg_int(argc, argv, "--steps-per-batch", -1);
     out_cfg->epochs = arg_int(argc, argv, "--epochs", -1);
+    out_cfg->c51_atoms = arg_int(argc, argv, "--c51-atoms", -1);
+    out_cfg->c51_vmin = arg_float(argc, argv, "--c51-vmin", -1.0e30f);
+    out_cfg->c51_vmax = arg_float(argc, argv, "--c51-vmax", -1.0e30f);
+    out_cfg->iqn_quantiles = arg_int(argc, argv, "--iqn-quantiles", -1);
+    out_cfg->iqn_tau_samples = arg_int(argc, argv, "--iqn-tau-samples", -1);
     out_cfg->log_every = arg_int(argc, argv, "--log-every", 100);
     out_cfg->render_every = arg_int(argc, argv, "--render-every", 1);
     out_cfg->render_fps = arg_int(argc, argv, "--render-fps", 60);
@@ -91,6 +99,9 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->trace_out = arg_str(argc, argv, "--trace-out", NULL);
     out_cfg->trace_in = arg_str(argc, argv, "--trace-in", NULL);
     out_cfg->dump_meta_json = arg_flag(argc, argv, "--dump-meta-json");
+    out_cfg->actor_count = arg_int(argc, argv, "--actor-count", -1);
+    out_cfg->learner_batch = arg_int(argc, argv, "--learner-batch", -1);
+    out_cfg->queue_capacity = arg_int(argc, argv, "--queue-capacity", -1);
     out_cfg->save_path = arg_str(argc, argv, "--save", NULL);
     out_cfg->load_path = arg_str(argc, argv, "--load", NULL);
     out_cfg->agents_expected = arg_int(argc, argv, "--agents", 0);

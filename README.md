@@ -52,13 +52,16 @@ Select environment:
 ./build/tinyfin-rl train --algo dqn --steps 2000
 ./build/tinyfin-rl train --algo rainbow --steps 2000
 ./build/tinyfin-rl train --algo qrdqn --steps 2000
+./build/tinyfin-rl train --algo iqn --steps 2000
 ./build/tinyfin-rl train --algo reinforce --steps 2000 --steps-per-batch 512
 ./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01 --kl-target 0.01
 ./build/tinyfin-rl train --algo a2c --steps 2000 --steps-per-batch 64
+./build/tinyfin-rl train --algo a3c --steps 2000 --envs 4 --steps-per-batch 64
 ./build/tinyfin-rl train --algo trpo --steps 2000 --steps-per-batch 64 --clip-eps 0.01
 ./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2
 ./build/tinyfin-rl train --algo td3 --steps 2000
 ./build/tinyfin-rl train --algo impala --steps 2000 --steps-per-batch 64
+./build/tinyfin-rl train --algo impala --steps 2000 --actor-count 4 --queue-capacity 1024
 ./build/tinyfin-rl train --algo mcts --env maze_rooms --steps 2000 --mcts-sims 400 --mcts-depth 80
 ./build/tinyfin-rl train --algo dqn --steps 2000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
@@ -93,7 +96,7 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 - The canonical environment is a four-room grid (`maze_rooms`).
 - Reference environments: `lineworld`, `lineworld_cont`, `point1d`, `coin_maze`.
 - Multi-agent environments: `lineworld_duo`, `coin_maze_duo`.
-- DQN/REINFORCE/PPO plus A2C/TRPO/IMPALA/Rainbow/QR-DQN/SAC/TD3 are implemented in C using Tinyfin.
+- DQN/REINFORCE/PPO plus A2C/A3C/TRPO/IMPALA/Rainbow/QR-DQN/IQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
 
 ## Python Env Bridge (Sockets)

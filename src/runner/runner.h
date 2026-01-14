@@ -42,6 +42,9 @@ typedef struct {
     const char *trace_out;
     const char *trace_in;
     int dump_meta_json;
+    int actor_count;
+    int learner_batch;
+    int queue_capacity;
     const char *save_path;
     const char *load_path;
     int threads;

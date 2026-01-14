@@ -227,6 +227,10 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 - PPO KL diagnostics + early stopping
 - Deterministic SAC/TD3 policy sampling notes
 - Golden runs expanded for Rainbow/QRDQN
+- Rainbow C51 + dueling heads
+- IQN distributional variant
+- A3C async runner
+- IMPALA actor/learner split
 - PPO KL logging per epoch
 - Golden runs expanded for lineworld_duo
 - Optional Gymnasium bridge smoke test
@@ -277,10 +281,10 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 
 ## Additional Algorithms (Ideas)
 
-- A3C (async actor-critic)
-- Rainbow DQN extensions (C51 + dueling)
-- Distributional variants beyond QR-DQN
-- IMPALA-scale actor/learner split
+- A3C (async actor-critic) (done)
+- Rainbow DQN extensions (C51 + dueling) (done)
+- Distributional variants beyond QR-DQN (done)
+- IMPALA-scale actor/learner split (done)
 
 ## Advanced Vectorization Roadmap
 

@@ -41,6 +41,11 @@ typedef struct {
     int mcts_depth;
     int steps_per_batch;
     int epochs;
+    int c51_atoms;
+    float c51_vmin;
+    float c51_vmax;
+    int iqn_quantiles;
+    int iqn_tau_samples;
     const char *save_path;
     const char *load_path;
     const char *env_name;

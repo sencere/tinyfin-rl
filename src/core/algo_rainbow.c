@@ -7,8 +7,12 @@
 #include "tinyfin/nn.h"
 #include "tinyfin/optim.h"
 #include "tinyfin/ops_add.h"
+#include "tinyfin/ops_log.h"
 #include "tinyfin/ops_mul.h"
 #include "tinyfin/ops_reduce.h"
+#include "tinyfin/ops_reshape.h"
+#include "tinyfin/ops_slice.h"
+#include "tinyfin/ops_softmax.h"
 #include "tinyfin/ops_sub.h"
 #include "tinyfin/tensor.h"
 
@@ -19,14 +23,21 @@
 #define RAINBOW_TARGET_UPDATE 100
 
 typedef struct {
-    Linear *q;
-    Linear *target_q;
+    Linear *adv;
+    Linear *val;
+    Linear *target_adv;
+    Linear *target_val;
     Adam *opt;
     tfrl_replay_buffer *replay;
     int obs_n;
     int obs_dim;
     tfrl_space_type obs_type;
     int action_n;
+    int atoms;
+    float v_min;
+    float v_max;
+    float delta_z;
+    float *support;
     float gamma;
     float epsilon;
     int batch_size;
@@ -88,19 +99,6 @@ static Tensor *obs_to_tensor(const tfrl_rainbow_algo *algo, tfrl_obs obs) {
     return one_hot(algo->obs_n, obs.index);
 }
 
-static int argmax_tensor(Tensor *t) {
-    int best = 0;
-    float best_v = tensor_get_f32_at(t, 0);
-    for (size_t i = 1; i < t->size; i++) {
-        float v = tensor_get_f32_at(t, i);
-        if (v > best_v) {
-            best_v = v;
-            best = (int)i;
-        }
-    }
-    return best;
-}
-
 static void init_linear(Linear *layer) {
     if (!layer) return;
     tensor_set_requires_grad(layer->weight, 1);
@@ -160,6 +158,56 @@ static int load_linear(Linear *layer, const char *prefix, const char *tag) {
     return 1;
 }
 
+static Tensor *rainbow_forward_logits(tfrl_rainbow_algo *algo, Tensor *x, int target) {
+    Linear *adv = target ? algo->target_adv : algo->adv;
+    Linear *val = target ? algo->target_val : algo->val;
+    Tensor *adv_logits = linear_forward(adv, x);
+    Tensor *val_logits = linear_forward(val, x);
+    Tensor *adv_mean = tensor_mean(adv_logits);
+    Tensor *adv_centered = tensor_sub(adv_logits, adv_mean);
+    Tensor *q_logits = tensor_add(val_logits, adv_centered);
+    tensor_free(adv_centered);
+    tensor_free(adv_mean);
+    tensor_free(val_logits);
+    tensor_free(adv_logits);
+    return q_logits;
+}
+
+static float rainbow_expected_q(Tensor *q_logits, const tfrl_rainbow_algo *algo, int action_idx) {
+    int shape[2] = {algo->action_n, algo->atoms};
+    Tensor *view = tensor_reshape(q_logits, 2, shape);
+    Tensor *row = tensor_slice(view, 0, action_idx, action_idx + 1);
+    Tensor *probs = tensor_softmax_autograd(row);
+    int sshape[2] = {1, algo->atoms};
+    Tensor *support = tensor_new(2, sshape);
+    for (int i = 0; i < algo->atoms; i++) {
+        tensor_set_f32_at(support, (size_t)i, algo->support[i]);
+    }
+    Tensor *weighted = tensor_mul(probs, support);
+    Tensor *sum = tensor_sum(weighted);
+    float value = tensor_get_f32_at(sum, 0);
+    tensor_free(sum);
+    tensor_free(weighted);
+    tensor_free(support);
+    tensor_free(probs);
+    tensor_free(row);
+    tensor_free(view);
+    return value;
+}
+
+static int rainbow_argmax_action(Tensor *q_logits, const tfrl_rainbow_algo *algo) {
+    int best = 0;
+    float best_v = rainbow_expected_q(q_logits, algo, 0);
+    for (int a = 1; a < algo->action_n; a++) {
+        float v = rainbow_expected_q(q_logits, algo, a);
+        if (v > best_v) {
+            best_v = v;
+            best = a;
+        }
+    }
+    return best;
+}
+
 static tfrl_action rainbow_act(void *ctx, tfrl_obs obs) {
     tfrl_rainbow_algo *algo = (tfrl_rainbow_algo *)ctx;
     tfrl_action action = {0};
@@ -169,9 +217,9 @@ static tfrl_action rainbow_act(void *ctx, tfrl_obs obs) {
         return action;
     }
     Tensor *x = obs_to_tensor(algo, obs);
-    Tensor *q_values = linear_forward(algo->q, x);
-    action.index = argmax_tensor(q_values);
-    tensor_free(q_values);
+    Tensor *q_logits = rainbow_forward_logits(algo, x, 0);
+    action.index = rainbow_argmax_action(q_logits, algo);
+    tensor_free(q_logits);
     tensor_free(x);
     return action;
 }
@@ -180,74 +228,112 @@ static void rainbow_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_ac
     tfrl_rainbow_algo *algo = (tfrl_rainbow_algo *)ctx;
     if (!algo || !obs || !out_actions || count <= 0) return;
 
-    int obs_dim = algo->obs_type == TFRL_SPACE_BOX ? algo->obs_dim : algo->obs_n;
-    int shape[2] = {count, obs_dim};
-    Tensor *x = tensor_zeros(2, shape);
-    if (!x) return;
-    for (int i = 0; i < count; i++) {
-        if (algo->obs_type == TFRL_SPACE_BOX) {
-            int n = obs[i].data_len < obs_dim ? obs[i].data_len : obs_dim;
-            for (int j = 0; j < n; j++) {
-                size_t off = (size_t)i * (size_t)obs_dim + (size_t)j;
-                tensor_set_f32_at(x, off, obs[i].data[j]);
-            }
-        } else if (obs[i].index >= 0 && obs[i].index < algo->obs_n) {
-            size_t off = (size_t)i * (size_t)obs_dim + (size_t)obs[i].index;
-            tensor_set_f32_at(x, off, 1.0f);
-        }
-    }
-
-    Tensor *q_values = linear_forward(algo->q, x);
     for (int i = 0; i < count; i++) {
         float r = rainbow_rand_uniform(algo);
         if (r < algo->epsilon) {
             out_actions[i].index = rainbow_rand_int(algo, algo->action_n);
             continue;
         }
-        int best = 0;
-        float best_v = tensor_get_f32_at(q_values, (size_t)i * (size_t)algo->action_n);
-        for (int j = 1; j < algo->action_n; j++) {
-            float v = tensor_get_f32_at(q_values, (size_t)i * (size_t)algo->action_n + (size_t)j);
-            if (v > best_v) {
-                best_v = v;
-                best = j;
-            }
-        }
-        out_actions[i].index = best;
+        Tensor *x = obs_to_tensor(algo, obs[i]);
+        Tensor *q_logits = rainbow_forward_logits(algo, x, 0);
+        out_actions[i].index = rainbow_argmax_action(q_logits, algo);
+        tensor_free(q_logits);
+        tensor_free(x);
     }
-    tensor_free(q_values);
-    tensor_free(x);
 }
 
-static void rainbow_apply_update(tfrl_rainbow_algo *algo, tfrl_obs obs, int action_idx, float reward, int done, tfrl_obs next_obs, float gamma_n, float weight, float *out_td) {
+static void rainbow_apply_update(tfrl_rainbow_algo *algo,
+                                 tfrl_obs obs,
+                                 int action_idx,
+                                 float reward,
+                                 int done,
+                                 tfrl_obs next_obs,
+                                 float gamma_n,
+                                 float weight,
+                                 float *out_td) {
     Tensor *x = obs_to_tensor(algo, obs);
-    Tensor *q_values = linear_forward(algo->q, x);
-    Tensor *action_one = one_hot(algo->action_n, action_idx);
-    Tensor *q_sel = tensor_mul(q_values, action_one);
-    Tensor *q_val = tensor_sum(q_sel);
+    Tensor *q_logits = rainbow_forward_logits(algo, x, 0);
 
-    float target = reward;
-    if (!done) {
+    int atoms = algo->atoms;
+    float target_dist[atoms];
+    for (int i = 0; i < atoms; i++) target_dist[i] = 0.0f;
+
+    if (done) {
+        float z = reward;
+        if (z < algo->v_min) z = algo->v_min;
+        if (z > algo->v_max) z = algo->v_max;
+        float b = (z - algo->v_min) / algo->delta_z;
+        int l = (int)floorf(b);
+        int u = (int)ceilf(b);
+        if (l == u) {
+            target_dist[l] = 1.0f;
+        } else {
+            target_dist[l] = (float)(u - b);
+            target_dist[u] = (float)(b - l);
+        }
+    } else {
         Tensor *x_next = obs_to_tensor(algo, next_obs);
-        Tensor *q_next_online = linear_forward(algo->q, x_next);
-        int next_a = argmax_tensor(q_next_online);
-        Tensor *q_next_target = linear_forward(algo->target_q, x_next);
-        float max_q = tensor_get_f32_at(q_next_target, (size_t)next_a);
-        target = reward + gamma_n * max_q;
+        Tensor *q_next_online = rainbow_forward_logits(algo, x_next, 0);
+        int next_a = rainbow_argmax_action(q_next_online, algo);
+        Tensor *q_next_target = rainbow_forward_logits(algo, x_next, 1);
+
+        int shape[2] = {algo->action_n, algo->atoms};
+        Tensor *q_next_view = tensor_reshape(q_next_target, 2, shape);
+        Tensor *q_next_row = tensor_slice(q_next_view, 0, next_a, next_a + 1);
+        Tensor *p_next = tensor_softmax_autograd(q_next_row);
+
+        for (int j = 0; j < atoms; j++) {
+            float p = tensor_get_f32_at(p_next, (size_t)j);
+            float z = reward + gamma_n * algo->support[j];
+            if (z < algo->v_min) z = algo->v_min;
+            if (z > algo->v_max) z = algo->v_max;
+            float b = (z - algo->v_min) / algo->delta_z;
+            int l = (int)floorf(b);
+            int u = (int)ceilf(b);
+            if (l == u) {
+                target_dist[l] += p;
+            } else {
+                target_dist[l] += p * (float)(u - b);
+                target_dist[u] += p * (float)(b - l);
+            }
+        }
+
+        tensor_free(p_next);
+        tensor_free(q_next_row);
+        tensor_free(q_next_view);
         tensor_free(q_next_target);
         tensor_free(q_next_online);
         tensor_free(x_next);
     }
 
-    Tensor *target_t = tensor_new(1, (int[1]){1});
-    tensor_set_f32_at(target_t, 0, target);
-    Tensor *diff = tensor_sub(q_val, target_t);
-    Tensor *loss = tensor_mul(diff, diff);
+    int shape[2] = {algo->action_n, algo->atoms};
+    Tensor *q_view = tensor_reshape(q_logits, 2, shape);
+    Tensor *q_row = tensor_slice(q_view, 0, action_idx, action_idx + 1);
+    Tensor *probs = tensor_softmax_autograd(q_row);
+    Tensor *logp = tensor_log(probs);
+    int tshape[2] = {1, algo->atoms};
+    Tensor *target_t = tensor_new(2, tshape);
+    for (int i = 0; i < atoms; i++) {
+        tensor_set_f32_at(target_t, (size_t)i, target_dist[i]);
+    }
+    Tensor *mul = tensor_mul(target_t, logp);
+    Tensor *sum = tensor_sum(mul);
+    Tensor *neg = tensor_new(1, (int[1]){1});
+    tensor_set_f32_at(neg, 0, -1.0f);
+    Tensor *loss = tensor_mul(sum, neg);
+
     if (out_td) {
-        float q_pred = tensor_get_f32_at(q_val, 0);
-        float td = target - q_pred;
+        float pred_mean = 0.0f;
+        float target_mean = 0.0f;
+        for (int i = 0; i < atoms; i++) {
+            float p = tensor_get_f32_at(probs, (size_t)i);
+            pred_mean += p * algo->support[i];
+            target_mean += target_dist[i] * algo->support[i];
+        }
+        float td = target_mean - pred_mean;
         *out_td = td >= 0.0f ? td : -td;
     }
+
     if (weight > 0.0f && weight != 1.0f) {
         Tensor *w_t = tensor_new(1, (int[1]){1});
         tensor_set_f32_at(w_t, 0, weight);
@@ -262,17 +348,21 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo, tfrl_obs obs, int acti
     adam_step(algo->opt, 0.0f);
 
     tensor_free(loss);
-    tensor_free(diff);
+    tensor_free(neg);
+    tensor_free(sum);
+    tensor_free(mul);
     tensor_free(target_t);
-    tensor_free(q_val);
-    tensor_free(q_sel);
-    tensor_free(action_one);
-    tensor_free(q_values);
+    tensor_free(logp);
+    tensor_free(probs);
+    tensor_free(q_row);
+    tensor_free(q_view);
+    tensor_free(q_logits);
     tensor_free(x);
 
     algo->step_count++;
     if (algo->step_count % RAINBOW_TARGET_UPDATE == 0) {
-        copy_linear(algo->target_q, algo->q);
+        copy_linear(algo->target_adv, algo->adv);
+        copy_linear(algo->target_val, algo->val);
     }
 }
 
@@ -421,19 +511,27 @@ static void rainbow_destroy(void *ctx) {
     if (!algo) return;
     adam_free(algo->opt);
     tfrl_replay_free(algo->replay);
-    tensor_free(algo->q->weight);
-    tensor_free(algo->q->bias);
-    tensor_free(algo->target_q->weight);
-    tensor_free(algo->target_q->bias);
-    free(algo->q);
-    free(algo->target_q);
+    tensor_free(algo->adv->weight);
+    tensor_free(algo->adv->bias);
+    tensor_free(algo->val->weight);
+    tensor_free(algo->val->bias);
+    tensor_free(algo->target_adv->weight);
+    tensor_free(algo->target_adv->bias);
+    tensor_free(algo->target_val->weight);
+    tensor_free(algo->target_val->bias);
+    free(algo->adv);
+    free(algo->val);
+    free(algo->target_adv);
+    free(algo->target_val);
+    free(algo->support);
     free(algo);
 }
 
 static void rainbow_save(void *ctx, const char *path) {
     tfrl_rainbow_algo *algo = (tfrl_rainbow_algo *)ctx;
     if (!algo) return;
-    save_linear(algo->q, path, "q");
+    save_linear(algo->adv, path, "adv");
+    save_linear(algo->val, path, "val");
 }
 
 static const tfrl_algo_vtable RAINBOW_VTABLE = {
@@ -466,21 +564,45 @@ tfrl_algo tfrl_algo_rainbow_create(const tfrl_algo_config *cfg) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }
     int input_dim = algo->obs_type == TFRL_SPACE_BOX ? algo->obs_dim : algo->obs_n;
-    algo->q = linear_create(input_dim, algo->action_n);
-    algo->target_q = linear_create(input_dim, algo->action_n);
-    if (!algo->q || !algo->target_q) {
+    algo->atoms = cfg->c51_atoms > 0 ? cfg->c51_atoms : 51;
+    algo->v_min = cfg->c51_vmin;
+    algo->v_max = cfg->c51_vmax;
+    if (algo->v_max <= algo->v_min) {
+        algo->v_min = -10.0f;
+        algo->v_max = 10.0f;
+    }
+    algo->delta_z = (algo->v_max - algo->v_min) / (float)(algo->atoms - 1);
+    algo->support = (float *)calloc((size_t)algo->atoms, sizeof(float));
+    if (!algo->support) {
         rainbow_destroy(algo);
         return out;
     }
-    init_linear(algo->q);
-    init_linear(algo->target_q);
-    copy_linear(algo->target_q, algo->q);
-    if (cfg->load_path) {
-        load_linear(algo->q, cfg->load_path, "q");
-        copy_linear(algo->target_q, algo->q);
+    for (int i = 0; i < algo->atoms; i++) {
+        algo->support[i] = algo->v_min + (float)i * algo->delta_z;
     }
-    Tensor *params[2] = {algo->q->weight, algo->q->bias};
-    algo->opt = adam_create(params, 2, cfg->lr > 0.0f ? cfg->lr : 0.001f, 0.9f, 0.999f, 1e-8f, 0.0f);
+    int out_dim = algo->action_n * algo->atoms;
+    algo->adv = linear_create(input_dim, out_dim);
+    algo->val = linear_create(input_dim, out_dim);
+    algo->target_adv = linear_create(input_dim, out_dim);
+    algo->target_val = linear_create(input_dim, out_dim);
+    if (!algo->adv || !algo->val || !algo->target_adv || !algo->target_val) {
+        rainbow_destroy(algo);
+        return out;
+    }
+    init_linear(algo->adv);
+    init_linear(algo->val);
+    init_linear(algo->target_adv);
+    init_linear(algo->target_val);
+    copy_linear(algo->target_adv, algo->adv);
+    copy_linear(algo->target_val, algo->val);
+    if (cfg->load_path) {
+        load_linear(algo->adv, cfg->load_path, "adv");
+        load_linear(algo->val, cfg->load_path, "val");
+        copy_linear(algo->target_adv, algo->adv);
+        copy_linear(algo->target_val, algo->val);
+    }
+    Tensor *params[4] = {algo->adv->weight, algo->adv->bias, algo->val->weight, algo->val->bias};
+    algo->opt = adam_create(params, 4, cfg->lr > 0.0f ? cfg->lr : 0.001f, 0.9f, 0.999f, 1e-8f, 0.0f);
     if (!algo->opt) {
         rainbow_destroy(algo);
         return out;

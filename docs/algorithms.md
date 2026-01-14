@@ -24,6 +24,9 @@ Flags:
 - `--batch-size`
 - `--per-alpha`
 - `--per-beta`
+- `--c51-atoms`
+- `--c51-vmin`
+- `--c51-vmax`
 - `--save PATH` / `--load PATH`
 
 ## Random
@@ -34,9 +37,9 @@ Baseline random policy (supports discrete and box actions).
 ./build/tinyfin-rl train --algo random --steps 2000
 ```
 
-## Rainbow DQN (Minimal)
+## Rainbow DQN (C51 + Dueling)
 
-Rainbow-style DQN with n-step returns and a target network.
+Rainbow DQN with n-step returns, dueling heads, and C51-style categorical support.
 
 ```bash
 ./build/tinyfin-rl train --algo rainbow --steps 2000
@@ -70,6 +73,27 @@ Flags:
 - `--batch-size`
 - `--per-alpha`
 - `--per-beta`
+- `--save PATH` / `--load PATH`
+
+## IQN (Minimal)
+
+Implicit quantile regression with sampled taus appended to the input features.
+
+```bash
+./build/tinyfin-rl train --algo iqn --steps 2000
+```
+
+Flags:
+
+- `--gamma`
+- `--lr`
+- `--epsilon`
+- `--replay-size`
+- `--batch-size`
+- `--per-alpha`
+- `--per-beta`
+- `--iqn-quantiles`
+- `--iqn-tau-samples`
 - `--save PATH` / `--load PATH`
 
 ## MCTS (Planner)
@@ -114,6 +138,15 @@ Advantage actor-critic with a shared optimizer for policy + value heads.
 
 ```bash
 ./build/tinyfin-rl train --algo a2c --steps 2000 --steps-per-batch 64 --entropy-coef 0.01
+```
+
+## A3C (Async, Minimal)
+
+Async actor-critic with a shared optimizer guarded by a mutex. Uses multiple envs (`--envs`) to drive concurrent updates.
+Rendering and trace output are disabled in async mode.
+
+```bash
+./build/tinyfin-rl train --algo a3c --steps 2000 --envs 4 --steps-per-batch 64 --entropy-coef 0.01
 ```
 
 ## TRPO (KL-Penalty, Minimal)
@@ -164,14 +197,24 @@ V-trace corrections over on-policy rollouts (single-process).
 ./build/tinyfin-rl train --algo impala --steps 2000 --steps-per-batch 64 --clip-eps 1.0
 ```
 
+To run with an async actor/learner split:
+
+```bash
+./build/tinyfin-rl train --algo impala --steps 2000 --actor-count 4 --queue-capacity 1024
+```
+
+Rendering and trace output are disabled when using the split runner.
+
 Checkpoint format:
 
 - DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
-- Rainbow DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
+- Rainbow DQN: `PATH.adv.w.tensor`, `PATH.adv.b.tensor`, `PATH.val.w.tensor`, `PATH.val.b.tensor`
 - QR-DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
+- IQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
 - REINFORCE: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`
 - PPO: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
 - A2C: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
+- A3C: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
 - TRPO: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
 - SAC: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
 - TD3: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
