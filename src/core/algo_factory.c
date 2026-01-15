@@ -32,6 +32,9 @@ typedef struct {
     float gae_lambda;
     int replay_size;
     int batch_size;
+    int train_every;
+    int learning_starts;
+    int grad_steps;
     float per_alpha;
     float per_beta;
     int mcts_sims;
@@ -57,6 +60,9 @@ static const tfrl_algo_schema ALGO_SCHEMA_DEFAULT = {
     .gae_lambda = 0.95f,
     .replay_size = 1000,
     .batch_size = 32,
+    .train_every = 1,
+    .learning_starts = 0,
+    .grad_steps = 1,
     .per_alpha = 0.0f,
     .per_beta = 0.4f,
     .mcts_sims = 200,
@@ -133,6 +139,15 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (float_unset_positive(cfg->gae_lambda)) cfg->gae_lambda = schema->gae_lambda;
     if (int_unset_nonneg(cfg->replay_size)) cfg->replay_size = schema->replay_size;
     if (int_unset_nonneg(cfg->batch_size)) cfg->batch_size = schema->batch_size;
+    if (int_unset_positive(cfg->train_every)) {
+        cfg->train_every = schema->train_every > 0 ? schema->train_every : ALGO_SCHEMA_DEFAULT.train_every;
+    }
+    if (int_unset_nonneg(cfg->learning_starts)) {
+        cfg->learning_starts = schema->learning_starts >= 0 ? schema->learning_starts : ALGO_SCHEMA_DEFAULT.learning_starts;
+    }
+    if (int_unset_positive(cfg->grad_steps)) {
+        cfg->grad_steps = schema->grad_steps > 0 ? schema->grad_steps : ALGO_SCHEMA_DEFAULT.grad_steps;
+    }
     if (float_unset_nonneg(cfg->per_alpha)) cfg->per_alpha = schema->per_alpha;
     if (float_unset_nonneg(cfg->per_beta)) cfg->per_beta = schema->per_beta;
     if (int_unset_positive(cfg->mcts_sims)) cfg->mcts_sims = schema->mcts_sims;
@@ -152,7 +167,7 @@ static void log_algo_config(const tfrl_algo_config *cfg) {
     if (!cfg) return;
     fprintf(stdout,
             "algo_config name=%s defaults=v%d gamma=%.3f lr=%.6f epsilon=%.3f entropy=%.3f clip_eps=%.3f kl_target=%.3f "
-            "gae_lambda=%.3f replay=%d batch=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d c51_atoms=%d c51_vmin=%.3f c51_vmax=%.3f iqn_quantiles=%d iqn_tau_samples=%d mcts_sims=%d mcts_depth=%d seed=%d deterministic=%d\n",
+            "gae_lambda=%.3f replay=%d batch=%d train_every=%d learning_starts=%d grad_steps=%d per_alpha=%.3f per_beta=%.3f steps_per_batch=%d epochs=%d c51_atoms=%d c51_vmin=%.3f c51_vmax=%.3f iqn_quantiles=%d iqn_tau_samples=%d mcts_sims=%d mcts_depth=%d seed=%d deterministic=%d\n",
             cfg->name ? cfg->name : "null",
             cfg->defaults_version,
             cfg->gamma,
@@ -164,6 +179,9 @@ static void log_algo_config(const tfrl_algo_config *cfg) {
             cfg->gae_lambda,
             cfg->replay_size,
             cfg->batch_size,
+            cfg->train_every,
+            cfg->learning_starts,
+            cfg->grad_steps,
             cfg->per_alpha,
             cfg->per_beta,
             cfg->steps_per_batch,
@@ -235,6 +253,9 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
             return 0;
         }
         if (!require_positive("batch_size", cfg->batch_size)) return 0;
+        if (!require_positive("train_every", cfg->train_every)) return 0;
+        if (!require_nonneg("learning_starts", cfg->learning_starts)) return 0;
+        if (!require_positive("grad_steps", cfg->grad_steps)) return 0;
         if ((strcmp(cfg->name, "rainbow") == 0) && !require_positive("c51_atoms", cfg->c51_atoms)) return 0;
         if ((strcmp(cfg->name, "rainbow") == 0) && !(cfg->c51_vmax > cfg->c51_vmin)) {
             fprintf(stderr, "invalid c51 support: vmin=%.3f vmax=%.3f\n", cfg->c51_vmin, cfg->c51_vmax);
@@ -244,6 +265,9 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
         if ((strcmp(cfg->name, "iqn") == 0) && !require_positive("iqn_tau_samples", cfg->iqn_tau_samples)) return 0;
     } else if (strcmp(cfg->name, "sac") == 0 || strcmp(cfg->name, "td3") == 0) {
         if (!require_positive("batch_size", cfg->batch_size)) return 0;
+        if (!require_positive("train_every", cfg->train_every)) return 0;
+        if (!require_nonneg("learning_starts", cfg->learning_starts)) return 0;
+        if (!require_positive("grad_steps", cfg->grad_steps)) return 0;
     } else if (strcmp(cfg->name, "mcts") == 0) {
         if (!require_discrete("mcts", cfg)) return 0;
         if (!require_positive("mcts_sims", cfg->mcts_sims)) return 0;

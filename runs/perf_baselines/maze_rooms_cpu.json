@@ -1,0 +1,19 @@
+{
+  "algo": "dqn",
+  "env": "maze_rooms",
+  "backend": "cpu",
+  "device": "cpu",
+  "steps": 200,
+  "envs": 16,
+  "agents": 1,
+  "threads": 4,
+  "episodes": 16,
+  "avg_return": -2.000000,
+  "elapsed_seconds": 10.428907,
+  "env_seconds": 2.384403,
+  "update_seconds": 8.002297,
+  "render_seconds": 0.000000,
+  "other_seconds": 0.042207,
+  "steps_per_sec": 19.177465,
+  "samples_per_sec": 306.839444
+}

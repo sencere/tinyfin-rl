@@ -35,6 +35,9 @@ typedef struct {
     float gae_lambda;
     int replay_size;
     int batch_size;
+    int train_every;
+    int learning_starts;
+    int grad_steps;
     float per_alpha;
     float per_beta;
     int mcts_sims;

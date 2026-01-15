@@ -48,9 +48,13 @@ typedef struct {
     float action_high;
     float gamma;
     int batch_size;
+    int train_every;
+    int learning_starts;
+    int grad_steps;
     float per_alpha;
     float per_beta;
     int step_count;
+    int update_count;
     int seed;
     int deterministic;
     unsigned int rng_state;
@@ -265,27 +269,34 @@ static tfrl_action td3_act(void *ctx, tfrl_obs obs) {
 static void td3_update(void *ctx, const tfrl_transition *transition) {
     tfrl_td3_algo *algo = (tfrl_td3_algo *)ctx;
     if (!transition) return;
+    algo->step_count++;
+    int step_id = algo->step_count;
 
     if (algo->replay) {
         tfrl_replay_push(algo->replay, transition, 1.0f);
         if (tfrl_replay_size(algo->replay) < algo->batch_size) return;
+        if (step_id < algo->learning_starts) return;
+        if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
 
-        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-        if (!idx || !weights) {
-            free(idx);
-            free(weights);
-            return;
-        }
-        if (algo->deterministic) {
-            tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta, (unsigned int)(algo->seed + algo->step_count));
-        } else {
-            tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
-        }
+        for (int g = 0; g < algo->grad_steps; g++) {
+            int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+            float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+            if (!idx || !weights) {
+                free(idx);
+                free(weights);
+                return;
+            }
+            if (algo->deterministic) {
+                tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
+                                                 (unsigned int)(algo->seed + step_id + g));
+            } else {
+                tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+            }
 
-        Tensor *q_loss_sum = NULL;
-        Tensor *policy_loss_sum = NULL;
-        for (int i = 0; i < algo->batch_size; i++) {
+            int update_id = algo->update_count + 1;
+            Tensor *q_loss_sum = NULL;
+            Tensor *policy_loss_sum = NULL;
+            for (int i = 0; i < algo->batch_size; i++) {
             const tfrl_transition *tr = tfrl_replay_get(algo->replay, idx[i]);
             if (!tr) continue;
 
@@ -407,7 +418,7 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                 q_loss_sum = tmp;
             }
 
-            if (algo->step_count % TD3_POLICY_DELAY == 0) {
+            if (update_id % TD3_POLICY_DELAY == 0) {
                 Tensor *policy_loss = NULL;
                 if (algo->action_type == TFRL_SPACE_BOX) {
                     Tensor *pi_logits = linear_forward(algo->policy, x);
@@ -490,26 +501,27 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(x);
         }
 
-        if (q_loss_sum) {
-            adam_zero_grad(algo->q_opt);
-            tensor_backward(q_loss_sum);
-            adam_step(algo->q_opt, 0.0f);
-            tensor_free(q_loss_sum);
-        }
-        if (policy_loss_sum) {
-            adam_zero_grad(algo->policy_opt);
-            tensor_backward(policy_loss_sum);
-            adam_step(algo->policy_opt, 0.0f);
-            tensor_free(policy_loss_sum);
-        }
+            if (q_loss_sum) {
+                adam_zero_grad(algo->q_opt);
+                tensor_backward(q_loss_sum);
+                adam_step(algo->q_opt, 0.0f);
+                tensor_free(q_loss_sum);
+            }
+            if (policy_loss_sum) {
+                adam_zero_grad(algo->policy_opt);
+                tensor_backward(policy_loss_sum);
+                adam_step(algo->policy_opt, 0.0f);
+                tensor_free(policy_loss_sum);
+            }
 
-        free(idx);
-        free(weights);
-        algo->step_count++;
-        if (algo->step_count % TD3_TARGET_UPDATE == 0) {
-            copy_linear(algo->tpolicy, algo->policy);
-            copy_linear(algo->tq1, algo->q1);
-            copy_linear(algo->tq2, algo->q2);
+            free(idx);
+            free(weights);
+            algo->update_count++;
+            if (update_id % TD3_TARGET_UPDATE == 0) {
+                copy_linear(algo->tpolicy, algo->policy);
+                copy_linear(algo->tq1, algo->q1);
+                copy_linear(algo->tq2, algo->q2);
+            }
         }
         return;
     }
@@ -627,8 +639,9 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
     tensor_free(q2_val);
     tensor_free(q1_val);
 
-    algo->step_count++;
-    if (algo->step_count % TD3_POLICY_DELAY == 0) {
+    int update_id = algo->update_count + 1;
+    algo->update_count++;
+    if (update_id % TD3_POLICY_DELAY == 0) {
         if (algo->action_type == TFRL_SPACE_BOX) {
             Tensor *pi_logits = linear_forward(algo->policy, x);
             Tensor *pi_action = tensor_tanh(pi_logits);
@@ -695,7 +708,7 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
     tensor_free(x_next);
     tensor_free(x);
 
-    if (algo->step_count % TD3_TARGET_UPDATE == 0) {
+    if (update_id % TD3_TARGET_UPDATE == 0) {
         copy_linear(algo->tpolicy, algo->policy);
         copy_linear(algo->tq1, algo->q1);
         copy_linear(algo->tq2, algo->q2);
@@ -761,6 +774,9 @@ tfrl_algo tfrl_algo_td3_create(const tfrl_algo_config *cfg) {
     algo->action_high = (float)cfg->action_high;
     algo->gamma = cfg->gamma > 0.0f ? cfg->gamma : 0.99f;
     algo->batch_size = cfg->batch_size > 0 ? cfg->batch_size : 32;
+    algo->train_every = cfg->train_every > 0 ? cfg->train_every : 1;
+    algo->learning_starts = cfg->learning_starts > 0 ? cfg->learning_starts : 0;
+    algo->grad_steps = cfg->grad_steps > 0 ? cfg->grad_steps : 1;
     algo->per_alpha = cfg->per_alpha;
     algo->per_beta = cfg->per_beta;
     algo->seed = cfg->seed;

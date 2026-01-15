@@ -173,6 +173,33 @@ Vectorized stepping, threaded stepping, a benchmark script, and DQN batched infe
 
 ---
 
+## 5.1 — Training Speed & Profiling (Next)
+
+### Scope
+- Identify and eliminate training bottlenecks (env step, update, render, data movement)
+- Improve SPS/steps-per-second on CPU and CUDA backends
+- Keep perf gains measurable and regression-tested
+
+### Key Deliverables
+- Built-in profiler breakdown in training loop (env/update/render/other) with CLI toggle
+- Lightweight profiling report dumped to stdout or JSON
+- Performance baselines for `maze_rooms` and `lineworld` (CPU + CUDA)
+- Clear guidance on tuning knobs (`--envs`, `--threads`, `--train-every`, `--batch-size`)
+
+### Candidate Improvements
+- Reduce update frequency and/or batch updates (learner batch)
+- Avoid per-step allocations in DQN update path
+- Tighten data movement between Tinyfin and runner (device residency)
+- Optional BLAS backend for CPU matmul when CUDA is not used
+
+**Result:**  
+Training runs are measurably faster and profiling highlights bottlenecks.
+
+**Update:**  
+IMPALA telemetry now reports queue depth, SPS, and update time; multiprocess DQN actors are available with shared-memory queues.
+
+---
+
 ## 6 — Usability & Reliability (Done)
 
 ### Scope

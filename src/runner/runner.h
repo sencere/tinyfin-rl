@@ -28,6 +28,9 @@ typedef struct {
     float gae_lambda;
     int replay_size;
     int batch_size;
+    int train_every;
+    int learning_starts;
+    int grad_steps;
     float per_alpha;
     float per_beta;
     int mcts_sims;
@@ -47,6 +50,8 @@ typedef struct {
     const char *trace_out;
     const char *trace_in;
     int dump_meta_json;
+    int profile;
+    const char *profile_json;
     int actor_count;
     int learner_batch;
     int queue_capacity;
@@ -58,6 +63,10 @@ typedef struct {
     const char *device;
     int agents_expected;
     int share_policy;
+    int mp_actors;
+    int mp_queue;
+    int mp_sync_every;
+    const char *mp_sync_path;
 } tfrl_runner_config;
 
 int tfrl_runner_run(const tfrl_runner_config *cfg);

@@ -68,7 +68,7 @@ endif
 $(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -Isrc $(VIEWER_INC) \
 		-o $@ $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) \
-		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) $(VIEWER_LIBS) -lpthread -lm
+		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) $(VIEWER_LIBS) -lpthread -lm -lrt
 
 $(ENV_LIB): src/core/env_example.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $<

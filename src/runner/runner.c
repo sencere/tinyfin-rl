@@ -1,10 +1,16 @@
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
+#include <signal.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "runner/runner.h"
@@ -86,6 +92,207 @@ static double now_seconds(void) {
     return (double)tv.tv_sec + (double)tv.tv_usec / 1e6;
 }
 
+static void fill_algo_config(tfrl_algo_config *out,
+                             const tfrl_runner_config *cfg,
+                             const tfrl_env_spec *spec,
+                             int seed,
+                             const char *load_path) {
+    if (!out || !cfg || !spec) return;
+    *out = (tfrl_algo_config){
+        .name = cfg->algo ? cfg->algo : "dqn",
+        .obs_n = spec->obs_n,
+        .action_n = spec->action_n,
+        .obs_type = spec->obs_type,
+        .action_type = spec->action_type,
+        .obs_dims = spec->obs_dims,
+        .action_dims = spec->action_dims,
+        .obs_shape = {spec->obs_shape[0], spec->obs_shape[1]},
+        .action_shape = {spec->action_shape[0], spec->action_shape[1]},
+        .obs_dtype = spec->obs_dtype,
+        .action_dtype = spec->action_dtype,
+        .obs_low = spec->obs_low,
+        .obs_high = spec->obs_high,
+        .action_low = spec->action_low,
+        .action_high = spec->action_high,
+        .gamma = cfg->gamma,
+        .lr = cfg->lr,
+        .epsilon = cfg->mode == TFRL_MODE_TRAIN ? cfg->epsilon : 0.0f,
+        .entropy_coef = cfg->entropy_coef,
+        .clip_eps = cfg->clip_eps,
+        .kl_target = cfg->kl_target,
+        .gae_lambda = cfg->gae_lambda,
+        .replay_size = cfg->replay_size,
+        .batch_size = cfg->batch_size,
+        .train_every = cfg->train_every,
+        .learning_starts = cfg->learning_starts,
+        .grad_steps = cfg->grad_steps,
+        .per_alpha = cfg->per_alpha,
+        .per_beta = cfg->per_beta,
+        .mcts_sims = cfg->mcts_sims,
+        .mcts_depth = cfg->mcts_depth,
+        .steps_per_batch = cfg->steps_per_batch,
+        .epochs = cfg->epochs,
+        .c51_atoms = cfg->c51_atoms,
+        .c51_vmin = cfg->c51_vmin,
+        .c51_vmax = cfg->c51_vmax,
+        .iqn_quantiles = cfg->iqn_quantiles,
+        .iqn_tau_samples = cfg->iqn_tau_samples,
+        .save_path = cfg->save_path,
+        .load_path = load_path,
+        .env_name = cfg->env_name,
+        .seed = seed,
+        .deterministic = cfg->deterministic,
+    };
+}
+
+typedef struct {
+    pthread_mutex_t lock;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    pthread_mutex_t step_lock;
+    int total_steps;
+    int steps_done;
+    int capacity;
+    int head;
+    int tail;
+    int count;
+    int closed;
+    tfrl_transition items[];
+} tfrl_mp_queue;
+
+static size_t mp_queue_bytes(int capacity) {
+    return sizeof(tfrl_mp_queue) + sizeof(tfrl_transition) * (size_t)capacity;
+}
+
+static tfrl_mp_queue *mp_queue_create(int capacity, int total_steps, char *name_out, size_t name_len, int *fd_out) {
+    if (capacity <= 0 || !name_out || name_len == 0 || !fd_out) return NULL;
+    snprintf(name_out, name_len, "/tfrl_mpq_%ld_%u", (long)getpid(), (unsigned)rand());
+    int fd = shm_open(name_out, O_CREAT | O_EXCL | O_RDWR, 0600);
+    if (fd < 0) return NULL;
+    size_t bytes = mp_queue_bytes(capacity);
+    if (ftruncate(fd, (off_t)bytes) != 0) {
+        close(fd);
+        shm_unlink(name_out);
+        return NULL;
+    }
+    void *mem = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mem == MAP_FAILED) {
+        close(fd);
+        shm_unlink(name_out);
+        return NULL;
+    }
+    tfrl_mp_queue *q = (tfrl_mp_queue *)mem;
+    memset(q, 0, bytes);
+    q->capacity = capacity;
+    q->total_steps = total_steps;
+    q->steps_done = 0;
+    q->closed = 0;
+
+    pthread_mutexattr_t mattr;
+    pthread_condattr_t cattr;
+    pthread_mutexattr_init(&mattr);
+    pthread_condattr_init(&cattr);
+    pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+    pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+    pthread_mutex_init(&q->lock, &mattr);
+    pthread_mutex_init(&q->step_lock, &mattr);
+    pthread_cond_init(&q->not_empty, &cattr);
+    pthread_cond_init(&q->not_full, &cattr);
+    pthread_mutexattr_destroy(&mattr);
+    pthread_condattr_destroy(&cattr);
+
+    *fd_out = fd;
+    return q;
+}
+
+static void mp_queue_close(tfrl_mp_queue *q) {
+    if (!q) return;
+    pthread_mutex_lock(&q->lock);
+    q->closed = 1;
+    pthread_cond_broadcast(&q->not_empty);
+    pthread_cond_broadcast(&q->not_full);
+    pthread_mutex_unlock(&q->lock);
+}
+
+static void mp_queue_destroy(tfrl_mp_queue *q, const char *name, int fd) {
+    if (!q) return;
+    size_t bytes = mp_queue_bytes(q->capacity);
+    pthread_mutex_destroy(&q->lock);
+    pthread_mutex_destroy(&q->step_lock);
+    pthread_cond_destroy(&q->not_empty);
+    pthread_cond_destroy(&q->not_full);
+    munmap(q, bytes);
+    if (fd >= 0) close(fd);
+    if (name && name[0]) shm_unlink(name);
+}
+
+static int mp_queue_next_step(tfrl_mp_queue *q) {
+    int step = -1;
+    if (!q) return -1;
+    pthread_mutex_lock(&q->step_lock);
+    if (q->steps_done < q->total_steps) {
+        step = q->steps_done;
+        q->steps_done++;
+    }
+    pthread_mutex_unlock(&q->step_lock);
+    return step;
+}
+
+static int mp_queue_push(tfrl_mp_queue *q, const tfrl_transition *tr) {
+    if (!q || !tr) return 0;
+    pthread_mutex_lock(&q->lock);
+    while (!q->closed && q->count >= q->capacity) {
+        pthread_cond_wait(&q->not_full, &q->lock);
+    }
+    if (q->closed) {
+        pthread_mutex_unlock(&q->lock);
+        return 0;
+    }
+    q->items[q->tail] = *tr;
+    q->tail = (q->tail + 1) % q->capacity;
+    q->count++;
+    pthread_cond_signal(&q->not_empty);
+    pthread_mutex_unlock(&q->lock);
+    return 1;
+}
+
+static int mp_queue_pop(tfrl_mp_queue *q, tfrl_transition *out) {
+    if (!q || !out) return 0;
+    pthread_mutex_lock(&q->lock);
+    while (!q->closed && q->count == 0) {
+        pthread_cond_wait(&q->not_empty, &q->lock);
+    }
+    if (q->count == 0 && q->closed) {
+        pthread_mutex_unlock(&q->lock);
+        return 0;
+    }
+    *out = q->items[q->head];
+    q->head = (q->head + 1) % q->capacity;
+    q->count--;
+    pthread_cond_signal(&q->not_full);
+    pthread_mutex_unlock(&q->lock);
+    return 1;
+}
+
+static int sync_available(const char *path) {
+    if (!path || !path[0]) return 0;
+    char probe[256];
+    snprintf(probe, sizeof(probe), "%s.q.w.tensor", path);
+    return access(probe, R_OK) == 0;
+}
+
+static void ensure_parent_dir(const char *path) {
+    if (!path) return;
+    const char *slash = strrchr(path, '/');
+    if (!slash || slash == path) return;
+    size_t len = (size_t)(slash - path);
+    if (len >= 256) return;
+    char dir[256];
+    memcpy(dir, path, len);
+    dir[len] = '\0';
+    mkdir(dir, 0755);
+}
+
 static int dashboard_enabled(void) {
     const char *env = getenv("TFRL_DASHBOARD");
     if (env && strcmp(env, "0") == 0) return 0;
@@ -144,6 +351,52 @@ static void dashboard_render(const tfrl_runner_config *cfg,
             cfg->backend ? cfg->backend : "cpu",
             cfg->device ? cfg->device : "cpu");
     fflush(stdout);
+}
+
+static void profile_write_json(const tfrl_runner_config *cfg,
+                               const char *path,
+                               int steps,
+                               int env_count,
+                               int agent_count,
+                               int total_episodes,
+                               double total_return_sum,
+                               double elapsed_seconds,
+                               double env_seconds,
+                               double update_seconds,
+                               double render_seconds) {
+    if (!path || !path[0]) return;
+    FILE *fp = fopen(path, "w");
+    if (!fp) {
+        fprintf(stderr, "profile: failed to write '%s': %s\n", path, strerror(errno));
+        return;
+    }
+    long long total_env_steps = (long long)steps * env_count * agent_count;
+    double steps_per_sec = elapsed_seconds > 0.0 ? (double)steps / elapsed_seconds : 0.0;
+    double samples_per_sec = elapsed_seconds > 0.0 ? (double)total_env_steps / elapsed_seconds : 0.0;
+    double avg_return = total_episodes > 0 ? total_return_sum / (double)total_episodes : 0.0;
+    double other = elapsed_seconds - env_seconds - update_seconds - render_seconds;
+    if (other < 0.0) other = 0.0;
+
+    fprintf(fp, "{\n");
+    fprintf(fp, "  \"algo\": \"%s\",\n", cfg->algo ? cfg->algo : "dqn");
+    fprintf(fp, "  \"env\": \"%s\",\n", cfg->env_name ? cfg->env_name : "maze_rooms");
+    fprintf(fp, "  \"backend\": \"%s\",\n", cfg->backend ? cfg->backend : "cpu");
+    fprintf(fp, "  \"device\": \"%s\",\n", cfg->device ? cfg->device : "cpu");
+    fprintf(fp, "  \"steps\": %d,\n", steps);
+    fprintf(fp, "  \"envs\": %d,\n", env_count);
+    fprintf(fp, "  \"agents\": %d,\n", agent_count);
+    fprintf(fp, "  \"threads\": %d,\n", cfg->threads > 0 ? cfg->threads : env_count);
+    fprintf(fp, "  \"episodes\": %d,\n", total_episodes);
+    fprintf(fp, "  \"avg_return\": %.6f,\n", avg_return);
+    fprintf(fp, "  \"elapsed_seconds\": %.6f,\n", elapsed_seconds);
+    fprintf(fp, "  \"env_seconds\": %.6f,\n", env_seconds);
+    fprintf(fp, "  \"update_seconds\": %.6f,\n", update_seconds);
+    fprintf(fp, "  \"render_seconds\": %.6f,\n", render_seconds);
+    fprintf(fp, "  \"other_seconds\": %.6f,\n", other);
+    fprintf(fp, "  \"steps_per_sec\": %.6f,\n", steps_per_sec);
+    fprintf(fp, "  \"samples_per_sec\": %.6f\n", samples_per_sec);
+    fprintf(fp, "}\n");
+    fclose(fp);
 }
 
 static void json_write_string(FILE *out, const char *s, size_t len) {
@@ -341,6 +594,9 @@ typedef struct {
     int head;
     int tail;
     int count;
+    int max_count;
+    long long push_count;
+    long long pop_count;
     int closed;
     pthread_mutex_t lock;
     pthread_cond_t not_empty;
@@ -355,6 +611,9 @@ static int queue_init(tfrl_transition_queue *q, int capacity) {
     q->head = 0;
     q->tail = 0;
     q->count = 0;
+    q->max_count = 0;
+    q->push_count = 0;
+    q->pop_count = 0;
     q->closed = 0;
     pthread_mutex_init(&q->lock, NULL);
     pthread_cond_init(&q->not_empty, NULL);
@@ -391,6 +650,8 @@ static int queue_push(tfrl_transition_queue *q, const tfrl_transition *tr) {
     q->items[q->tail] = *tr;
     q->tail = (q->tail + 1) % q->capacity;
     q->count++;
+    if (q->count > q->max_count) q->max_count = q->count;
+    q->push_count++;
     pthread_cond_signal(&q->not_empty);
     pthread_mutex_unlock(&q->lock);
     return 1;
@@ -408,9 +669,29 @@ static int queue_pop(tfrl_transition_queue *q, tfrl_transition *out) {
     *out = q->items[q->head];
     q->head = (q->head + 1) % q->capacity;
     q->count--;
+    q->pop_count++;
     pthread_cond_signal(&q->not_full);
     pthread_mutex_unlock(&q->lock);
     return 1;
+}
+
+typedef struct {
+    int count;
+    int max_count;
+    long long push_count;
+    long long pop_count;
+} tfrl_queue_stats;
+
+static tfrl_queue_stats queue_stats(const tfrl_transition_queue *q) {
+    tfrl_queue_stats stats = {0};
+    if (!q) return stats;
+    pthread_mutex_lock((pthread_mutex_t *)&q->lock);
+    stats.count = q->count;
+    stats.max_count = q->max_count;
+    stats.push_count = q->push_count;
+    stats.pop_count = q->pop_count;
+    pthread_mutex_unlock((pthread_mutex_t *)&q->lock);
+    return stats;
 }
 
 static void *a3c_worker_main(void *arg) {
@@ -533,6 +814,11 @@ typedef struct {
     int total_steps;
     pthread_mutex_t *policy_lock;
     int learner_batch;
+    int log_every;
+    int profile;
+    double start_time;
+    double update_seconds;
+    int processed;
 } tfrl_impala_learner;
 
 static void *impala_learner_main(void *arg) {
@@ -540,15 +826,29 @@ static void *impala_learner_main(void *arg) {
     int processed = 0;
     tfrl_transition tr;
     int batch = learner->learner_batch > 0 ? learner->learner_batch : 1;
+    learner->start_time = now_seconds();
+    learner->update_seconds = 0.0;
     while (processed < learner->total_steps) {
         for (int i = 0; i < batch && processed < learner->total_steps; i++) {
             if (!queue_pop(learner->queue, &tr)) return NULL;
+            double t0 = now_seconds();
             pthread_mutex_lock(learner->policy_lock);
             learner->algo->vtable->update(learner->algo->ctx, &tr);
             pthread_mutex_unlock(learner->policy_lock);
+            learner->update_seconds += now_seconds() - t0;
             processed++;
+            if (learner->log_every > 0 && (processed % learner->log_every) == 0) {
+                double elapsed = now_seconds() - learner->start_time;
+                double sps = elapsed > 0.0 ? (double)processed / elapsed : 0.0;
+                tfrl_queue_stats stats = queue_stats(learner->queue);
+                fprintf(stdout,
+                        "impala: steps=%d sps=%.1f queue=%d/%d push=%lld pop=%lld update=%.2fs\n",
+                        processed, sps, stats.count, stats.max_count, stats.push_count, stats.pop_count,
+                        learner->update_seconds);
+            }
         }
     }
+    learner->processed = processed;
     return NULL;
 }
 
@@ -597,6 +897,8 @@ static int run_impala_split(const tfrl_runner_config *cfg,
         .total_steps = total_steps,
         .policy_lock = &policy_lock,
         .learner_batch = cfg->learner_batch > 0 ? cfg->learner_batch : 1,
+        .log_every = cfg->log_every,
+        .profile = cfg->profile,
     };
     pthread_create(&learner_thread, NULL, impala_learner_main, &learner);
 
@@ -608,9 +910,190 @@ static int run_impala_split(const tfrl_runner_config *cfg,
 
     free(actors);
     free(actor_cfg);
+    if (cfg->profile) {
+        double elapsed = now_seconds() - learner.start_time;
+        double sps = elapsed > 0.0 ? (double)learner.processed / elapsed : 0.0;
+        tfrl_queue_stats stats = queue_stats(&queue);
+        fprintf(stdout,
+                "impala_profile: steps=%d elapsed=%.2fs sps=%.1f update=%.2fs queue_max=%d push=%lld pop=%lld\n",
+                learner.processed, elapsed, sps, learner.update_seconds, stats.max_count,
+                stats.push_count, stats.pop_count);
+    }
     queue_destroy(&queue);
     pthread_mutex_destroy(&step_lock);
     pthread_mutex_destroy(&policy_lock);
+    return 0;
+}
+
+typedef struct {
+    tfrl_runner_config cfg;
+    int actor_id;
+    int total_steps;
+    tfrl_mp_queue *queue;
+    const char *sync_path;
+    int sync_every;
+} tfrl_mp_actor;
+
+static int is_dqn_family(const char *name) {
+    if (!name) return 0;
+    return strcmp(name, "dqn") == 0 || strcmp(name, "rainbow") == 0 || strcmp(name, "qrdqn") == 0 || strcmp(name, "iqn") == 0;
+}
+
+static void mp_actor_main(const tfrl_mp_actor *actor) {
+    tfrl_env_config env_cfg = {.name = actor->cfg.env_name, .seed = (uint64_t)(actor->cfg.seed + actor->actor_id + 1)};
+    tfrl_env *env = tfrl_env_create(&env_cfg);
+    if (!env) _exit(1);
+    const tfrl_env_spec *spec = tfrl_env_get_spec(env);
+    if (!spec) {
+        tfrl_env_destroy(env);
+        _exit(1);
+    }
+    tfrl_obs obs = tfrl_env_reset(env, (uint64_t)(actor->cfg.seed + actor->actor_id + 1));
+    tfrl_algo algo = {0};
+    int loaded = 0;
+    while (1) {
+        int step_id = mp_queue_next_step(actor->queue);
+        if (step_id < 0) break;
+        if (actor->sync_every > 0 && (step_id % actor->sync_every) == 0 && sync_available(actor->sync_path)) {
+            tfrl_algo_destroy(&algo);
+            tfrl_algo_config algo_cfg;
+            fill_algo_config(&algo_cfg, &actor->cfg, spec, actor->cfg.seed, actor->sync_path);
+            tfrl_algo_config_apply_defaults(&algo_cfg);
+            algo = tfrl_algo_create(&algo_cfg, spec);
+            loaded = 1;
+        }
+        if (!algo.ctx) {
+            const char *load_path = loaded ? actor->sync_path : actor->cfg.load_path;
+            tfrl_algo_config algo_cfg;
+            fill_algo_config(&algo_cfg, &actor->cfg, spec, actor->cfg.seed, load_path);
+            tfrl_algo_config_apply_defaults(&algo_cfg);
+            algo = tfrl_algo_create(&algo_cfg, spec);
+        }
+        tfrl_action action = algo.vtable->act(algo.ctx, obs);
+        tfrl_step_result step = tfrl_env_step(env, action);
+        tfrl_transition transition = {
+            .obs = obs,
+            .action = action,
+            .reward = step.reward,
+            .next_obs = step.observation,
+            .done = step.done,
+        };
+        if (!mp_queue_push(actor->queue, &transition)) break;
+        obs = step.observation;
+        if (step.done) {
+            obs = tfrl_env_reset(env, (uint64_t)(actor->cfg.seed + actor->actor_id + 1));
+        }
+    }
+    tfrl_algo_destroy(&algo);
+    tfrl_env_destroy(env);
+    _exit(0);
+}
+
+static int run_mp_dqn(const tfrl_runner_config *cfg) {
+    if (!cfg || !is_dqn_family(cfg->algo)) {
+        fprintf(stderr, "mp mode only supports dqn/rainbow/qrdqn/iqn\n");
+        return 1;
+    }
+    if (cfg->render || cfg->trace_out) {
+        fprintf(stderr, "mp mode does not support render/trace; disable them.\n");
+        return 1;
+    }
+    tfrl_env_config env_cfg = {.name = cfg->env_name, .seed = (uint64_t)(cfg->seed)};
+    tfrl_env *env = tfrl_env_create(&env_cfg);
+    if (!env) {
+        fprintf(stderr, "env create failed\n");
+        return 1;
+    }
+    const tfrl_env_spec *spec = tfrl_env_get_spec(env);
+    int agent_count = tfrl_env_agent_count(env);
+    if (agent_count != 1) {
+        fprintf(stderr, "mp dqn requires single-agent env\n");
+        tfrl_env_destroy(env);
+        return 1;
+    }
+
+    int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
+    int actor_count = cfg->mp_actors > 0 ? cfg->mp_actors : 1;
+    int queue_capacity = cfg->mp_queue > 0 ? cfg->mp_queue : 65536;
+    const char *sync_path = cfg->mp_sync_path && cfg->mp_sync_path[0] ? cfg->mp_sync_path : "runs/mp_sync";
+    int sync_every = cfg->mp_sync_every > 0 ? cfg->mp_sync_every : 1000;
+    ensure_parent_dir(sync_path);
+
+    char shm_name[64] = {0};
+    int shm_fd = -1;
+    tfrl_mp_queue *queue = mp_queue_create(queue_capacity, total_steps, shm_name, sizeof(shm_name), &shm_fd);
+    if (!queue) {
+        fprintf(stderr, "mp queue init failed\n");
+        tfrl_env_destroy(env);
+        return 1;
+    }
+
+    tfrl_algo_config algo_cfg;
+    fill_algo_config(&algo_cfg, cfg, spec, cfg->seed, cfg->load_path);
+    tfrl_algo_config_apply_defaults(&algo_cfg);
+    tfrl_algo algo = tfrl_algo_create(&algo_cfg, spec);
+    if (!algo.ctx) {
+        mp_queue_destroy(queue, shm_name, shm_fd);
+        tfrl_env_destroy(env);
+        return 1;
+    }
+
+    pid_t *pids = (pid_t *)calloc((size_t)actor_count, sizeof(pid_t));
+    if (!pids) {
+        tfrl_algo_destroy(&algo);
+        mp_queue_destroy(queue, shm_name, shm_fd);
+        tfrl_env_destroy(env);
+        return 1;
+    }
+
+    for (int i = 0; i < actor_count; i++) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            tfrl_mp_actor actor = {
+                .cfg = *cfg,
+                .actor_id = i,
+                .total_steps = total_steps,
+                .queue = queue,
+                .sync_path = sync_path,
+                .sync_every = sync_every,
+            };
+            mp_actor_main(&actor);
+        }
+        if (pid < 0) {
+            fprintf(stderr, "fork failed\n");
+            mp_queue_close(queue);
+            for (int j = 0; j < i; j++) {
+                if (pids[j] > 0) kill(pids[j], SIGTERM);
+            }
+            free(pids);
+            tfrl_algo_destroy(&algo);
+            mp_queue_destroy(queue, shm_name, shm_fd);
+            tfrl_env_destroy(env);
+            return 1;
+        }
+        pids[i] = pid;
+    }
+
+    int processed = 0;
+    tfrl_transition tr;
+    while (processed < total_steps) {
+        if (!mp_queue_pop(queue, &tr)) break;
+        algo.vtable->update(algo.ctx, &tr);
+        processed++;
+        if (sync_every > 0 && (processed % sync_every) == 0) {
+            tfrl_algo_save(&algo, sync_path);
+        }
+    }
+
+    mp_queue_close(queue);
+    for (int i = 0; i < actor_count; i++) {
+        int status = 0;
+        waitpid(pids[i], &status, 0);
+    }
+    free(pids);
+    tfrl_algo_destroy(&algo);
+    mp_queue_destroy(queue, shm_name, shm_fd);
+    tfrl_env_destroy(env);
     return 0;
 }
 
@@ -725,48 +1208,8 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         free(envs);
         return 1;
     }
-    tfrl_algo_config algo_cfg = {
-        .name = cfg->algo ? cfg->algo : "dqn",
-        .obs_n = spec->obs_n,
-        .action_n = spec->action_n,
-        .obs_type = spec->obs_type,
-        .action_type = spec->action_type,
-        .obs_dims = spec->obs_dims,
-        .action_dims = spec->action_dims,
-        .obs_shape = {spec->obs_shape[0], spec->obs_shape[1]},
-        .action_shape = {spec->action_shape[0], spec->action_shape[1]},
-        .obs_dtype = spec->obs_dtype,
-        .action_dtype = spec->action_dtype,
-        .obs_low = spec->obs_low,
-        .obs_high = spec->obs_high,
-        .action_low = spec->action_low,
-        .action_high = spec->action_high,
-        .gamma = cfg->gamma,
-        .lr = cfg->lr,
-        .epsilon = cfg->mode == TFRL_MODE_TRAIN ? cfg->epsilon : 0.0f,
-        .entropy_coef = cfg->entropy_coef,
-        .clip_eps = cfg->clip_eps,
-        .kl_target = cfg->kl_target,
-        .gae_lambda = cfg->gae_lambda,
-        .replay_size = cfg->replay_size,
-        .batch_size = cfg->batch_size,
-        .per_alpha = cfg->per_alpha,
-        .per_beta = cfg->per_beta,
-        .mcts_sims = cfg->mcts_sims,
-        .mcts_depth = cfg->mcts_depth,
-        .steps_per_batch = cfg->steps_per_batch,
-        .epochs = cfg->epochs,
-        .c51_atoms = cfg->c51_atoms,
-        .c51_vmin = cfg->c51_vmin,
-        .c51_vmax = cfg->c51_vmax,
-        .iqn_quantiles = cfg->iqn_quantiles,
-        .iqn_tau_samples = cfg->iqn_tau_samples,
-        .save_path = cfg->save_path,
-        .load_path = cfg->load_path,
-        .env_name = cfg->env_name,
-        .seed = seed,
-        .deterministic = cfg->deterministic,
-    };
+    tfrl_algo_config algo_cfg;
+    fill_algo_config(&algo_cfg, cfg, spec, seed, cfg->load_path);
     tfrl_algo_config_apply_defaults(&algo_cfg);
     int policy_count = cfg->share_policy ? 1 : agent_count;
     tfrl_algo algos[policy_count];
@@ -922,12 +1365,20 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     }
 
     if (cfg->mode == TFRL_MODE_TRAIN) {
+        if (cfg->mp_actors > 0) {
+            for (int i = 0; i < env_count; i++) {
+                tfrl_env_destroy(envs[i]);
+            }
+            free(envs);
+            return run_mp_dqn(cfg);
+        }
         int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
         int thread_count = cfg->threads > 0 ? cfg->threads : env_count;
         if (cfg->deterministic) thread_count = 1;
         int use_dashboard = dashboard_enabled();
+        int use_profile = cfg->profile || (cfg->profile_json && cfg->profile_json[0]) || use_dashboard;
         int dashboard_every = cfg->log_every > 0 ? cfg->log_every : 100;
-        double start_time = now_seconds();
+        double start_time = use_profile ? now_seconds() : 0.0;
         double env_seconds = 0.0;
         double update_seconds = 0.0;
         double render_seconds = 0.0;
@@ -970,7 +1421,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 }
             }
             {
-                double t0 = now_seconds();
+                double t0 = use_profile ? now_seconds() : 0.0;
                 if (agent_count == 1) {
                     step_envs_threaded(envs, env_count, actions, steps, thread_count);
                 } else {
@@ -984,10 +1435,10 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                         }
                     }
                 }
-                env_seconds += now_seconds() - t0;
+                if (use_profile) env_seconds += now_seconds() - t0;
             }
             {
-                double t0 = now_seconds();
+                double t0 = use_profile ? now_seconds() : 0.0;
                 for (int i = 0; i < env_count; i++) {
                     for (int a = 0; a < agent_count; a++) {
                         int idx = i * agent_count + a;
@@ -1004,11 +1455,11 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                         episode_returns[idx] += steps[idx].reward;
                     }
                 }
-                update_seconds += now_seconds() - t0;
+                if (use_profile) update_seconds += now_seconds() - t0;
             }
 
             if ((viewer || writer) && should_render(step, cfg->render_every)) {
-                double t0 = now_seconds();
+                double t0 = use_profile ? now_seconds() : 0.0;
                 size_t written = tfrl_env_render_write(envs[render_idx], render_buf, render_buf_len);
                 if (writer && written > 0) {
                     tfrl_trace_writer_write(writer, render_buf, written);
@@ -1016,7 +1467,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 if (viewer && written > 0) {
                     tfrl_viewer_draw(viewer, render_buf, written);
                 }
-                render_seconds += now_seconds() - t0;
+                if (use_profile) render_seconds += now_seconds() - t0;
             }
 
             for (int i = 0; i < env_count; i++) {
@@ -1061,6 +1512,26 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                              env_seconds, update_seconds, render_seconds);
             fprintf(stdout, "\033[?25h");
             fflush(stdout);
+        }
+        if (use_profile) {
+            double elapsed = now_seconds() - start_time;
+            long long total_env_steps = (long long)total_steps * env_count * agent_count;
+            double steps_per_sec = elapsed > 0.0 ? (double)total_steps / elapsed : 0.0;
+            double samples_per_sec = elapsed > 0.0 ? (double)total_env_steps / elapsed : 0.0;
+            double other = elapsed - env_seconds - update_seconds - render_seconds;
+            if (other < 0.0) other = 0.0;
+            if (cfg->profile || (cfg->profile_json && cfg->profile_json[0])) {
+                fprintf(stdout,
+                        "profile: steps=%d envs=%d agents=%d elapsed=%.2fs sps=%.1f samples=%.1f "
+                        "env=%.2fs update=%.2fs render=%.2fs other=%.2fs\n",
+                        total_steps, env_count, agent_count, elapsed, steps_per_sec, samples_per_sec,
+                        env_seconds, update_seconds, render_seconds, other);
+            }
+            if (cfg->profile_json && cfg->profile_json[0]) {
+                profile_write_json(cfg, cfg->profile_json, total_steps, env_count, agent_count,
+                                   total_episode_count, total_return_sum, elapsed, env_seconds,
+                                   update_seconds, render_seconds);
+            }
         }
         if (env_count > 1 || agent_count > 1) {
             double sum = 0.0;

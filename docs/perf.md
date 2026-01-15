@@ -18,6 +18,13 @@ thread scheduling variability.
 ./scripts/bench_steps.sh 200000
 ```
 
+Run baseline profiles (CPU by default, CUDA when `RUN_CUDA=1`):
+
+```bash
+./scripts/perf_baselines.sh 20000
+RUN_CUDA=1 ./scripts/perf_baselines.sh 20000
+```
+
 Use vectorized env stepping for throughput:
 
 ```bash
@@ -31,3 +38,33 @@ With threads:
 ```
 
 Batched inference is enabled for DQN when `--envs > 1` via `act_batch`.
+
+## Profiling
+
+Enable the training profiler to get a simple breakdown of time spent in
+environment stepping, algorithm updates, and rendering.
+
+```bash
+./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 20000 --profile
+```
+
+Write a JSON report:
+
+```bash
+./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 20000 --profile-json runs/profile.json
+```
+
+IMPALA telemetry (queue depth + SPS):
+
+```bash
+./build/tinyfin-rl train --algo impala --env maze_rooms --steps 20000 --actor-count 4 --learner-batch 8 --log-every 200 --profile
+```
+
+## Tuning Knobs
+
+- `--envs N` increases parallel environment stepping per iteration.
+- `--threads N` splits env stepping across threads (agent_count == 1).
+- `--train-every N` reduces update frequency to boost SPS.
+- `--batch-size N` trades compute intensity vs. update cost.
+- `--learning-starts N` delays updates until replay has warm data.
+- `--grad-steps N` performs multiple updates per training tick.

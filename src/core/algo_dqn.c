@@ -25,6 +25,9 @@ typedef struct {
     float gamma;
     float epsilon;
     int batch_size;
+    int train_every;
+    int learning_starts;
+    int grad_steps;
     float per_alpha;
     float per_beta;
     int seed;
@@ -214,95 +217,101 @@ static void dqn_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_action
 static void dqn_update(void *ctx, const tfrl_transition *transition) {
     tfrl_dqn_algo *algo = (tfrl_dqn_algo *)ctx;
     if (!transition) return;
+    algo->step_count++;
+    int step_id = algo->step_count;
 
     if (algo->replay) {
         tfrl_replay_push(algo->replay, transition, 1.0f);
         if (tfrl_replay_size(algo->replay) < algo->batch_size) return;
+        if (step_id < algo->learning_starts) return;
+        if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
 
-        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-        if (!idx || !weights) {
+        for (int g = 0; g < algo->grad_steps; g++) {
+            int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+            float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+            if (!idx || !weights) {
+                free(idx);
+                free(weights);
+                return;
+            }
+            if (algo->deterministic) {
+                tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
+                                                 (unsigned int)(algo->seed + step_id + g));
+            } else {
+                tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+            }
+
+            Tensor **temps = NULL;
+            size_t temp_count = 0;
+            size_t temp_cap = 0;
+            Tensor *loss_sum = NULL;
+            int ok = 1;
+            for (int i = 0; i < algo->batch_size; i++) {
+                const tfrl_transition *tr = tfrl_replay_get(algo->replay, idx[i]);
+                if (!tr) continue;
+
+                Tensor *x = obs_to_tensor(algo, tr->obs);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, x)) { ok = 0; break; }
+                Tensor *q_values = linear_forward(algo->q, x);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_values)) { ok = 0; break; }
+                int action = tr->action.index;
+
+                float target = (float)tr->reward;
+                if (!tr->done) {
+                    Tensor *x_next = obs_to_tensor(algo, tr->next_obs);
+                    Tensor *q_next = linear_forward(algo->q, x_next);
+                    int next_a = argmax_tensor(q_next);
+                    float max_q = tensor_get_f32_at(q_next, (size_t)next_a);
+                    target = (float)tr->reward + algo->gamma * max_q;
+                    tensor_free(x_next);
+                    tensor_free(q_next);
+                }
+
+                float q_pred = tensor_get_f32_at(q_values, (size_t)action);
+                float td_err = target - q_pred;
+                float priority = td_err >= 0.0f ? td_err : -td_err;
+                tfrl_replay_update_priority(algo->replay, idx[i], priority + 1e-3f);
+
+                Tensor *action_one = one_hot(algo->action_n, action);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, action_one)) { ok = 0; break; }
+                Tensor *q_sel = tensor_mul(q_values, action_one);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_sel)) { ok = 0; break; }
+                Tensor *q_val = tensor_sum(q_sel);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_val)) { ok = 0; break; }
+                Tensor *target_t = tensor_new(1, (int[1]){1});
+                tensor_set_f32_at(target_t, 0, target);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, target_t)) { ok = 0; break; }
+                Tensor *diff = tensor_sub(q_val, target_t);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, diff)) { ok = 0; break; }
+                Tensor *loss = tensor_mul(diff, diff);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, loss)) { ok = 0; break; }
+                Tensor *weight_t = tensor_new(1, (int[1]){1});
+                tensor_set_f32_at(weight_t, 0, weights[i]);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, weight_t)) { ok = 0; break; }
+                Tensor *weighted = tensor_mul(loss, weight_t);
+                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, weighted)) { ok = 0; break; }
+
+                if (!loss_sum) {
+                    loss_sum = weighted;
+                } else {
+                    Tensor *tmp = tensor_add(loss_sum, weighted);
+                    if (!dqn_temp_push(&temps, &temp_count, &temp_cap, tmp)) { ok = 0; break; }
+                    loss_sum = tmp;
+                }
+            }
+
+            if (ok && loss_sum) {
+                sgd_zero_grad(algo->opt);
+                tensor_backward(loss_sum);
+                sgd_step(algo->opt, 0.0f);
+            }
+            for (size_t i = 0; i < temp_count; i++) {
+                tensor_free(temps[i]);
+            }
+            free(temps);
             free(idx);
             free(weights);
-            return;
         }
-        if (algo->deterministic) {
-            tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta, (unsigned int)(algo->seed + algo->step_count));
-        } else {
-            tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
-        }
-
-        Tensor **temps = NULL;
-        size_t temp_count = 0;
-        size_t temp_cap = 0;
-        Tensor *loss_sum = NULL;
-        int ok = 1;
-        for (int i = 0; i < algo->batch_size; i++) {
-            const tfrl_transition *tr = tfrl_replay_get(algo->replay, idx[i]);
-            if (!tr) continue;
-
-            Tensor *x = obs_to_tensor(algo, tr->obs);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, x)) { ok = 0; break; }
-            Tensor *q_values = linear_forward(algo->q, x);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_values)) { ok = 0; break; }
-            int action = tr->action.index;
-
-            float target = (float)tr->reward;
-            if (!tr->done) {
-                Tensor *x_next = obs_to_tensor(algo, tr->next_obs);
-                Tensor *q_next = linear_forward(algo->q, x_next);
-                int next_a = argmax_tensor(q_next);
-                float max_q = tensor_get_f32_at(q_next, (size_t)next_a);
-                target = (float)tr->reward + algo->gamma * max_q;
-                tensor_free(x_next);
-                tensor_free(q_next);
-            }
-
-            float q_pred = tensor_get_f32_at(q_values, (size_t)action);
-            float td_err = target - q_pred;
-            float priority = td_err >= 0.0f ? td_err : -td_err;
-            tfrl_replay_update_priority(algo->replay, idx[i], priority + 1e-3f);
-
-            Tensor *action_one = one_hot(algo->action_n, action);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, action_one)) { ok = 0; break; }
-            Tensor *q_sel = tensor_mul(q_values, action_one);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_sel)) { ok = 0; break; }
-            Tensor *q_val = tensor_sum(q_sel);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, q_val)) { ok = 0; break; }
-            Tensor *target_t = tensor_new(1, (int[1]){1});
-            tensor_set_f32_at(target_t, 0, target);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, target_t)) { ok = 0; break; }
-            Tensor *diff = tensor_sub(q_val, target_t);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, diff)) { ok = 0; break; }
-            Tensor *loss = tensor_mul(diff, diff);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, loss)) { ok = 0; break; }
-            Tensor *weight_t = tensor_new(1, (int[1]){1});
-            tensor_set_f32_at(weight_t, 0, weights[i]);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, weight_t)) { ok = 0; break; }
-            Tensor *weighted = tensor_mul(loss, weight_t);
-            if (!dqn_temp_push(&temps, &temp_count, &temp_cap, weighted)) { ok = 0; break; }
-
-            if (!loss_sum) {
-                loss_sum = weighted;
-            } else {
-                Tensor *tmp = tensor_add(loss_sum, weighted);
-                if (!dqn_temp_push(&temps, &temp_count, &temp_cap, tmp)) { ok = 0; break; }
-                loss_sum = tmp;
-            }
-        }
-
-        if (ok && loss_sum) {
-            sgd_zero_grad(algo->opt);
-            tensor_backward(loss_sum);
-            sgd_step(algo->opt, 0.0f);
-        }
-        for (size_t i = 0; i < temp_count; i++) {
-            tensor_free(temps[i]);
-        }
-        free(temps);
-        free(idx);
-        free(weights);
-        algo->step_count++;
         return;
     }
 
@@ -381,6 +390,9 @@ tfrl_algo tfrl_algo_dqn_create(const tfrl_algo_config *cfg) {
     algo->gamma = cfg->gamma > 0.0f ? cfg->gamma : 0.99f;
     algo->epsilon = cfg->epsilon;
     algo->batch_size = cfg->batch_size > 0 ? cfg->batch_size : 32;
+    algo->train_every = cfg->train_every > 0 ? cfg->train_every : 1;
+    algo->learning_starts = cfg->learning_starts > 0 ? cfg->learning_starts : 0;
+    algo->grad_steps = cfg->grad_steps > 0 ? cfg->grad_steps : 1;
     algo->per_alpha = cfg->per_alpha;
     algo->per_beta = cfg->per_beta;
     algo->seed = cfg->seed;

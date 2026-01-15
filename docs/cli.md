@@ -30,6 +30,9 @@ Common flags:
 - `--epochs N` (PPO)
 - `--replay-size N` (DQN family, SAC, TD3)
 - `--batch-size N` (DQN family, SAC, TD3)
+- `--train-every N` (DQN family, SAC, TD3)
+- `--learning-starts N` (DQN family, SAC, TD3)
+- `--grad-steps N` (DQN family, SAC, TD3)
 - `--per-alpha N` (DQN family, SAC, TD3)
 - `--per-beta N` (DQN family, SAC, TD3)
 - `--c51-atoms N` (Rainbow)
@@ -51,6 +54,12 @@ Common flags:
 - `--render-every N`
 - `--render-fps N`
 - `--trace-out FILE`
+- `--profile` (print profiling summary)
+- `--profile-json FILE` (write JSON profile summary)
+- `--mp-actors N` (multiprocess actor count for off-policy algos)
+- `--mp-queue N` (shared queue capacity for mp mode)
+- `--mp-sync-every N` (sync interval for actor policy reload)
+- `--mp-sync-path PATH` (sync checkpoint prefix)
 - `--deterministic` (single-thread stepping + fixed seed when `--seed` is 0)
 - `--share-policy` (use one policy for all agents)
 - `--backend cpu|cuda`

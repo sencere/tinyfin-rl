@@ -102,6 +102,7 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 - Multi-agent environments: `lineworld_duo`, `coin_maze_duo`.
 - DQN/REINFORCE/PPO plus A2C/A3C/TRPO/IMPALA/Rainbow/QR-DQN/IQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
+- Multiprocess DQN actors (shared-memory queue) are available for higher throughput.
 
 ## Python Env Bridge (Sockets)
 
