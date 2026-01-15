@@ -31,6 +31,7 @@ static float arg_float(int argc, char **argv, const char *name, float def) {
 }
 
 void tfrl_cli_print_usage(const char *name) {
+    fprintf(stderr, "\033[1;34mTINYFIN 🐟\033[0m\n\n");
     fprintf(stderr, "usage:\n");
     fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "           [--backend cpu|cuda] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
@@ -51,6 +52,8 @@ void tfrl_cli_print_usage(const char *name) {
 
 int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     if (!out_cfg || argc < 2) return 0;
+    if (arg_flag(argc, argv, "--help") || arg_flag(argc, argv, "-h")) return 0;
+    if (argc == 2 && strcmp(argv[1], "train") == 0) return 0;
     memset(out_cfg, 0, sizeof(*out_cfg));
 
     const char *mode = argv[1];

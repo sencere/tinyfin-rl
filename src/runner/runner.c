@@ -119,7 +119,7 @@ static void dashboard_render(const tfrl_runner_config *cfg,
     int steps_left = total_steps - (step + 1);
 
     fprintf(stdout, "\033[2J\033[H");
-    fprintf(stdout, "\033[1;34mT I N Y F I N - R L\033[0m\n");
+    fprintf(stdout, "\033[1;34mTINYFIN 🐟\033[0m\n");
     fprintf(stdout, "progress: %6.2f%%  steps: %d/%d  left: %d\n",
             progress, step + 1, total_steps, steps_left);
     fprintf(stdout, "episodes: %d  est_left: %.0f  last_return: %.4f  avg_return: %.4f\n",
