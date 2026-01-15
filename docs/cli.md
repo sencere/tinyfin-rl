@@ -42,6 +42,7 @@ Common flags:
 - `--iqn-tau-samples N` (IQN)
 - `--actor-count N` (IMPALA split)
 - `--learner-batch N` (IMPALA split)
+- `--learner-batch-auto` (adaptive batch sizing for IMPALA)
 - `--queue-capacity N` (IMPALA split)
 - `--mcts-sims N` (MCTS)
 - `--mcts-depth N` (MCTS)

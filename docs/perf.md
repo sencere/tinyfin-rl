@@ -25,6 +25,12 @@ Run baseline profiles (CPU by default, CUDA when `RUN_CUDA=1`):
 RUN_CUDA=1 ./scripts/perf_baselines.sh 20000
 ```
 
+Summarize baseline results:
+
+```bash
+python3 scripts/perf_compare.py runs/perf_baselines
+```
+
 Use vectorized env stepping for throughput:
 
 ```bash
@@ -57,7 +63,7 @@ Write a JSON report:
 IMPALA telemetry (queue depth + SPS):
 
 ```bash
-./build/tinyfin-rl train --algo impala --env maze_rooms --steps 20000 --actor-count 4 --learner-batch 8 --log-every 200 --profile
+./build/tinyfin-rl train --algo impala --env maze_rooms --steps 20000 --actor-count 4 --learner-batch 8 --learner-batch-auto --log-every 200 --profile
 ```
 
 ## Tuning Knobs

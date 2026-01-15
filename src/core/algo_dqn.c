@@ -226,24 +226,23 @@ static void dqn_update(void *ctx, const tfrl_transition *transition) {
         if (step_id < algo->learning_starts) return;
         if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
 
+        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+        if (!idx || !weights) {
+            free(idx);
+            free(weights);
+            return;
+        }
+        Tensor **temps = NULL;
+        size_t temp_cap = 0;
         for (int g = 0; g < algo->grad_steps; g++) {
-            int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-            float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-            if (!idx || !weights) {
-                free(idx);
-                free(weights);
-                return;
-            }
             if (algo->deterministic) {
                 tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
                                                  (unsigned int)(algo->seed + step_id + g));
             } else {
                 tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
             }
-
-            Tensor **temps = NULL;
             size_t temp_count = 0;
-            size_t temp_cap = 0;
             Tensor *loss_sum = NULL;
             int ok = 1;
             for (int i = 0; i < algo->batch_size; i++) {
@@ -308,10 +307,10 @@ static void dqn_update(void *ctx, const tfrl_transition *transition) {
             for (size_t i = 0; i < temp_count; i++) {
                 tensor_free(temps[i]);
             }
-            free(temps);
-            free(idx);
-            free(weights);
         }
+        free(temps);
+        free(idx);
+        free(weights);
         return;
     }
 

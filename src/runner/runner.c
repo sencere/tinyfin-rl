@@ -274,11 +274,36 @@ static int mp_queue_pop(tfrl_mp_queue *q, tfrl_transition *out) {
     return 1;
 }
 
-static int sync_available(const char *path) {
+static int read_marker_version(const char *path, long long *out_version) {
+    if (!path || !path[0] || !out_version) return 0;
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return 0;
+    char buf[64] = {0};
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return 0;
+    char *end = NULL;
+    long long v = strtoll(buf, &end, 10);
+    if (end == buf) return 0;
+    *out_version = v;
+    return 1;
+}
+
+static int write_marker_version(const char *path, long long version) {
     if (!path || !path[0]) return 0;
-    char probe[256];
-    snprintf(probe, sizeof(probe), "%s.q.w.tensor", path);
-    return access(probe, R_OK) == 0;
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    int fd = open(tmp, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (fd < 0) return 0;
+    char buf[64];
+    int len = snprintf(buf, sizeof(buf), "%lld\n", version);
+    if (write(fd, buf, (size_t)len) != len) {
+        close(fd);
+        return 0;
+    }
+    close(fd);
+    if (rename(tmp, path) != 0) return 0;
+    return 1;
 }
 
 static void ensure_parent_dir(const char *path) {
@@ -676,6 +701,7 @@ static int queue_pop(tfrl_transition_queue *q, tfrl_transition *out) {
 }
 
 typedef struct {
+    int capacity;
     int count;
     int max_count;
     long long push_count;
@@ -688,6 +714,7 @@ static tfrl_queue_stats queue_stats(const tfrl_transition_queue *q) {
     pthread_mutex_lock((pthread_mutex_t *)&q->lock);
     stats.count = q->count;
     stats.max_count = q->max_count;
+    stats.capacity = q->capacity;
     stats.push_count = q->push_count;
     stats.pop_count = q->pop_count;
     pthread_mutex_unlock((pthread_mutex_t *)&q->lock);
@@ -819,16 +846,30 @@ typedef struct {
     double start_time;
     double update_seconds;
     int processed;
+    int learner_batch_auto;
 } tfrl_impala_learner;
 
 static void *impala_learner_main(void *arg) {
     tfrl_impala_learner *learner = (tfrl_impala_learner *)arg;
     int processed = 0;
     tfrl_transition tr;
-    int batch = learner->learner_batch > 0 ? learner->learner_batch : 1;
+    int base_batch = learner->learner_batch > 0 ? learner->learner_batch : 1;
+    int batch = base_batch;
     learner->start_time = now_seconds();
     learner->update_seconds = 0.0;
     while (processed < learner->total_steps) {
+        if (learner->learner_batch_auto) {
+            tfrl_queue_stats stats = queue_stats(learner->queue);
+            int cap = stats.capacity > 0 ? stats.capacity : 1;
+            if (stats.count > (cap * 3) / 4) {
+                batch = base_batch * 4;
+            } else if (stats.count > cap / 2) {
+                batch = base_batch * 2;
+            } else {
+                batch = base_batch;
+            }
+            if (batch > 1024) batch = 1024;
+        }
         for (int i = 0; i < batch && processed < learner->total_steps; i++) {
             if (!queue_pop(learner->queue, &tr)) return NULL;
             double t0 = now_seconds();
@@ -899,6 +940,7 @@ static int run_impala_split(const tfrl_runner_config *cfg,
         .learner_batch = cfg->learner_batch > 0 ? cfg->learner_batch : 1,
         .log_every = cfg->log_every,
         .profile = cfg->profile,
+        .learner_batch_auto = cfg->learner_batch_auto,
     };
     pthread_create(&learner_thread, NULL, impala_learner_main, &learner);
 
@@ -931,6 +973,7 @@ typedef struct {
     int total_steps;
     tfrl_mp_queue *queue;
     const char *sync_path;
+    const char *sync_marker;
     int sync_every;
 } tfrl_mp_actor;
 
@@ -951,16 +994,21 @@ static void mp_actor_main(const tfrl_mp_actor *actor) {
     tfrl_obs obs = tfrl_env_reset(env, (uint64_t)(actor->cfg.seed + actor->actor_id + 1));
     tfrl_algo algo = {0};
     int loaded = 0;
+    long long last_version = -1;
     while (1) {
         int step_id = mp_queue_next_step(actor->queue);
         if (step_id < 0) break;
-        if (actor->sync_every > 0 && (step_id % actor->sync_every) == 0 && sync_available(actor->sync_path)) {
-            tfrl_algo_destroy(&algo);
-            tfrl_algo_config algo_cfg;
-            fill_algo_config(&algo_cfg, &actor->cfg, spec, actor->cfg.seed, actor->sync_path);
-            tfrl_algo_config_apply_defaults(&algo_cfg);
-            algo = tfrl_algo_create(&algo_cfg, spec);
-            loaded = 1;
+        if (actor->sync_every > 0 && (step_id % actor->sync_every) == 0) {
+            long long version = -1;
+            if (read_marker_version(actor->sync_marker, &version) && version > last_version) {
+                tfrl_algo_destroy(&algo);
+                tfrl_algo_config algo_cfg;
+                fill_algo_config(&algo_cfg, &actor->cfg, spec, actor->cfg.seed, actor->sync_path);
+                tfrl_algo_config_apply_defaults(&algo_cfg);
+                algo = tfrl_algo_create(&algo_cfg, spec);
+                loaded = 1;
+                last_version = version;
+            }
         }
         if (!algo.ctx) {
             const char *load_path = loaded ? actor->sync_path : actor->cfg.load_path;
@@ -1016,6 +1064,8 @@ static int run_mp_dqn(const tfrl_runner_config *cfg) {
     int actor_count = cfg->mp_actors > 0 ? cfg->mp_actors : 1;
     int queue_capacity = cfg->mp_queue > 0 ? cfg->mp_queue : 65536;
     const char *sync_path = cfg->mp_sync_path && cfg->mp_sync_path[0] ? cfg->mp_sync_path : "runs/mp_sync";
+    char sync_marker[256];
+    snprintf(sync_marker, sizeof(sync_marker), "%s.done", sync_path);
     int sync_every = cfg->mp_sync_every > 0 ? cfg->mp_sync_every : 1000;
     ensure_parent_dir(sync_path);
 
@@ -1055,6 +1105,7 @@ static int run_mp_dqn(const tfrl_runner_config *cfg) {
                 .total_steps = total_steps,
                 .queue = queue,
                 .sync_path = sync_path,
+                .sync_marker = sync_marker,
                 .sync_every = sync_every,
             };
             mp_actor_main(&actor);
@@ -1075,6 +1126,7 @@ static int run_mp_dqn(const tfrl_runner_config *cfg) {
     }
 
     int processed = 0;
+    long long sync_version = 0;
     tfrl_transition tr;
     while (processed < total_steps) {
         if (!mp_queue_pop(queue, &tr)) break;
@@ -1082,6 +1134,8 @@ static int run_mp_dqn(const tfrl_runner_config *cfg) {
         processed++;
         if (sync_every > 0 && (processed % sync_every) == 0) {
             tfrl_algo_save(&algo, sync_path);
+            sync_version++;
+            write_marker_version(sync_marker, sync_version);
         }
     }
 

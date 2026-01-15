@@ -54,6 +54,7 @@ typedef struct {
     const char *profile_json;
     int actor_count;
     int learner_batch;
+    int learner_batch_auto;
     int queue_capacity;
     const char *save_path;
     const char *load_path;

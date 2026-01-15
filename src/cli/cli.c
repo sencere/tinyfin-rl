@@ -47,7 +47,7 @@ void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "  --train-every N --learning-starts N --grad-steps N (dqn/rainbow/qrdqn/iqn/sac/td3)\n");
     fprintf(stderr, "  --c51-atoms N --c51-vmin V --c51-vmax V (rainbow)\n");
     fprintf(stderr, "  --iqn-quantiles N --iqn-tau-samples N (iqn)\n");
-    fprintf(stderr, "  --actor-count N --learner-batch N --queue-capacity N (impala split)\n");
+    fprintf(stderr, "  --actor-count N --learner-batch N --learner-batch-auto --queue-capacity N (impala split)\n");
     fprintf(stderr, "  --mcts-sims N --mcts-depth N (mcts)\n");
     fprintf(stderr, "checkpoint params:\n");
     fprintf(stderr, "  --save PATH --load PATH\n");
@@ -112,6 +112,7 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->profile_json = arg_str(argc, argv, "--profile-json", NULL);
     out_cfg->actor_count = arg_int(argc, argv, "--actor-count", -1);
     out_cfg->learner_batch = arg_int(argc, argv, "--learner-batch", -1);
+    out_cfg->learner_batch_auto = arg_flag(argc, argv, "--learner-batch-auto");
     out_cfg->queue_capacity = arg_int(argc, argv, "--queue-capacity", -1);
     out_cfg->save_path = arg_str(argc, argv, "--save", NULL);
     out_cfg->load_path = arg_str(argc, argv, "--load", NULL);

@@ -196,7 +196,7 @@ Vectorized stepping, threaded stepping, a benchmark script, and DQN batched infe
 Training runs are measurably faster and profiling highlights bottlenecks.
 
 **Update:**  
-IMPALA telemetry now reports queue depth, SPS, and update time; multiprocess DQN actors are available with shared-memory queues.
+IMPALA telemetry now reports queue depth, SPS, and update time; adaptive learner batching and multiprocess DQN actors with atomic sync markers are available.
 
 ---
 
