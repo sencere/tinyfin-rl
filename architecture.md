@@ -93,7 +93,9 @@ tinyfin-rl/
     runner/
     core/
       env_api.h
-      env_example.c
+    envs/
+      envs.c
+    core/
       algo_api.h
       algo_dqn.c
       trace.c

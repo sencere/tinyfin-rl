@@ -217,6 +217,23 @@ Docs cover training, replay, CLI, env API, and checkpoints.
 
 ---
 
+## 7 — Deployment & Production Integration (Next)
+
+### Scope
+- Make trained policies usable outside the training binary without re-implementing algorithms.
+- Define a stable interface for loading checkpoints and running inference.
+
+### Key Deliverables
+- A minimal inference-only API (C) for “load weights → act” (single-agent + multi-agent).
+- A versioned export format for models (checkpoint bundle with metadata, shapes, and env spec).
+- CLI support for export/packaging (e.g. `tinyfin-rl export ...`) and a small “runner” example that uses the exported artifact.
+- Documentation: recommended production patterns (ship binary vs embed library) and compatibility guarantees.
+
+**Result:**  
+Checkpoints can be deployed intentionally (not just used for `eval`/`train --load`).
+
+---
+
 ## Current State (Summary)
 
 - Tinyfin provides a mature tensor + autograd backend

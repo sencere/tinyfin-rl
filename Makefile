@@ -13,7 +13,7 @@ RAYLIB_LIB ?= $(RAYLIB_DIR)/src/libraylib.so
 RAYLIB_LDFLAGS ?= -L$(RAYLIB_DIR)/src -lraylib -lm -ldl -lpthread -lX11 -lrt
 
 SRC_CORE = \
-	src/core/env_example.c \
+	src/envs/envs.c \
 	src/core/algo_factory.c \
 	src/core/algo_random.c \
 	src/core/algo_dqn.c \
@@ -70,7 +70,7 @@ $(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
 		-o $@ $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) \
 		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) $(VIEWER_LIBS) -lpthread -lm -lrt
 
-$(ENV_LIB): src/core/env_example.c | $(BIN_DIR)
+$(ENV_LIB): src/envs/envs.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $<
 
 tests: $(TEST_REPLAY) $(TEST_POINT1D) $(TEST_LINEWORLD_DUO) $(TEST_COIN_MAZE_DUO)
@@ -78,13 +78,13 @@ tests: $(TEST_REPLAY) $(TEST_POINT1D) $(TEST_LINEWORLD_DUO) $(TEST_COIN_MAZE_DUO
 $(TEST_REPLAY): tests/test_replay_buffer.c src/core/replay_buffer.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_POINT1D): tests/test_point1d_smoke.c src/core/env_example.c | $(BIN_DIR)
+$(TEST_POINT1D): tests/test_point1d_smoke.c src/envs/envs.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_LINEWORLD_DUO): tests/test_lineworld_duo_smoke.c src/core/env_example.c | $(BIN_DIR)
+$(TEST_LINEWORLD_DUO): tests/test_lineworld_duo_smoke.c src/envs/envs.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_COIN_MAZE_DUO): tests/test_coin_maze_duo_smoke.c src/core/env_example.c | $(BIN_DIR)
+$(TEST_COIN_MAZE_DUO): tests/test_coin_maze_duo_smoke.c src/envs/envs.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
 raylib:

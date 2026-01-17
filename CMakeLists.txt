@@ -8,7 +8,7 @@ option(TFRL_WITH_RAYLIB "Enable raylib viewer" OFF)
 set(TINYFIN_DIR "tinyfin" CACHE PATH "Path to tinyfin")
 
 set(SRC_CORE
-    src/core/env_example.c
+    src/envs/envs.c
     src/core/algo_factory.c
     src/core/algo_random.c
     src/core/algo_dqn.c
@@ -56,7 +56,7 @@ if (TFRL_WITH_RAYLIB)
     target_link_libraries(tinyfin-rl raylib)
 endif()
 
-add_library(tfrl_env SHARED src/core/env_example.c)
+add_library(tfrl_env SHARED src/envs/envs.c)
 target_include_directories(tfrl_env PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 enable_testing()
@@ -66,17 +66,17 @@ target_include_directories(test_replay_buffer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 target_link_libraries(test_replay_buffer m)
 add_test(NAME replay_buffer COMMAND test_replay_buffer)
 
-add_executable(test_point1d_smoke tests/test_point1d_smoke.c src/core/env_example.c)
+add_executable(test_point1d_smoke tests/test_point1d_smoke.c src/envs/envs.c)
 target_include_directories(test_point1d_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_point1d_smoke m)
 add_test(NAME point1d_smoke COMMAND test_point1d_smoke)
 
-add_executable(test_lineworld_duo_smoke tests/test_lineworld_duo_smoke.c src/core/env_example.c)
+add_executable(test_lineworld_duo_smoke tests/test_lineworld_duo_smoke.c src/envs/envs.c)
 target_include_directories(test_lineworld_duo_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_lineworld_duo_smoke m)
 add_test(NAME lineworld_duo_smoke COMMAND test_lineworld_duo_smoke)
 
-add_executable(test_coin_maze_duo_smoke tests/test_coin_maze_duo_smoke.c src/core/env_example.c)
+add_executable(test_coin_maze_duo_smoke tests/test_coin_maze_duo_smoke.c src/envs/envs.c)
 target_include_directories(test_coin_maze_duo_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_coin_maze_duo_smoke m)
 add_test(NAME coin_maze_duo_smoke COMMAND test_coin_maze_duo_smoke)

@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,8 +7,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "env_api.h"
-#include "render_snapshot.h"
+#include "core/env_api.h"
+#include "core/render_snapshot.h"
 
 typedef enum {
     TFRL_ENV_MAZE = 0,
