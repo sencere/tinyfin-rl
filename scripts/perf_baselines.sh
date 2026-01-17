@@ -16,10 +16,10 @@ run_case() {
   local backend="$2"
   local device="$3"
   local out="${out_dir}/${env}_${backend}.json"
-  local thread_args=""
+  local threads="${THREADS:-4}"
+  local thread_args="--threads ${threads}"
   local train_args=""
   if [ "$backend" = "cpu" ] || [ "$backend" = "blas" ]; then
-    thread_args="--threads 4"
     if [ "$backend" = "blas" ]; then
       export TINYFIN_BACKEND=blas
     fi
