@@ -22,13 +22,26 @@ Run baseline profiles (CPU by default, CUDA when `RUN_CUDA=1`):
 
 ```bash
 ./scripts/perf_baselines.sh 20000
+RUN_BLAS=1 ./scripts/perf_baselines.sh 20000
 RUN_CUDA=1 ./scripts/perf_baselines.sh 20000
+```
+
+BLAS baseline requires rebuilding Tinyfin with BLAS:
+
+```bash
+make -C tinyfin ENABLE_BLAS=1 libtinyfin.so
 ```
 
 Summarize baseline results:
 
 ```bash
 python3 scripts/perf_compare.py runs/perf_baselines
+```
+
+Smoke checks (mp DQN + IMPALA telemetry):
+
+```bash
+./scripts/perf_smoke.sh
 ```
 
 Use vectorized env stepping for throughput:

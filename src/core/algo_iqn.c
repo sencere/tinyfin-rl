@@ -304,14 +304,14 @@ static void iqn_update(void *ctx, const tfrl_transition *transition) {
         if (tfrl_replay_size(algo->replay) < algo->batch_size) return;
         if (step_id < algo->learning_starts) return;
         if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
+        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+        if (!idx || !weights) {
+            free(idx);
+            free(weights);
+            return;
+        }
         for (int g = 0; g < algo->grad_steps; g++) {
-            int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-            float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-            if (!idx || !weights) {
-                free(idx);
-                free(weights);
-                return;
-            }
             if (algo->deterministic) {
                 tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
                                                  (unsigned int)(algo->seed + step_id + g));
@@ -324,9 +324,9 @@ static void iqn_update(void *ctx, const tfrl_transition *transition) {
                 float td = iqn_apply_update(algo, tr, weights[i]);
                 tfrl_replay_update_priority(algo->replay, idx[i], td + 1e-3f);
             }
-            free(idx);
-            free(weights);
         }
+        free(idx);
+        free(weights);
         return;
     }
 

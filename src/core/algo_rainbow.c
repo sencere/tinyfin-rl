@@ -616,14 +616,14 @@ static void rainbow_update(void *ctx, const tfrl_transition *transition) {
             rainbow_apply_update(algo, transition->obs, transition->action.index, (float)transition->reward, transition->done, transition->next_obs, algo->gamma, 1.0f, NULL);
         }
         if (algo->replay && tfrl_replay_size(algo->replay) >= algo->batch_size) {
+            int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+            float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+            if (!idx || !weights) {
+                free(idx);
+                free(weights);
+                return;
+            }
             for (int g = 0; g < algo->grad_steps; g++) {
-                int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-                float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-                if (!idx || !weights) {
-                    free(idx);
-                    free(weights);
-                    return;
-                }
                 if (algo->deterministic) {
                     tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
                                                      (unsigned int)(algo->seed + step_id + g));
@@ -637,9 +637,9 @@ static void rainbow_update(void *ctx, const tfrl_transition *transition) {
                     rainbow_apply_update(algo, tr->obs, tr->action.index, (float)tr->reward, tr->done, tr->next_obs, algo->gamma, weights[i], &td);
                     tfrl_replay_update_priority(algo->replay, idx[i], td + 1e-3f);
                 }
-                free(idx);
-                free(weights);
             }
+            free(idx);
+            free(weights);
         }
         return;
     }
@@ -725,14 +725,14 @@ static void rainbow_update(void *ctx, const tfrl_transition *transition) {
     if (algo->replay && tfrl_replay_size(algo->replay) >= algo->batch_size) {
         if (step_id < algo->learning_starts) return;
         if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
+        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+        if (!idx || !weights) {
+            free(idx);
+            free(weights);
+            return;
+        }
         for (int g = 0; g < algo->grad_steps; g++) {
-            int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-            float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-            if (!idx || !weights) {
-                free(idx);
-                free(weights);
-                return;
-            }
             if (algo->deterministic) {
                 tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
                                                  (unsigned int)(algo->seed + step_id + g));
@@ -747,9 +747,9 @@ static void rainbow_update(void *ctx, const tfrl_transition *transition) {
                 rainbow_apply_update(algo, tr->obs, tr->action.index, (float)tr->reward, tr->done, tr->next_obs, gamma_n, weights[i], &td);
                 tfrl_replay_update_priority(algo->replay, idx[i], td + 1e-3f);
             }
-            free(idx);
-            free(weights);
         }
+        free(idx);
+        free(weights);
     }
 }
 

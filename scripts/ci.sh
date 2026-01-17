@@ -5,3 +5,4 @@ make
 ./scripts/run_tests.sh
 ./scripts/golden_runs.sh
 ./scripts/bridge_smoke.sh
+./scripts/perf_smoke.sh

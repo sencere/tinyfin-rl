@@ -278,14 +278,14 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
         if (step_id < algo->learning_starts) return;
         if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
 
+        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+        if (!idx || !weights) {
+            free(idx);
+            free(weights);
+            return;
+        }
         for (int g = 0; g < algo->grad_steps; g++) {
-            int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-            float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-            if (!idx || !weights) {
-                free(idx);
-                free(weights);
-                return;
-            }
             if (algo->deterministic) {
                 tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
                                                  (unsigned int)(algo->seed + step_id + g));
@@ -514,8 +514,6 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                 tensor_free(policy_loss_sum);
             }
 
-            free(idx);
-            free(weights);
             algo->update_count++;
             if (update_id % TD3_TARGET_UPDATE == 0) {
                 copy_linear(algo->tpolicy, algo->policy);
@@ -523,6 +521,8 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                 copy_linear(algo->tq2, algo->q2);
             }
         }
+        free(idx);
+        free(weights);
         return;
     }
 

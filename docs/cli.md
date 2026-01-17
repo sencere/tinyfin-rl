@@ -63,7 +63,7 @@ Common flags:
 - `--mp-sync-path PATH` (sync checkpoint prefix)
 - `--deterministic` (single-thread stepping + fixed seed when `--seed` is 0)
 - `--share-policy` (use one policy for all agents)
-- `--backend cpu|cuda`
+- `--backend cpu|cuda|blas`
 - `--device cpu|gpu`
 
 Defaults:

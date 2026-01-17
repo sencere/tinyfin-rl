@@ -49,6 +49,7 @@ if (NOT TINYFIN_LIB)
     set(TINYFIN_LIB ${TINYFIN_DIR}/libtinyfin.so)
 endif()
 target_link_libraries(tinyfin-rl ${TINYFIN_LIB} m pthread)
+target_link_libraries(tinyfin-rl rt)
 
 if (TFRL_WITH_RAYLIB)
     target_include_directories(tinyfin-rl PRIVATE raylib-src/src)

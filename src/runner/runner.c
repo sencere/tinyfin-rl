@@ -63,7 +63,7 @@ static void configure_tinyfin(const tfrl_runner_config *cfg) {
     if (!cfg) return;
     if (cfg->backend && cfg->backend[0]) {
         if (!backend_set_by_name(cfg->backend)) {
-            fprintf(stderr, "unknown backend '%s' (expected cpu|cuda)\n", cfg->backend);
+            fprintf(stderr, "unknown backend '%s' (expected cpu|cuda|blas)\n", cfg->backend);
         }
     }
     if (cfg->device && cfg->device[0]) {
@@ -292,12 +292,15 @@ static int read_marker_version(const char *path, long long *out_version) {
 static int write_marker_version(const char *path, long long version) {
     if (!path || !path[0]) return 0;
     char tmp[256];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    size_t path_len = strlen(path);
+    if (path_len + 4 >= sizeof(tmp)) return 0;
+    memcpy(tmp, path, path_len);
+    memcpy(tmp + path_len, ".tmp", 5);
     int fd = open(tmp, O_CREAT | O_TRUNC | O_WRONLY, 0644);
     if (fd < 0) return 0;
     char buf[64];
-    int len = snprintf(buf, sizeof(buf), "%lld\n", version);
-    if (write(fd, buf, (size_t)len) != len) {
+    int written = snprintf(buf, sizeof(buf), "%lld\n", version);
+    if (write(fd, buf, (size_t)written) != written) {
         close(fd);
         return 0;
     }
