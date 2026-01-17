@@ -29,10 +29,25 @@ make
 ./build/tinyfin-rl train --algo dqn --steps 1000
 ```
 
+Convenience build scripts:
+
+```bash
+./scripts/build_tinyfin.sh
+./scripts/build_tinyfin_rl.sh
+```
+
+With CUDA:
+
+```bash
+ENABLE_CUDA=1 ./scripts/build_tinyfin.sh
+ENABLE_CUDA=1 ./scripts/build_tinyfin_rl.sh
+```
+
 With raylib viewer:
 
 ```bash
-make USE_RAYLIB=1
+USE_RAYLIB=1 ./scripts/build_tinyfin_rl.sh
+export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 ./build/tinyfin-rl train --algo dqn --steps 1000 --render live --render-fps 10
 ```
 
