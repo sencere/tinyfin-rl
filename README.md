@@ -10,7 +10,7 @@ autograd. Rendering is optional and never drives simulation.
 
 ## Demo PPO Agent With Planing 
 
-![tinyfin-rl agent demo](resources/demo/agent2.gif)
+<img src="resources/demo/agent2.gif" alt="tinyfin-rl agent demo" height="400" />
 
 ## Demo DQN Agent
 
