@@ -50,11 +50,16 @@ int got = tfrl_env_step_multi(env, actions, agents, steps, 2);
 - `py:pettingzoo:MODULE` (Python bridge)
 - `py:retro:ENV_ID` (Python bridge)
 
-## Template
+## Adding a New C Env
 
-Use `src/envs/example_env.c` as a clean, minimal template for a new C environment.
-Copy it into `src/envs/envs.c` (or wire it into the build) and add a name
-branch in `tfrl_env_create` to select it.
+1) Add a new file under `src/envs/` that implements:
+   - `tfrl_env_spec_*`
+   - `tfrl_env_reset_*`
+   - `tfrl_env_step_*`
+2) Register it in `src/envs/registry.c` with its name, ops, and agent count.
+3) Add the new file to the build lists in `CMakeLists.txt` and `Makefile`.
+
+`tfrl_env_create` no longer needs per-env branches; it uses the registry.
 
 ## Python
 

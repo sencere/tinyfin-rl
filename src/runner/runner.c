@@ -19,7 +19,7 @@
 #include "core/algo_api.h"
 #include "core/env_api.h"
 #include "core/trace.h"
-#include "viewer/viewer.h"
+#include "envs/viewer.h"
 #include "tinyfin/backend.h"
 #include "tinyfin/tensor.h"
 

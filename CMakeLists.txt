@@ -9,6 +9,13 @@ set(TINYFIN_DIR "tinyfin" CACHE PATH "Path to tinyfin")
 
 set(SRC_CORE
     src/envs/envs.c
+    src/envs/registry.c
+    src/envs/maze.c
+    src/envs/lineworld.c
+    src/envs/point1d.c
+    src/envs/coin_maze.c
+    src/envs/py_bridge.c
+    src/envs/render.c
     src/core/algo_factory.c
     src/core/algo_random.c
     src/core/algo_dqn.c
@@ -35,9 +42,9 @@ set(SRC_APP
 )
 
 if (TFRL_WITH_RAYLIB)
-    set(SRC_VIEWER src/viewer/viewer_raylib.c)
+    set(SRC_VIEWER src/envs/viewer_raylib.c)
 else()
-    set(SRC_VIEWER src/viewer/viewer_stub.c)
+    set(SRC_VIEWER src/envs/viewer_stub.c)
 endif()
 
 add_executable(tinyfin-rl ${SRC_CORE} ${SRC_APP} ${SRC_VIEWER})
@@ -56,7 +63,16 @@ if (TFRL_WITH_RAYLIB)
     target_link_libraries(tinyfin-rl raylib)
 endif()
 
-add_library(tfrl_env SHARED src/envs/envs.c)
+add_library(tfrl_env SHARED
+    src/envs/envs.c
+    src/envs/registry.c
+    src/envs/maze.c
+    src/envs/lineworld.c
+    src/envs/point1d.c
+    src/envs/coin_maze.c
+    src/envs/py_bridge.c
+    src/envs/render.c
+)
 target_include_directories(tfrl_env PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 enable_testing()
@@ -66,17 +82,44 @@ target_include_directories(test_replay_buffer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 target_link_libraries(test_replay_buffer m)
 add_test(NAME replay_buffer COMMAND test_replay_buffer)
 
-add_executable(test_point1d_smoke tests/test_point1d_smoke.c src/envs/envs.c)
+add_executable(test_point1d_smoke tests/test_point1d_smoke.c
+    src/envs/envs.c
+    src/envs/registry.c
+    src/envs/maze.c
+    src/envs/lineworld.c
+    src/envs/point1d.c
+    src/envs/coin_maze.c
+    src/envs/py_bridge.c
+    src/envs/render.c
+)
 target_include_directories(test_point1d_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_point1d_smoke m)
 add_test(NAME point1d_smoke COMMAND test_point1d_smoke)
 
-add_executable(test_lineworld_duo_smoke tests/test_lineworld_duo_smoke.c src/envs/envs.c)
+add_executable(test_lineworld_duo_smoke tests/test_lineworld_duo_smoke.c
+    src/envs/envs.c
+    src/envs/registry.c
+    src/envs/maze.c
+    src/envs/lineworld.c
+    src/envs/point1d.c
+    src/envs/coin_maze.c
+    src/envs/py_bridge.c
+    src/envs/render.c
+)
 target_include_directories(test_lineworld_duo_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_lineworld_duo_smoke m)
 add_test(NAME lineworld_duo_smoke COMMAND test_lineworld_duo_smoke)
 
-add_executable(test_coin_maze_duo_smoke tests/test_coin_maze_duo_smoke.c src/envs/envs.c)
+add_executable(test_coin_maze_duo_smoke tests/test_coin_maze_duo_smoke.c
+    src/envs/envs.c
+    src/envs/registry.c
+    src/envs/maze.c
+    src/envs/lineworld.c
+    src/envs/point1d.c
+    src/envs/coin_maze.c
+    src/envs/py_bridge.c
+    src/envs/render.c
+)
 target_include_directories(test_coin_maze_duo_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_coin_maze_duo_smoke m)
 add_test(NAME coin_maze_duo_smoke COMMAND test_coin_maze_duo_smoke)

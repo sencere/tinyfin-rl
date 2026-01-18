@@ -95,15 +95,22 @@ tinyfin-rl/
       env_api.h
     envs/
       envs.c
+      envs_internal.h
+      registry.c
+      maze.c
+      lineworld.c
+      point1d.c
+      coin_maze.c
+      py_bridge.c
+      render.c
+      viewer.h
+      viewer_raylib.c
+      viewer_stub.c
     core/
       algo_api.h
       algo_dqn.c
       trace.c
       render_snapshot.h
-    viewer/
-      viewer.h
-      viewer_raylib.c
-      viewer_stub.c
   tinyfin/         # tensor + autograd
   raylib-src/      # optional raylib
   roadmap.md

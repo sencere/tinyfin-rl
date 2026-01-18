@@ -43,9 +43,16 @@ ENABLE_CUDA=1 ./scripts/build_tinyfin.sh
 ENABLE_CUDA=1 ./scripts/build_tinyfin_rl.sh
 ```
 
+Build only the shared env library:
+
+```bash
+BUILD_ENV_LIB_ONLY=1 ./scripts/build_tinyfin_rl.sh
+```
+
 With raylib viewer:
 
 ```bash
+./scripts/build_raylib.sh
 USE_RAYLIB=1 ./scripts/build_tinyfin_rl.sh
 export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 ./build/tinyfin-rl train --algo dqn --steps 1000 --render live --render-fps 10
@@ -103,9 +110,8 @@ Eval:
 Replay:
 
 ```bash
-make -C raylib-src/src
-make clean
-make USE_RAYLIB=1
+./scripts/build_raylib.sh
+USE_RAYLIB=1 ./scripts/build_tinyfin_rl.sh
 export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
 ```

@@ -154,6 +154,9 @@ Python is a convenience layer via CLI and an env shared library.
 **Result:**  
 Environments include `maze_rooms`, `lineworld`, `lineworld_cont`, `point1d`, and `coin_maze` with space/dtype metadata in `tfrl_env_spec`.
 
+**Update:**  
+Environment implementations are split into per-env files under `src/envs/`, and viewer/render snapshot logic is colocated there.
+
 ---
 
 ## 5 — Performance & Scaling (Done)

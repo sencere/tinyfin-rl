@@ -14,6 +14,13 @@ RAYLIB_LDFLAGS ?= -L$(RAYLIB_DIR)/src -lraylib -lm -ldl -lpthread -lX11 -lrt
 
 SRC_CORE = \
 	src/envs/envs.c \
+	src/envs/registry.c \
+	src/envs/maze.c \
+	src/envs/lineworld.c \
+	src/envs/point1d.c \
+	src/envs/coin_maze.c \
+	src/envs/py_bridge.c \
+	src/envs/render.c \
 	src/core/algo_factory.c \
 	src/core/algo_random.c \
 	src/core/algo_dqn.c \
@@ -37,8 +44,8 @@ SRC_APP = \
 	src/cli/cli.c \
 	src/runner/runner.c
 
-SRC_VIEWER_STUB = src/viewer/viewer_stub.c
-SRC_VIEWER_RAYLIB = src/viewer/viewer_raylib.c
+SRC_VIEWER_STUB = src/envs/viewer_stub.c
+SRC_VIEWER_RAYLIB = src/envs/viewer_raylib.c
 
 BIN_DIR ?= build
 BIN ?= $(BIN_DIR)/tinyfin-rl
@@ -70,21 +77,21 @@ $(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
 		-o $@ $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) \
 		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) $(VIEWER_LIBS) -lpthread -lm -lrt
 
-$(ENV_LIB): src/envs/envs.c | $(BIN_DIR)
-	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $<
+$(ENV_LIB): src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $^
 
 tests: $(TEST_REPLAY) $(TEST_POINT1D) $(TEST_LINEWORLD_DUO) $(TEST_COIN_MAZE_DUO)
 
 $(TEST_REPLAY): tests/test_replay_buffer.c src/core/replay_buffer.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_POINT1D): tests/test_point1d_smoke.c src/envs/envs.c | $(BIN_DIR)
+$(TEST_POINT1D): tests/test_point1d_smoke.c src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_LINEWORLD_DUO): tests/test_lineworld_duo_smoke.c src/envs/envs.c | $(BIN_DIR)
+$(TEST_LINEWORLD_DUO): tests/test_lineworld_duo_smoke.c src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_COIN_MAZE_DUO): tests/test_coin_maze_duo_smoke.c src/envs/envs.c | $(BIN_DIR)
+$(TEST_COIN_MAZE_DUO): tests/test_coin_maze_duo_smoke.c src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
 raylib:
