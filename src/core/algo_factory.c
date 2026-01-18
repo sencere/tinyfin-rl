@@ -17,6 +17,7 @@ tfrl_algo tfrl_algo_mcts_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_iqn_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_tetris_plan_create(const tfrl_algo_config *cfg);
 
 static void apply_algo_defaults(tfrl_algo_config *cfg);
 
@@ -91,6 +92,7 @@ static const tfrl_algo_schema ALGO_SCHEMAS[] = {
     {.name = "td3", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "mcts", .defaults_version = 1, .gamma = 0.99f, .mcts_sims = 200, .mcts_depth = 50},
     {.name = "random", .defaults_version = 1, .gamma = 0.99f},
+    {.name = "tetris_plan", .defaults_version = 1, .gamma = 0.99f},
 };
 
 static const tfrl_algo_schema *algo_schema_for(const char *name) {
@@ -346,6 +348,9 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     }
     if (strcmp(cfg_use->name, "iqn") == 0) {
         return tfrl_algo_iqn_create(cfg_use);
+    }
+    if (strcmp(cfg_use->name, "tetris_plan") == 0) {
+        return tfrl_algo_tetris_plan_create(cfg_use);
     }
     fprintf(stderr, "unknown algo '%s'; using random policy\n", cfg_use->name);
     return tfrl_algo_random_create(cfg_use);

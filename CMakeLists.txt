@@ -14,6 +14,10 @@ set(SRC_CORE
     src/envs/lineworld.c
     src/envs/point1d.c
     src/envs/coin_maze.c
+    src/envs/snake_env.c
+    src/envs/floppy_env.c
+    src/envs/tetris_env.c
+    src/envs/pang_env.c
     src/envs/py_bridge.c
     src/envs/render.c
     src/core/algo_factory.c
@@ -31,6 +35,7 @@ set(SRC_CORE
     src/core/algo_mcts.c
     src/core/algo_reinforce.c
     src/core/algo_ppo.c
+    src/core/algo_tetris_plan.c
     src/core/replay_buffer.c
     src/core/trace.c
 )
@@ -70,6 +75,10 @@ add_library(tfrl_env SHARED
     src/envs/lineworld.c
     src/envs/point1d.c
     src/envs/coin_maze.c
+    src/envs/snake_env.c
+    src/envs/floppy_env.c
+    src/envs/tetris_env.c
+    src/envs/pang_env.c
     src/envs/py_bridge.c
     src/envs/render.c
 )
@@ -89,6 +98,10 @@ add_executable(test_point1d_smoke tests/test_point1d_smoke.c
     src/envs/lineworld.c
     src/envs/point1d.c
     src/envs/coin_maze.c
+    src/envs/snake_env.c
+    src/envs/floppy_env.c
+    src/envs/tetris_env.c
+    src/envs/pang_env.c
     src/envs/py_bridge.c
     src/envs/render.c
 )
@@ -103,6 +116,10 @@ add_executable(test_lineworld_duo_smoke tests/test_lineworld_duo_smoke.c
     src/envs/lineworld.c
     src/envs/point1d.c
     src/envs/coin_maze.c
+    src/envs/snake_env.c
+    src/envs/floppy_env.c
+    src/envs/tetris_env.c
+    src/envs/pang_env.c
     src/envs/py_bridge.c
     src/envs/render.c
 )
@@ -117,6 +134,10 @@ add_executable(test_coin_maze_duo_smoke tests/test_coin_maze_duo_smoke.c
     src/envs/lineworld.c
     src/envs/point1d.c
     src/envs/coin_maze.c
+    src/envs/snake_env.c
+    src/envs/floppy_env.c
+    src/envs/tetris_env.c
+    src/envs/pang_env.c
     src/envs/py_bridge.c
     src/envs/render.c
 )

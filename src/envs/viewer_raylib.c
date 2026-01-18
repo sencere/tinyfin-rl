@@ -8,6 +8,7 @@
 #include "raylib.h"
 
 #include "core/render_snapshot.h"
+#include "envs_internal.h"
 
 #define CELL_SIZE 48
 
@@ -66,6 +67,19 @@ struct tfrl_viewer {
     int width;
     int height;
 };
+
+static Color tetris_color(uint32_t id) {
+    switch (id) {
+        case 1: return (Color){40, 90, 170, 255};
+        case 2: return (Color){55, 110, 195, 255};
+        case 3: return (Color){70, 130, 220, 255};
+        case 4: return (Color){90, 150, 235, 255};
+        case 5: return (Color){110, 170, 245, 255};
+        case 6: return (Color){130, 190, 255, 255};
+        case 7: return (Color){30, 70, 140, 255};
+        default: return DARKGRAY;
+    }
+}
 
 static char *tfrl_strdup(const char *s) {
     if (!s) return NULL;
@@ -147,20 +161,31 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
         for (uint32_t x = 0; x < grid->width; x++) {
             int px = (int)x * CELL_SIZE;
             int py = (int)y * CELL_SIZE;
-            if (walls[y * grid->width + x]) {
-                DrawRectangle(px, py, CELL_SIZE, CELL_SIZE, DARKGRAY);
+            unsigned char cell = walls[y * grid->width + x];
+            if (cell) {
+                if (header->api_version == 0x0003 && grid_v3.env_kind == TFRL_ENV_TETRIS) {
+                    DrawRectangle(px, py, CELL_SIZE, CELL_SIZE, tetris_color(cell));
+                } else {
+                    DrawRectangle(px, py, CELL_SIZE, CELL_SIZE, DARKGRAY);
+                }
             } else {
                 DrawRectangleLines(px, py, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
             }
         }
     }
-    DrawRectangle((int)grid->goal_x * CELL_SIZE, (int)grid->goal_y * CELL_SIZE, CELL_SIZE, CELL_SIZE, (Color){255, 210, 120, 255});
-    DrawRectangle((int)grid->agent_x * CELL_SIZE, (int)grid->agent_y * CELL_SIZE, CELL_SIZE, CELL_SIZE, (Color){70, 130, 255, 255});
+    if (header->api_version != 0x0003 || grid_v3.env_kind != TFRL_ENV_TETRIS) {
+        DrawRectangle((int)grid->goal_x * CELL_SIZE, (int)grid->goal_y * CELL_SIZE, CELL_SIZE, CELL_SIZE, (Color){255, 210, 120, 255});
+        DrawRectangle((int)grid->agent_x * CELL_SIZE, (int)grid->agent_y * CELL_SIZE, CELL_SIZE, CELL_SIZE, (Color){70, 130, 255, 255});
+    }
     if (entities) {
         for (size_t i = 0; i < entity_count; i++) {
             int cx = (int)entities[i].x * CELL_SIZE + CELL_SIZE / 2;
             int cy = (int)entities[i].y * CELL_SIZE + CELL_SIZE / 2;
-            if (entities[i].type == 2) {
+            if (header->api_version == 0x0003 && grid_v3.env_kind == TFRL_ENV_TETRIS) {
+                uint32_t id = (uint32_t)(entities[i].value + 0.5f);
+                DrawRectangle((int)entities[i].x * CELL_SIZE, (int)entities[i].y * CELL_SIZE,
+                              CELL_SIZE, CELL_SIZE, tetris_color(id));
+            } else if (entities[i].type == 2) {
                 DrawRectangle(cx - CELL_SIZE / 4, cy - CELL_SIZE / 4, CELL_SIZE / 2, CELL_SIZE / 2, (Color){220, 80, 80, 255});
             } else {
                 DrawCircle(cx, cy, CELL_SIZE * 0.2f, (Color){255, 215, 0, 255});

@@ -28,9 +28,22 @@ per_beta="${PER_BETA:-}"
 # Docs-recommended defaults for DQN family unless overridden.
 if [[ "$algo" == "dqn" || "$algo" == "rainbow" || "$algo" == "qrdqn" || "$algo" == "iqn" ]]; then
   replay_size="${replay_size:-10000}"
-  batch_size="${batch_size:-64}"
+  batch_size="${batch_size:-128}"
   per_alpha="${per_alpha:-0.6}"
   per_beta="${per_beta:-0.4}"
+fi
+
+# Tetris defaults (single env, CPU-friendly) unless overridden.
+if [[ "$env_name" == "tetris" || "$env_name" == "tetris_disc" ]]; then
+  steps="${STEPS:-20000}"
+  envs="${ENVS:-1}"
+  threads="${THREADS:-1}"
+  backend="${BACKEND:-cpu}"
+  device="${DEVICE:-cpu}"
+  log_every="${LOG_EVERY:-50}"
+  replay_size="${replay_size:-20000}"
+  batch_size="${batch_size:-128}"
+  epsilon="${epsilon:-0.2}"
 fi
 
 mkdir -p "$save_dir"

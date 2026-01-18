@@ -54,6 +54,10 @@ typedef struct {
 size_t tfrl_env_render_bytes_needed(const tfrl_env *env) {
     if (!env) return 0;
     if (env->kind == TFRL_ENV_PYBRIDGE) return 0;
+    if (env->kind == TFRL_ENV_SNAKE || env->kind == TFRL_ENV_FLOPPY ||
+        env->kind == TFRL_ENV_PANG) {
+        return 0;
+    }
     int w = MAZE_W;
     int h = MAZE_H;
     if (env->kind == TFRL_ENV_LINEWORLD || env->kind == TFRL_ENV_LINEWORLD_CONT) {
@@ -65,6 +69,9 @@ size_t tfrl_env_render_bytes_needed(const tfrl_env *env) {
     } else if (env->kind == TFRL_ENV_COIN_MAZE) {
         w = COIN_MAZE_W;
         h = COIN_MAZE_H;
+    } else if (env->kind == TFRL_ENV_TETRIS) {
+        w = TETRIS_W;
+        h = TETRIS_H;
     }
     int entity_count = 0;
     if (env->kind == TFRL_ENV_COIN_MAZE || env->kind == TFRL_ENV_COIN_MAZE_DUO) {
@@ -77,14 +84,43 @@ size_t tfrl_env_render_bytes_needed(const tfrl_env *env) {
     }
     if (env->kind == TFRL_ENV_COIN_MAZE_DUO) {
         entity_count += 1;
+    }
+    if (env->kind == TFRL_ENV_TETRIS) {
+        entity_count += 4;
     }
     size_t payload_bytes = sizeof(tfrl_grid_snapshot_v3) + (w * h) + (entity_count * sizeof(tfrl_entity_snapshot));
     return sizeof(tfrl_render_snapshot_header) + payload_bytes;
 }
 
+static const int TETRIS_BLOCKS[7][4][2] = {
+    {{0, 1}, {1, 1}, {2, 1}, {3, 1}},
+    {{1, 0}, {2, 0}, {1, 1}, {2, 1}},
+    {{1, 0}, {0, 1}, {1, 1}, {2, 1}},
+    {{0, 0}, {0, 1}, {1, 1}, {2, 1}},
+    {{2, 0}, {0, 1}, {1, 1}, {2, 1}},
+    {{1, 0}, {2, 0}, {0, 1}, {1, 1}},
+    {{0, 0}, {1, 0}, {1, 1}, {2, 1}}
+};
+
+static void tetris_rot_coord(int x, int y, int rot, int *out_x, int *out_y) {
+    int rx = x;
+    int ry = y;
+    for (int i = 0; i < rot; i++) {
+        int tmp = rx;
+        rx = ry;
+        ry = 3 - tmp;
+    }
+    *out_x = rx;
+    *out_y = ry;
+}
+
 size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
     if (!env || !buffer) return 0;
     if (env->kind == TFRL_ENV_PYBRIDGE) return 0;
+    if (env->kind == TFRL_ENV_SNAKE || env->kind == TFRL_ENV_FLOPPY ||
+        env->kind == TFRL_ENV_PANG) {
+        return 0;
+    }
     int w = MAZE_W;
     int h = MAZE_H;
     if (env->kind == TFRL_ENV_LINEWORLD || env->kind == TFRL_ENV_LINEWORLD_CONT) {
@@ -96,6 +132,9 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
     } else if (env->kind == TFRL_ENV_COIN_MAZE) {
         w = COIN_MAZE_W;
         h = COIN_MAZE_H;
+    } else if (env->kind == TFRL_ENV_TETRIS) {
+        w = TETRIS_W;
+        h = TETRIS_H;
     }
     int entity_count = 0;
     if (env->kind == TFRL_ENV_COIN_MAZE || env->kind == TFRL_ENV_COIN_MAZE_DUO) {
@@ -108,6 +147,9 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
     }
     if (env->kind == TFRL_ENV_COIN_MAZE_DUO) {
         entity_count += 1;
+    }
+    if (env->kind == TFRL_ENV_TETRIS) {
+        entity_count += 4;
     }
     size_t payload_bytes = sizeof(tfrl_grid_snapshot_v3) + (w * h) + (entity_count * sizeof(tfrl_entity_snapshot));
     size_t total = sizeof(tfrl_render_snapshot_header) + payload_bytes;
@@ -137,6 +179,12 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
         agent_y = 0;
         goal_x = (uint32_t)(w - 1);
         goal_y = 0;
+    } else if (env->kind == TFRL_ENV_TETRIS) {
+        max_steps = (uint32_t)TETRIS_MAX_STEPS;
+        agent_x = (uint32_t)env->tetris.x;
+        agent_y = (uint32_t)env->tetris.y;
+        goal_x = agent_x;
+        goal_y = agent_y;
     }
 
     tfrl_grid_snapshot_v3 payload = {
@@ -163,6 +211,11 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
                 env->kind == TFRL_ENV_LINEWORLD_DUO || env->kind == TFRL_ENV_POINT1D ||
                 env->kind == TFRL_ENV_COIN_MAZE || env->kind == TFRL_ENV_COIN_MAZE_DUO) {
                 walls[y * w + x] = 0;
+            } else if (env->kind == TFRL_ENV_TETRIS) {
+                int cell = env->tetris.grid[x][y];
+                if (cell < 0) cell = 0;
+                if (cell > 7) cell = 7;
+                walls[y * w + x] = (unsigned char)cell;
             } else {
                 walls[y * w + x] = (unsigned char)(tfrl_env_is_wall_maze(x, y) ? 1 : 0);
             }
@@ -191,6 +244,23 @@ size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len) {
         entities[0].x = (float)env->x2;
         entities[0].y = (float)env->y2;
         entities[0].value = 1.0f;
+    }
+    if (env->kind == TFRL_ENV_TETRIS) {
+        int idx = 0;
+        int piece = env->tetris.piece;
+        if (piece < 0) piece = 0;
+        if (piece > 6) piece = 6;
+        for (int i = 0; i < 4; i++) {
+            int bx = 0;
+            int by = 0;
+            tetris_rot_coord(TETRIS_BLOCKS[piece][i][0], TETRIS_BLOCKS[piece][i][1],
+                              env->tetris.rot, &bx, &by);
+            entities[idx].type = 2;
+            entities[idx].x = (float)(env->tetris.x + bx);
+            entities[idx].y = (float)(env->tetris.y + by);
+            entities[idx].value = (float)(piece + 1);
+            idx++;
+        }
     }
     env->frame_index++;
     return total;

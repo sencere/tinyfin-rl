@@ -4,6 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 use_raylib="${USE_RAYLIB:-0}"
+skip_raylib="${TFRL_SKIP_RAYLIB:-0}"
 clean="${CLEAN:-0}"
 build_tinyfin="${BUILD_TINYFIN:-1}"
 build_env_lib_only="${BUILD_ENV_LIB_ONLY:-0}"
@@ -16,7 +17,7 @@ if [[ "$build_tinyfin" == "1" && ! -f "$root/tinyfin/libtinyfin.so" ]]; then
   ENABLE_CUDA="${ENABLE_CUDA:-0}" CLEAN="$clean" bash "$root/scripts/build_tinyfin.sh"
 fi
 
-if [[ "$use_raylib" == "1" ]]; then
+if [[ "$use_raylib" == "1" && "$skip_raylib" != "1" ]]; then
   bash "$root/scripts/build_raylib.sh"
 fi
 

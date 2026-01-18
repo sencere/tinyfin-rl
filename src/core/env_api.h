@@ -8,7 +8,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define TFRL_MAX_BOX_DIMS 4
+#define TFRL_MAX_BOX_DIMS 32
 
 typedef struct {
     int index;

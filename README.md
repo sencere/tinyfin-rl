@@ -4,13 +4,17 @@
   <img src="resources/logo/logo.png" alt="tinyfin logo" />
 </p>
 
-## Demo DQN Agent
-
-![tinyfin-rl agent demo](resources/demo/agent.gif)
-
 Tinyfin-RL is a **C-first reinforcement learning system** with a single
 executable, a deterministic environment core, and Tinyfin for tensors +
 autograd. Rendering is optional and never drives simulation.
+
+## Demo PPO Agent With Planing 
+
+![tinyfin-rl agent demo](resources/demo/agent2.gif)
+
+## Demo DQN Agent
+
+![tinyfin-rl agent demo](resources/demo/agent.gif)
 
 ## What’s In Here
 
@@ -39,8 +43,8 @@ Convenience build scripts:
 With CUDA:
 
 ```bash
-ENABLE_CUDA=1 ./scripts/build_tinyfin.sh
-ENABLE_CUDA=1 ./scripts/build_tinyfin_rl.sh
+ENABLE_CUDA=1 CLEAN=1 ./scripts/build_tinyfin.sh
+ENABLE_CUDA=1 CLEAN=1 ./scripts/build_tinyfin_rl.sh
 ```
 
 Build only the shared env library:
@@ -53,8 +57,6 @@ With raylib viewer:
 
 ```bash
 ./scripts/build_raylib.sh
-USE_RAYLIB=1 ./scripts/build_tinyfin_rl.sh
-export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 ./build/tinyfin-rl train --algo dqn --steps 1000 --render live --render-fps 10
 ```
 
@@ -70,6 +72,9 @@ Select environment:
 ./build/tinyfin-rl train --algo dqn --env coin_maze --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --threads 4 --render live --render-env 0
+./build/tinyfin-rl train --algo dqn --env tetris --steps 20000
+./build/tinyfin-rl train --algo ppo --env tetris_disc --steps 20000
+./build/tinyfin-rl train --algo tetris_plan --env tetris --steps 2000
 ```
 
 ## Algorithms
@@ -111,8 +116,6 @@ Replay:
 
 ```bash
 ./scripts/build_raylib.sh
-USE_RAYLIB=1 ./scripts/build_tinyfin_rl.sh
-export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
 ```
 
@@ -120,6 +123,9 @@ export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
 
 - The canonical environment is a four-room grid (`maze_rooms`).
 - Reference environments: `lineworld`, `lineworld_cont`, `point1d`, `coin_maze`.
+- Arcade environments: `snake`, `floppy`, `tetris`, `pang`.
+- PPO requires discrete observations: use `tetris_disc` for PPO on tetris.
+- `tetris_plan` is a lookahead planner (current + next piece) that overrides actions.
 - Multi-agent environments: `lineworld_duo`, `coin_maze_duo`.
 - DQN/REINFORCE/PPO plus A2C/A3C/TRPO/IMPALA/Rainbow/QR-DQN/IQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.

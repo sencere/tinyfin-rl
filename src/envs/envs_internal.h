@@ -14,7 +14,11 @@ typedef enum {
     TFRL_ENV_COIN_MAZE = 4,
     TFRL_ENV_LINEWORLD_DUO = 5,
     TFRL_ENV_COIN_MAZE_DUO = 6,
-    TFRL_ENV_PYBRIDGE = 7
+    TFRL_ENV_PYBRIDGE = 7,
+    TFRL_ENV_SNAKE = 8,
+    TFRL_ENV_FLOPPY = 9,
+    TFRL_ENV_TETRIS = 10,
+    TFRL_ENV_PANG = 11
 } tfrl_env_kind;
 
 #define MAZE_W 10
@@ -35,6 +39,82 @@ typedef enum {
 #define COIN_MAZE_H 10
 #define COIN_MAZE_MAX_STEPS 200
 #define COIN_MAZE_COINS 4
+
+#define SNAKE_W 25
+#define SNAKE_H 14
+#define SNAKE_MAX_STEPS 500
+#define SNAKE_MAX_LEN 256
+
+#define FLOPPY_W 800
+#define FLOPPY_H 450
+#define FLOPPY_MAX_STEPS 10000
+#define FLOPPY_MAX_TUBES 100
+#define FLOPPY_TUBES_WIDTH 80
+#define FLOPPY_RADIUS 24
+
+#define TETRIS_W 10
+#define TETRIS_H 20
+#define TETRIS_MAX_STEPS 2000
+
+#define PANG_W 800
+#define PANG_H 450
+#define PANG_MAX_STEPS 2000
+#define PANG_MAX_BIG 2
+#define PANG_MAX_MED (PANG_MAX_BIG * 2)
+#define PANG_MAX_SMALL (PANG_MAX_BIG * 4)
+
+typedef struct {
+    int len;
+    int dir;
+    int xs[SNAKE_MAX_LEN];
+    int ys[SNAKE_MAX_LEN];
+    int fruit_x;
+    int fruit_y;
+} tfrl_snake_state;
+
+typedef struct {
+    float x;
+    float y;
+    int score;
+    int last_action;
+    float tubes_x[FLOPPY_MAX_TUBES];
+    float tubes_offset_y[FLOPPY_MAX_TUBES];
+    int tubes_scored[FLOPPY_MAX_TUBES];
+} tfrl_floppy_state;
+
+typedef struct {
+    int grid[TETRIS_W][TETRIS_H];
+    int piece;
+    int next_piece;
+    int rot;
+    int x;
+    int y;
+    int lines;
+    double score;
+} tfrl_tetris_state;
+
+typedef struct {
+    float x;
+    float y;
+    float vx;
+    float vy;
+    float radius;
+    int active;
+} tfrl_pang_ball;
+
+typedef struct {
+    float player_x;
+    float player_y;
+    float ship_height;
+    float gravity;
+    int shot_active;
+    float shot_x;
+    float shot_y;
+    float line_x;
+    tfrl_pang_ball big[PANG_MAX_BIG];
+    tfrl_pang_ball med[PANG_MAX_MED];
+    tfrl_pang_ball small[PANG_MAX_SMALL];
+} tfrl_pang_state;
 
 typedef struct tfrl_env_ops {
     const char *name;
@@ -67,6 +147,10 @@ struct tfrl_env {
     tfrl_env_spec py_spec;
     int py_agent_count;
     char py_name[128];
+    tfrl_snake_state snake;
+    tfrl_floppy_state floppy;
+    tfrl_tetris_state tetris;
+    tfrl_pang_state pang;
 };
 
 typedef struct tfrl_env tfrl_env;
@@ -83,6 +167,11 @@ const tfrl_env_spec *tfrl_env_spec_lineworld_duo(void);
 const tfrl_env_spec *tfrl_env_spec_point1d(void);
 const tfrl_env_spec *tfrl_env_spec_coin_maze(void);
 const tfrl_env_spec *tfrl_env_spec_coin_maze_duo(void);
+const tfrl_env_spec *tfrl_env_spec_snake(void);
+const tfrl_env_spec *tfrl_env_spec_floppy(void);
+const tfrl_env_spec *tfrl_env_spec_tetris(void);
+const tfrl_env_spec *tfrl_env_spec_tetris_disc(void);
+const tfrl_env_spec *tfrl_env_spec_pang(void);
 
 tfrl_obs tfrl_env_reset_maze(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_lineworld(tfrl_env *env, uint64_t seed);
@@ -91,6 +180,11 @@ tfrl_obs tfrl_env_reset_lineworld_duo(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_point1d(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_coin_maze(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_coin_maze_duo(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_snake(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_floppy(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_tetris(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_tetris_disc(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_pang(tfrl_env *env, uint64_t seed);
 
 tfrl_step_result tfrl_env_step_maze(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_lineworld(tfrl_env *env, tfrl_action action);
@@ -99,6 +193,11 @@ tfrl_step_result tfrl_env_step_lineworld_duo(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_point1d(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_coin_maze(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_coin_maze_duo(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_snake(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_floppy(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_tetris(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_tetris_disc(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_pang(tfrl_env *env, tfrl_action action);
 
 int tfrl_env_step_multi_lineworld_duo(tfrl_env *env, const tfrl_action *actions, int action_count,
                                      tfrl_step_result *out_steps, int max_agents);
