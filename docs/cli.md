@@ -10,7 +10,7 @@
 
 Common flags:
 
-- `--algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random`
+- `--algo dqn|rainbow|qrdqn|iql|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random`
 - `--env maze_rooms|lineworld|lineworld_duo|lineworld_cont|point1d|coin_maze|coin_maze_duo`
 - `--env py:gymnasium:ENV_ID` (Python bridge)
 - `--env py:pettingzoo:MODULE` (Python bridge, e.g. `py:pettingzoo:butterfly.pistonball_v6`)

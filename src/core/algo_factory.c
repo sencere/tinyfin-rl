@@ -7,6 +7,7 @@ tfrl_algo tfrl_algo_random_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_dqn_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_rainbow_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_qrdqn_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_iql_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_a2c_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_a3c_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_trpo_create(const tfrl_algo_config *cfg);
@@ -81,6 +82,7 @@ static const tfrl_algo_schema ALGO_SCHEMAS[] = {
     {.name = "dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "rainbow", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f, .c51_atoms = 51, .c51_vmin = -10.0f, .c51_vmax = 10.0f},
     {.name = "qrdqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "iql", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .epsilon = 0.1f, .replay_size = 10000, .batch_size = 64, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "iqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f, .iqn_quantiles = 32, .iqn_tau_samples = 32},
     {.name = "ppo", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .entropy_coef = 0.01f, .clip_eps = 0.2f, .kl_target = 0.01f, .gae_lambda = 0.95f, .steps_per_batch = 64, .epochs = 2},
     {.name = "reinforce", .defaults_version = 1, .gamma = 0.99f, .lr = 0.01f, .steps_per_batch = 64},
@@ -249,7 +251,7 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
     } else if (strcmp(cfg->name, "a2c") == 0 || strcmp(cfg->name, "a3c") == 0 || strcmp(cfg->name, "trpo") == 0 || strcmp(cfg->name, "impala") == 0) {
         if (!require_discrete(cfg->name, cfg)) return 0;
         if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
-    } else if (strcmp(cfg->name, "dqn") == 0 || strcmp(cfg->name, "rainbow") == 0 || strcmp(cfg->name, "qrdqn") == 0 || strcmp(cfg->name, "iqn") == 0) {
+    } else if (strcmp(cfg->name, "dqn") == 0 || strcmp(cfg->name, "rainbow") == 0 || strcmp(cfg->name, "qrdqn") == 0 || strcmp(cfg->name, "iqn") == 0 || strcmp(cfg->name, "iql") == 0) {
         if (cfg->action_type != TFRL_SPACE_DISCRETE) {
             fprintf(stderr, "%s requires discrete action space\n", cfg->name);
             return 0;
@@ -321,6 +323,9 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     }
     if (strcmp(cfg_use->name, "qrdqn") == 0) {
         return tfrl_algo_qrdqn_create(cfg_use);
+    }
+    if (strcmp(cfg_use->name, "iql") == 0) {
+        return tfrl_algo_iql_create(cfg_use);
     }
     if (strcmp(cfg_use->name, "a2c") == 0) {
         return tfrl_algo_a2c_create(cfg_use);

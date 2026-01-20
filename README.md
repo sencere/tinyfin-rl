@@ -90,6 +90,7 @@ Select environment:
 ./build/tinyfin-rl train --algo dqn --steps 2000
 ./build/tinyfin-rl train --algo rainbow --steps 2000
 ./build/tinyfin-rl train --algo qrdqn --steps 2000
+./build/tinyfin-rl train --algo iql --steps 2000
 ./build/tinyfin-rl train --algo iqn --steps 2000
 ./build/tinyfin-rl train --algo reinforce --steps 2000 --steps-per-batch 512
 ./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01 --kl-target 0.01
@@ -134,7 +135,7 @@ Replay:
 - PPO requires discrete observations: use `tetris_disc` for PPO on tetris.
 - `tetris_plan` is a lookahead planner (current + next piece) that overrides actions.
 - Multi-agent environments: `lineworld_duo`, `coin_maze_duo`.
-- DQN/REINFORCE/PPO plus A2C/A3C/TRPO/IMPALA/Rainbow/QR-DQN/IQN/SAC/TD3 are implemented in C using Tinyfin.
+- DQN/REINFORCE/PPO plus A2C/A3C/TRPO/IMPALA/Rainbow/QR-DQN/IQL/IQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
 - Batch helpers include `tfrl_env_step_batch`, `tfrl_env_reset_batch`, and `tfrl_env_reset_batch_seeds`.
 - Multiprocess DQN actors (shared-memory queue) are available for higher throughput.

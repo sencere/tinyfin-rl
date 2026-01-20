@@ -35,11 +35,11 @@ void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "\033[1;34mTINYFIN\033[0m\n\n");
     fprintf(stderr, "usage:\n");
     fprintf(stderr, "  %s list-envs\n", name);
-    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|iql|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "           [--backend cpu|cuda|blas] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "           [--profile] [--profile-json FILE]\n");
     fprintf(stderr, "           [--mp-actors N] [--mp-queue N] [--mp-sync-every N] [--mp-sync-path PATH]\n");
-    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|iql|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "          [--backend cpu|cuda|blas] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N] [--dump-meta-json]\n", name);
     fprintf(stderr, "algo params:\n");

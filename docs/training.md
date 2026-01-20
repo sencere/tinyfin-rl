@@ -18,6 +18,7 @@ Use replay/PER tuning:
 ```bash
 ./build/tinyfin-rl train --algo rainbow --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
 ./build/tinyfin-rl train --algo qrdqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
+./build/tinyfin-rl train --algo iql --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
 ./build/tinyfin-rl train --algo iqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
 ```
 

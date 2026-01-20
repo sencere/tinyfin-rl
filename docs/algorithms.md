@@ -75,6 +75,27 @@ Flags:
 - `--per-beta`
 - `--save PATH` / `--load PATH`
 
+## IQL (Implicit Q-Learning)
+
+IQL trains a value head with expectile regression against Q-values and uses the
+value estimate for Q-targets. This implementation uses an implicit policy via
+argmax Q with optional epsilon exploration.
+
+```bash
+./build/tinyfin-rl train --algo iql --steps 2000 --replay-size 10000 --batch-size 64
+```
+
+Flags:
+
+- `--gamma`
+- `--lr`
+- `--epsilon`
+- `--replay-size`
+- `--batch-size`
+- `--per-alpha`
+- `--per-beta`
+- `--save PATH` / `--load PATH`
+
 ## IQN (Minimal)
 
 Implicit quantile regression with sampled taus appended to the input features.
@@ -211,6 +232,7 @@ Checkpoint format:
 - DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
 - Rainbow DQN: `PATH.adv.w.tensor`, `PATH.adv.b.tensor`, `PATH.val.w.tensor`, `PATH.val.b.tensor`
 - QR-DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
+- IQL: `PATH.q.w.tensor`, `PATH.q.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
 - IQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
 - REINFORCE: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`
 - PPO: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`

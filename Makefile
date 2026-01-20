@@ -47,6 +47,7 @@ SRC_CORE = \
 	src/core/algo_dqn.c \
 	src/core/algo_rainbow.c \
 	src/core/algo_qrdqn.c \
+	src/core/algo_iql.c \
 	src/core/algo_iqn.c \
 	src/core/algo_a2c.c \
 	src/core/algo_a3c.c \
