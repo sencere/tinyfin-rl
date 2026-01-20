@@ -89,3 +89,23 @@ CUDA backend:
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
 ./build/tinyfin-rl replay --trace-in runs/run.tft --dump-meta-json
 ```
+
+## Production Runner
+
+Minimal inference-only binary that loads saved weights and steps one env:
+
+```bash
+make build/tinyfin-prod
+./build/tinyfin-prod --algo dqn --env lineworld --load runs/dqn --steps 1000 --deterministic
+```
+
+Flags:
+
+- `--algo NAME`
+- `--env NAME`
+- `--load PATH`
+- `--steps N`
+- `--episodes N`
+- `--seed N`
+- `--deterministic`
+- `--print-every N` (emit action/reward every N steps)

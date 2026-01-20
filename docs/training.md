@@ -103,6 +103,13 @@ Use `--save PATH` and `--load PATH`:
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ```
 
+Inference-only runner:
+
+```bash
+make build/tinyfin-prod
+./build/tinyfin-prod --algo dqn --env lineworld --load runs/dqn --steps 1000 --deterministic
+```
+
 ## Render after training
 
 Record a trace and replay it:

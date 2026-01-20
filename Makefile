@@ -40,7 +40,7 @@ ENV_SRCS = \
 	src/envs/render.c \
 	src/envs/render_grid.c
 
-SRC_CORE = \
+SRC_LIB = \
 	$(ENV_SRCS) \
 	src/core/algo_factory.c \
 	src/core/algo_random.c \
@@ -62,6 +62,8 @@ SRC_CORE = \
 	src/core/replay_buffer.c \
 	src/core/trace.c
 
+SRC_CORE = $(SRC_LIB)
+
 SRC_APP = \
 	src/main.c \
 	src/cli/cli.c \
@@ -72,6 +74,7 @@ SRC_VIEWER_RAYLIB = src/envs/viewer_raylib.c
 
 BIN_DIR ?= build
 BIN ?= $(BIN_DIR)/tinyfin-rl
+PROD_BIN ?= $(BIN_DIR)/tinyfin-prod
 ENV_LIB ?= $(BIN_DIR)/libtfrl_env.so
 TEST_REPLAY ?= $(BIN_DIR)/test_replay_buffer
 TEST_POINT1D ?= $(BIN_DIR)/test_point1d_smoke
@@ -99,6 +102,11 @@ $(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -Isrc $(VIEWER_INC) \
 		-o $@ $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) \
 		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) $(VIEWER_LIBS) -lpthread -lm -lrt
+
+$(PROD_BIN): $(SRC_LIB) src/prod/prod_main.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -I$(TINYFIN_INC) -Isrc \
+		-o $@ $(SRC_LIB) src/prod/prod_main.c \
+		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) -lpthread -lm -lrt
 
 $(ENV_LIB): $(ENV_SRCS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $^

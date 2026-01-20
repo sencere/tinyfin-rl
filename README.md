@@ -127,6 +127,13 @@ Replay:
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
 ```
 
+Production runner (inference-only):
+
+```bash
+make build/tinyfin-prod
+./build/tinyfin-prod --algo dqn --env lineworld --load runs/dqn --steps 1000 --deterministic
+```
+
 ## Notes
 
 - The canonical environment is a four-room grid (`maze_rooms`).
