@@ -69,6 +69,7 @@ With raylib viewer:
 Select environment:
 
 ```bash
+./build/tinyfin-rl list-envs
 ./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 1000
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 500

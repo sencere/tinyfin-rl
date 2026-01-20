@@ -146,3 +146,13 @@ const tfrl_env_ops *tfrl_env_find_ops(const char *name) {
     }
     return &ENVS[0];
 }
+
+size_t tfrl_env_count(void) {
+    return sizeof(ENVS) / sizeof(ENVS[0]);
+}
+
+const tfrl_env_ops *tfrl_env_get_ops(size_t index) {
+    size_t count = tfrl_env_count();
+    if (index >= count) return NULL;
+    return &ENVS[index];
+}

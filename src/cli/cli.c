@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "cli.h"
+#include "envs/envs_internal.h"
 
 static int arg_int(int argc, char **argv, const char *name, int def) {
     for (int i = 1; i < argc - 1; i++) {
@@ -33,6 +34,7 @@ static float arg_float(int argc, char **argv, const char *name, float def) {
 void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "\033[1;34mTINYFIN\033[0m\n\n");
     fprintf(stderr, "usage:\n");
+    fprintf(stderr, "  %s list-envs\n", name);
     fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "           [--backend cpu|cuda|blas] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "           [--profile] [--profile-json FILE]\n");
@@ -132,4 +134,14 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
         return 0;
     }
     return 1;
+}
+
+void tfrl_cli_print_envs(void) {
+    size_t count = tfrl_env_count();
+    for (size_t i = 0; i < count; i++) {
+        const tfrl_env_ops *ops = tfrl_env_get_ops(i);
+        if (ops && ops->name) {
+            printf("%s\n", ops->name);
+        }
+    }
 }

@@ -183,6 +183,8 @@ void tfrl_env_reset_state(tfrl_env *env);
 int tfrl_env_is_wall_maze(int x, int y);
 
 const tfrl_env_ops *tfrl_env_find_ops(const char *name);
+size_t tfrl_env_count(void);
+const tfrl_env_ops *tfrl_env_get_ops(size_t index);
 
 const tfrl_env_spec *tfrl_env_spec_maze(void);
 const tfrl_env_spec *tfrl_env_spec_lineworld(void);
