@@ -60,6 +60,7 @@ typedef struct {
     double reward;
     tfrl_obs next_obs;
     int done;
+    int policy_version;
 } tfrl_transition;
 
 typedef struct tfrl_algo_vtable {

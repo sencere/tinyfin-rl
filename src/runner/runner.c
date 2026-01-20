@@ -1042,6 +1042,60 @@ static void mp_actor_main(const tfrl_mp_actor *actor) {
     _exit(0);
 }
 
+static void mp_actor_main_ppo(const tfrl_mp_actor *actor) {
+    tfrl_env_config env_cfg = {.name = actor->cfg.env_name, .seed = (uint64_t)(actor->cfg.seed + actor->actor_id + 1)};
+    tfrl_env *env = tfrl_env_create(&env_cfg);
+    if (!env) _exit(1);
+    const tfrl_env_spec *spec = tfrl_env_get_spec(env);
+    if (!spec) {
+        tfrl_env_destroy(env);
+        _exit(1);
+    }
+    tfrl_obs obs = tfrl_env_reset(env, (uint64_t)(actor->cfg.seed + actor->actor_id + 1));
+    tfrl_algo algo = {0};
+    long long last_version = -1;
+    int policy_version = 0;
+
+    while (1) {
+        int step_id = mp_queue_next_step(actor->queue);
+        if (step_id < 0) break;
+        long long version = -1;
+        if (read_marker_version(actor->sync_marker, &version) && version > last_version) {
+            tfrl_algo_destroy(&algo);
+            tfrl_algo_config algo_cfg;
+            fill_algo_config(&algo_cfg, &actor->cfg, spec, actor->cfg.seed, actor->sync_path);
+            tfrl_algo_config_apply_defaults(&algo_cfg);
+            algo = tfrl_algo_create(&algo_cfg, spec);
+            last_version = version;
+            policy_version = (int)version;
+        }
+        if (!algo.ctx) {
+            tfrl_algo_config algo_cfg;
+            fill_algo_config(&algo_cfg, &actor->cfg, spec, actor->cfg.seed, actor->sync_path);
+            tfrl_algo_config_apply_defaults(&algo_cfg);
+            algo = tfrl_algo_create(&algo_cfg, spec);
+        }
+        tfrl_action action = algo.vtable->act(algo.ctx, obs);
+        tfrl_step_result step = tfrl_env_step(env, action);
+        tfrl_transition transition = {
+            .obs = obs,
+            .action = action,
+            .reward = step.reward,
+            .next_obs = step.observation,
+            .done = step.done,
+            .policy_version = policy_version,
+        };
+        if (!mp_queue_push(actor->queue, &transition)) break;
+        obs = step.observation;
+        if (step.done) {
+            obs = tfrl_env_reset(env, (uint64_t)(actor->cfg.seed + actor->actor_id + 1));
+        }
+    }
+    tfrl_algo_destroy(&algo);
+    tfrl_env_destroy(env);
+    _exit(0);
+}
+
 static int run_mp_dqn(const tfrl_runner_config *cfg) {
     if (!cfg || !is_dqn_family(cfg->algo)) {
         fprintf(stderr, "mp mode only supports dqn/rainbow/qrdqn/iqn\n");
@@ -1153,6 +1207,131 @@ static int run_mp_dqn(const tfrl_runner_config *cfg) {
     tfrl_algo_destroy(&algo);
     mp_queue_destroy(queue, shm_name, shm_fd);
     tfrl_env_destroy(env);
+    return 0;
+}
+
+static int run_mp_ppo(const tfrl_runner_config *cfg) {
+    if (!cfg || !cfg->algo || strcmp(cfg->algo, "ppo") != 0) {
+        fprintf(stderr, "mp mode only supports ppo here\n");
+        return 1;
+    }
+    if (cfg->render || cfg->trace_out) {
+        fprintf(stderr, "mp mode does not support render/trace; disable them.\n");
+        return 1;
+    }
+    tfrl_env_config env_cfg = {.name = cfg->env_name, .seed = (uint64_t)(cfg->seed)};
+    tfrl_env *env = tfrl_env_create(&env_cfg);
+    if (!env) {
+        fprintf(stderr, "env create failed\n");
+        return 1;
+    }
+    const tfrl_env_spec *spec = tfrl_env_get_spec(env);
+    int agent_count = tfrl_env_agent_count(env);
+    if (agent_count != 1) {
+        fprintf(stderr, "mp ppo requires single-agent env\n");
+        tfrl_env_destroy(env);
+        return 1;
+    }
+
+    int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
+    int actor_count = cfg->mp_actors > 0 ? cfg->mp_actors : 1;
+    int queue_capacity = cfg->mp_queue > 0 ? cfg->mp_queue : 65536;
+    const char *sync_path = cfg->mp_sync_path && cfg->mp_sync_path[0] ? cfg->mp_sync_path : "runs/mp_sync";
+    char sync_marker[256];
+    snprintf(sync_marker, sizeof(sync_marker), "%s.done", sync_path);
+    ensure_parent_dir(sync_path);
+
+    char shm_name[64] = {0};
+    int shm_fd = -1;
+    tfrl_mp_queue *queue = mp_queue_create(queue_capacity, total_steps, shm_name, sizeof(shm_name), &shm_fd);
+    if (!queue) {
+        fprintf(stderr, "mp queue init failed\n");
+        tfrl_env_destroy(env);
+        return 1;
+    }
+
+    tfrl_algo_config algo_cfg;
+    fill_algo_config(&algo_cfg, cfg, spec, cfg->seed, cfg->load_path);
+    tfrl_algo_config_apply_defaults(&algo_cfg);
+    tfrl_algo algo = tfrl_algo_create(&algo_cfg, spec);
+    if (!algo.ctx) {
+        mp_queue_destroy(queue, shm_name, shm_fd);
+        tfrl_env_destroy(env);
+        return 1;
+    }
+    tfrl_algo_save(&algo, sync_path);
+    write_marker_version(sync_marker, 0);
+
+    pid_t *pids = (pid_t *)calloc((size_t)actor_count, sizeof(pid_t));
+    if (!pids) {
+        tfrl_algo_destroy(&algo);
+        mp_queue_destroy(queue, shm_name, shm_fd);
+        tfrl_env_destroy(env);
+        return 1;
+    }
+
+    for (int i = 0; i < actor_count; i++) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            tfrl_mp_actor actor = {
+                .cfg = *cfg,
+                .actor_id = i,
+                .total_steps = total_steps,
+                .queue = queue,
+                .sync_path = sync_path,
+                .sync_marker = sync_marker,
+                .sync_every = 1,
+            };
+            mp_actor_main_ppo(&actor);
+        }
+        if (pid < 0) {
+            fprintf(stderr, "fork failed\n");
+            mp_queue_close(queue);
+            for (int j = 0; j < i; j++) {
+                if (pids[j] > 0) kill(pids[j], SIGTERM);
+            }
+            free(pids);
+            tfrl_algo_destroy(&algo);
+            mp_queue_destroy(queue, shm_name, shm_fd);
+            tfrl_env_destroy(env);
+            return 1;
+        }
+        pids[i] = pid;
+    }
+
+    int processed_total = 0;
+    int processed_used = 0;
+    int batch = cfg->steps_per_batch > 0 ? cfg->steps_per_batch : 64;
+    int batch_count = 0;
+    int policy_version = 0;
+    tfrl_transition tr;
+    while (processed_total < total_steps) {
+        if (!mp_queue_pop(queue, &tr)) break;
+        processed_total++;
+        if (tr.policy_version != policy_version) {
+            continue;
+        }
+        algo.vtable->update(algo.ctx, &tr);
+        processed_used++;
+        batch_count++;
+        if (batch_count >= batch) {
+            batch_count = 0;
+            policy_version++;
+            tfrl_algo_save(&algo, sync_path);
+            write_marker_version(sync_marker, policy_version);
+        }
+    }
+
+    mp_queue_close(queue);
+    for (int i = 0; i < actor_count; i++) {
+        int status = 0;
+        waitpid(pids[i], &status, 0);
+    }
+    free(pids);
+    tfrl_algo_destroy(&algo);
+    mp_queue_destroy(queue, shm_name, shm_fd);
+    tfrl_env_destroy(env);
+    fprintf(stdout, "mp_ppo: total=%d used=%d version=%d\n", processed_total, processed_used, policy_version);
     return 0;
 }
 
@@ -1448,6 +1627,9 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 tfrl_env_destroy(envs[i]);
             }
             free(envs);
+            if (cfg->algo && strcmp(cfg->algo, "ppo") == 0) {
+                return run_mp_ppo(cfg);
+            }
             return run_mp_dqn(cfg);
         }
         int total_steps = cfg->steps > 0 ? cfg->steps : 1000;
@@ -1469,35 +1651,42 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             fprintf(stdout, "\033[?25l");
             fflush(stdout);
         }
-        tfrl_obs *obs_batch = (tfrl_obs *)calloc((size_t)env_count, sizeof(tfrl_obs));
-        tfrl_action *act_batch = (tfrl_action *)calloc((size_t)env_count, sizeof(tfrl_action));
-        if (!obs_batch || !act_batch) {
-            fprintf(stderr, "allocation failed\n");
-            free(obs_batch);
-            free(act_batch);
-            for (int a = 0; a < agent_count; a++) {
-                tfrl_algo_destroy(&algos[a]);
+        tfrl_obs *obs_batch = NULL;
+        tfrl_action *act_batch = NULL;
+        if (agent_count > 1 && !cfg->share_policy) {
+            obs_batch = (tfrl_obs *)calloc((size_t)env_count, sizeof(tfrl_obs));
+            act_batch = (tfrl_action *)calloc((size_t)env_count, sizeof(tfrl_action));
+            if (!obs_batch || !act_batch) {
+                fprintf(stderr, "allocation failed\n");
+                free(obs_batch);
+                free(act_batch);
+                for (int a = 0; a < agent_count; a++) {
+                    tfrl_algo_destroy(&algos[a]);
+                }
+                for (int i = 0; i < env_count; i++) {
+                    tfrl_env_destroy(envs[i]);
+                }
+                free(envs);
+                free(obs);
+                free(actions);
+                free(steps);
+                free(episode_returns);
+                free(episode_counts);
+                return 1;
             }
-            for (int i = 0; i < env_count; i++) {
-                tfrl_env_destroy(envs[i]);
-            }
-            free(envs);
-            free(obs);
-            free(actions);
-            free(steps);
-            free(episode_returns);
-            free(episode_counts);
-            return 1;
         }
         for (int step = 0; step < total_steps; step++) {
-            for (int a = 0; a < agent_count; a++) {
-                for (int i = 0; i < env_count; i++) {
-                    obs_batch[i] = obs[i * agent_count + a];
-                }
-                int algo_idx = cfg->share_policy ? 0 : a;
-                tfrl_algo_act_batch(&algos[algo_idx], obs_batch, env_count, act_batch);
-                for (int i = 0; i < env_count; i++) {
-                    actions[i * agent_count + a] = act_batch[i];
+            if (agent_count == 1 || cfg->share_policy) {
+                tfrl_algo_act_batch(&algos[0], obs, total_agents, actions);
+            } else {
+                for (int a = 0; a < agent_count; a++) {
+                    for (int i = 0; i < env_count; i++) {
+                        obs_batch[i] = obs[i * agent_count + a];
+                    }
+                    tfrl_algo_act_batch(&algos[a], obs_batch, env_count, act_batch);
+                    for (int i = 0; i < env_count; i++) {
+                        actions[i * agent_count + a] = act_batch[i];
+                    }
                 }
             }
             {
