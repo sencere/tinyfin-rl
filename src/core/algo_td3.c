@@ -58,6 +58,8 @@ typedef struct {
     int seed;
     int deterministic;
     unsigned int rng_state;
+    int *idx;
+    float *weights;
 } tfrl_td3_algo;
 
 static Tensor *one_hot(int n, int idx) {
@@ -278,27 +280,220 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
         if (step_id < algo->learning_starts) return;
         if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
 
-        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-        if (!idx || !weights) {
-            free(idx);
-            free(weights);
-            return;
+        if (!algo->idx || !algo->weights) {
+            algo->idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+            algo->weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+            if (!algo->idx || !algo->weights) return;
         }
         for (int g = 0; g < algo->grad_steps; g++) {
             if (algo->deterministic) {
-                tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
+                tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, algo->idx, algo->weights, algo->per_beta,
                                                  (unsigned int)(algo->seed + step_id + g));
             } else {
-                tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+                tfrl_replay_sample(algo->replay, algo->batch_size, algo->idx, algo->weights, algo->per_beta);
             }
 
             int update_id = algo->update_count + 1;
+            if (algo->action_type != TFRL_SPACE_BOX) {
+                int obs_dim = algo->obs_type == TFRL_SPACE_BOX ? algo->obs_dim : algo->obs_n;
+                int x_shape[2] = {algo->batch_size, obs_dim};
+                int q_shape[2] = {algo->batch_size, algo->action_n};
+                Tensor *x = tensor_zeros(2, x_shape);
+                Tensor *x_next = tensor_zeros(2, x_shape);
+                Tensor *target_mat = tensor_zeros(2, q_shape);
+                Tensor *weight_mat = tensor_zeros(2, q_shape);
+                Tensor *weight_row = tensor_zeros(2, q_shape);
+                if (!x || !x_next || !target_mat || !weight_mat || !weight_row) {
+                    tensor_free(x);
+                    tensor_free(x_next);
+                    tensor_free(target_mat);
+                    tensor_free(weight_mat);
+                    tensor_free(weight_row);
+                    continue;
+                }
+                for (int i = 0; i < algo->batch_size; i++) {
+                    const tfrl_transition *tr = tfrl_replay_get(algo->replay, algo->idx[i]);
+                    if (!tr) continue;
+                    if (algo->obs_type == TFRL_SPACE_BOX) {
+                        int n = tr->obs.data_len < obs_dim ? tr->obs.data_len : obs_dim;
+                        for (int j = 0; j < n; j++) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)j;
+                            tensor_set_f32_at(x, off, tr->obs.data[j]);
+                        }
+                        n = tr->next_obs.data_len < obs_dim ? tr->next_obs.data_len : obs_dim;
+                        for (int j = 0; j < n; j++) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)j;
+                            tensor_set_f32_at(x_next, off, tr->next_obs.data[j]);
+                        }
+                    } else {
+                        if (tr->obs.index >= 0 && tr->obs.index < algo->obs_n) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)tr->obs.index;
+                            tensor_set_f32_at(x, off, 1.0f);
+                        }
+                        if (tr->next_obs.index >= 0 && tr->next_obs.index < algo->obs_n) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)tr->next_obs.index;
+                            tensor_set_f32_at(x_next, off, 1.0f);
+                        }
+                    }
+                }
+
+                Tensor *q1 = linear_forward(algo->q1, x);
+                Tensor *q2 = linear_forward(algo->q2, x);
+                Tensor *next_logits = linear_forward(algo->tpolicy, x_next);
+                Tensor *next_probs = tensor_softmax_autograd(next_logits);
+                Tensor *tq1 = linear_forward(algo->tq1, x_next);
+                Tensor *tq2 = linear_forward(algo->tq2, x_next);
+                if (!q1 || !q2 || !next_logits || !next_probs || !tq1 || !tq2) {
+                    tensor_free(q1);
+                    tensor_free(q2);
+                    tensor_free(tq2);
+                    tensor_free(tq1);
+                    tensor_free(next_probs);
+                    tensor_free(next_logits);
+                    tensor_free(x);
+                    tensor_free(x_next);
+                    tensor_free(target_mat);
+                    tensor_free(weight_mat);
+                    tensor_free(weight_row);
+                    continue;
+                }
+
+                for (int i = 0; i < algo->batch_size; i++) {
+                    const tfrl_transition *tr = tfrl_replay_get(algo->replay, algo->idx[i]);
+                    if (!tr) continue;
+                    int next_a = 0;
+                    float best = -1e30f;
+                    for (int a = 0; a < algo->action_n; a++) {
+                        size_t off = (size_t)i * (size_t)algo->action_n + (size_t)a;
+                        float p = tensor_get_f32_at(next_probs, off);
+                        if (p > best) {
+                            best = p;
+                            next_a = a;
+                        }
+                    }
+                    size_t next_off = (size_t)i * (size_t)algo->action_n + (size_t)next_a;
+                    float q1v = tensor_get_f32_at(tq1, next_off);
+                    float q2v = tensor_get_f32_at(tq2, next_off);
+                    float minq = q1v < q2v ? q1v : q2v;
+                    float target = (float)tr->reward;
+                    if (!tr->done) {
+                        target += algo->gamma * minq;
+                    }
+                    int action = tr->action.index;
+                    if (action >= 0 && action < algo->action_n) {
+                        size_t off = (size_t)i * (size_t)algo->action_n + (size_t)action;
+                        tensor_set_f32_at(target_mat, off, target);
+                        tensor_set_f32_at(weight_mat, off, algo->weights[i]);
+                    }
+                    for (int a = 0; a < algo->action_n; a++) {
+                        size_t off = (size_t)i * (size_t)algo->action_n + (size_t)a;
+                        tensor_set_f32_at(weight_row, off, algo->weights[i]);
+                    }
+                }
+
+                Tensor *diff1 = tensor_sub(q1, target_mat);
+                Tensor *diff2 = tensor_sub(q2, target_mat);
+                Tensor *diff1_sq = diff1 ? tensor_mul(diff1, diff1) : NULL;
+                Tensor *diff2_sq = diff2 ? tensor_mul(diff2, diff2) : NULL;
+                Tensor *diff_sum = NULL;
+                if (diff1_sq && diff2_sq) {
+                    diff_sum = tensor_add(diff1_sq, diff2_sq);
+                }
+                Tensor *weighted_q = diff_sum ? tensor_mul(diff_sum, weight_mat) : NULL;
+                Tensor *q_loss = weighted_q ? tensor_sum(weighted_q) : NULL;
+
+                Tensor *policy_loss = NULL;
+                if (update_id % TD3_POLICY_DELAY == 0) {
+                    Tensor *pi_logits = linear_forward(algo->policy, x);
+                    Tensor *pi_probs = tensor_softmax_autograd(pi_logits);
+                    Tensor *q1_const = tensor_new(2, q_shape);
+                    if (pi_logits && pi_probs && q1_const) {
+                        for (int i = 0; i < algo->batch_size; i++) {
+                            for (int a = 0; a < algo->action_n; a++) {
+                                size_t off = (size_t)i * (size_t)algo->action_n + (size_t)a;
+                                tensor_set_f32_at(q1_const, off, tensor_get_f32_at(q1, off));
+                            }
+                        }
+                        Tensor *policy_elem = tensor_mul(pi_probs, q1_const);
+                        Tensor *policy_weighted = tensor_mul(policy_elem, weight_row);
+                        Tensor *policy_sum = policy_weighted ? tensor_sum(policy_weighted) : NULL;
+                        if (policy_sum) {
+                            Tensor *neg = tensor_new(1, (int[1]){1});
+                            tensor_set_f32_at(neg, 0, -1.0f);
+                            policy_loss = tensor_mul(policy_sum, neg);
+                            tensor_free(neg);
+                            tensor_free(policy_sum);
+                        }
+                        tensor_free(policy_weighted);
+                        tensor_free(policy_elem);
+                    }
+                    tensor_free(q1_const);
+                    tensor_free(pi_probs);
+                    tensor_free(pi_logits);
+                }
+
+                if (q_loss) {
+                    Tensor *scale = tensor_new(1, (int[1]){1});
+                    tensor_set_f32_at(scale, 0, 1.0f / (float)algo->batch_size);
+                    Tensor *scaled = tensor_mul(q_loss, scale);
+                    tensor_free(q_loss);
+                    tensor_free(scale);
+                    q_loss = scaled;
+                }
+                if (policy_loss) {
+                    Tensor *scale = tensor_new(1, (int[1]){1});
+                    tensor_set_f32_at(scale, 0, 1.0f / (float)algo->batch_size);
+                    Tensor *scaled = tensor_mul(policy_loss, scale);
+                    tensor_free(policy_loss);
+                    tensor_free(scale);
+                    policy_loss = scaled;
+                }
+
+                if (q_loss) {
+                    adam_zero_grad(algo->q_opt);
+                    tensor_backward(q_loss);
+                    adam_step(algo->q_opt, 0.0f);
+                    tensor_free(q_loss);
+                }
+                if (policy_loss) {
+                    adam_zero_grad(algo->policy_opt);
+                    tensor_backward(policy_loss);
+                    adam_step(algo->policy_opt, 0.0f);
+                    tensor_free(policy_loss);
+                }
+
+                tensor_free(weighted_q);
+                tensor_free(diff_sum);
+                tensor_free(diff2_sq);
+                tensor_free(diff1_sq);
+                tensor_free(diff2);
+                tensor_free(diff1);
+                tensor_free(tq2);
+                tensor_free(tq1);
+                tensor_free(next_probs);
+                tensor_free(next_logits);
+                tensor_free(q2);
+                tensor_free(q1);
+                tensor_free(weight_row);
+                tensor_free(weight_mat);
+                tensor_free(target_mat);
+                tensor_free(x_next);
+                tensor_free(x);
+
+                algo->update_count++;
+                if (update_id % TD3_TARGET_UPDATE == 0) {
+                    copy_linear(algo->tpolicy, algo->policy);
+                    copy_linear(algo->tq1, algo->q1);
+                    copy_linear(algo->tq2, algo->q2);
+                }
+                continue;
+            }
+
             Tensor *q_loss_sum = NULL;
             Tensor *policy_loss_sum = NULL;
             for (int i = 0; i < algo->batch_size; i++) {
-            const tfrl_transition *tr = tfrl_replay_get(algo->replay, idx[i]);
-            if (!tr) continue;
+                const tfrl_transition *tr = tfrl_replay_get(algo->replay, algo->idx[i]);
+                if (!tr) continue;
 
             Tensor *x = obs_to_tensor(algo, tr->obs);
             Tensor *x_next = obs_to_tensor(algo, tr->next_obs);
@@ -400,9 +595,9 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
             Tensor *loss2 = tensor_mul(diff2, diff2);
             Tensor *q_loss = tensor_add(loss1, loss2);
 
-            if (weights[i] != 1.0f) {
+            if (algo->weights[i] != 1.0f) {
                 Tensor *w_t = tensor_new(1, (int[1]){1});
-                tensor_set_f32_at(w_t, 0, weights[i]);
+                tensor_set_f32_at(w_t, 0, algo->weights[i]);
                 Tensor *weighted = tensor_mul(q_loss, w_t);
                 tensor_free(q_loss);
                 tensor_free(w_t);
@@ -471,9 +666,9 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                     tensor_free(pi_logits);
                 }
 
-                if (weights[i] != 1.0f) {
+                if (algo->weights[i] != 1.0f) {
                     Tensor *w_t = tensor_new(1, (int[1]){1});
-                    tensor_set_f32_at(w_t, 0, weights[i]);
+                    tensor_set_f32_at(w_t, 0, algo->weights[i]);
                     Tensor *weighted = tensor_mul(policy_loss, w_t);
                     tensor_free(policy_loss);
                     tensor_free(w_t);
@@ -498,8 +693,8 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
             tensor_free(diff1);
             tensor_free(target_t);
             tensor_free(x_next);
-            tensor_free(x);
-        }
+                tensor_free(x);
+            }
 
             if (q_loss_sum) {
                 adam_zero_grad(algo->q_opt);
@@ -521,8 +716,6 @@ static void td3_update(void *ctx, const tfrl_transition *transition) {
                 copy_linear(algo->tq2, algo->q2);
             }
         }
-        free(idx);
-        free(weights);
         return;
     }
 
@@ -721,6 +914,8 @@ static void td3_destroy(void *ctx) {
     adam_free(algo->policy_opt);
     adam_free(algo->q_opt);
     tfrl_replay_free(algo->replay);
+    free(algo->idx);
+    free(algo->weights);
     tensor_free(algo->policy->weight);
     tensor_free(algo->policy->bias);
     tensor_free(algo->q1->weight);
@@ -828,6 +1023,14 @@ tfrl_algo tfrl_algo_td3_create(const tfrl_algo_config *cfg) {
     if (!algo->policy_opt || !algo->q_opt) {
         td3_destroy(algo);
         return out;
+    }
+    if (algo->batch_size > 0) {
+        algo->idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+        algo->weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+        if (!algo->idx || !algo->weights) {
+            td3_destroy(algo);
+            return out;
+        }
     }
     out.ctx = algo;
     out.vtable = &TD3_VTABLE;

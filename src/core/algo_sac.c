@@ -61,6 +61,8 @@ typedef struct {
     int seed;
     int deterministic;
     unsigned int rng_state;
+    int *idx;
+    float *weights;
 } tfrl_sac_algo;
 
 static Tensor *one_hot(int n, int idx) {
@@ -403,236 +405,473 @@ static void sac_update(void *ctx, const tfrl_transition *transition) {
         if (step_id < algo->learning_starts) return;
         if (algo->train_every > 1 && (step_id % algo->train_every) != 0) return;
 
-        int *idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
-        float *weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
-        if (!idx || !weights) {
-            free(idx);
-            free(weights);
-            return;
+        if (!algo->idx || !algo->weights) {
+            algo->idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+            algo->weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+            if (!algo->idx || !algo->weights) return;
         }
         for (int g = 0; g < algo->grad_steps; g++) {
             if (algo->deterministic) {
-                tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, idx, weights, algo->per_beta,
+                tfrl_replay_sample_deterministic(algo->replay, algo->batch_size, algo->idx, algo->weights, algo->per_beta,
                                                  (unsigned int)(algo->seed + step_id + g));
             } else {
-                tfrl_replay_sample(algo->replay, algo->batch_size, idx, weights, algo->per_beta);
+                tfrl_replay_sample(algo->replay, algo->batch_size, algo->idx, algo->weights, algo->per_beta);
             }
 
-            Tensor *q_loss_sum = NULL;
-            Tensor *policy_loss_sum = NULL;
-            for (int i = 0; i < algo->batch_size; i++) {
-            const tfrl_transition *tr = tfrl_replay_get(algo->replay, idx[i]);
-            if (!tr) continue;
-
-            Tensor *x = obs_to_tensor(algo, tr->obs);
-            Tensor *x_next = obs_to_tensor(algo, tr->next_obs);
-            if (!x || !x_next) {
-                tensor_free(x);
-                tensor_free(x_next);
-                continue;
-            }
-
-            Tensor *q1 = NULL;
-            Tensor *q2 = NULL;
-            if (algo->action_type == TFRL_SPACE_BOX) {
-                Tensor *a_t = action_to_tensor(algo, tr->action);
-                Tensor *qa_in = concat_obs_action(algo, x, a_t);
-                tensor_free(a_t);
-                q1 = linear_forward(algo->q1, qa_in);
-                q2 = linear_forward(algo->q2, qa_in);
-                tensor_free(qa_in);
-            } else {
-                q1 = linear_forward(algo->q1, x);
-                q2 = linear_forward(algo->q2, x);
-            }
-
-            float target = (float)tr->reward;
-            if (!tr->done) {
-                if (algo->action_type == TFRL_SPACE_BOX) {
-                    float next_buf[4] = {0};
-                    float logp = 0.0f;
-                    sample_action_stats(algo, tr->next_obs, next_buf, &logp);
-                    tfrl_action next_action = {.data_len = algo->action_dim};
-                    for (int j = 0; j < algo->action_dim; j++) next_action.data[j] = next_buf[j];
-                    Tensor *next_a = action_to_tensor(algo, next_action);
-                    Tensor *tq_in = concat_obs_action(algo, x_next, next_a);
-                    Tensor *tq1 = linear_forward(algo->tq1, tq_in);
-                    Tensor *tq2 = linear_forward(algo->tq2, tq_in);
-                    float q1v = tensor_get_f32_at(tq1, 0);
-                    float q2v = tensor_get_f32_at(tq2, 0);
-                    float minq = q1v < q2v ? q1v : q2v;
-                    target = (float)tr->reward + algo->gamma * (minq - algo->alpha * logp);
-                    tensor_free(tq2);
-                    tensor_free(tq1);
-                    tensor_free(tq_in);
-                    tensor_free(next_a);
-                } else {
-                    Tensor *next_logits = linear_forward(algo->policy, x_next);
-                    Tensor *next_probs = tensor_softmax_autograd(next_logits);
-                    Tensor *next_logp = tensor_log(next_probs);
-                    Tensor *tq1 = linear_forward(algo->tq1, x_next);
-                    Tensor *tq2 = linear_forward(algo->tq2, x_next);
-                    float soft_value = 0.0f;
-                    for (int a = 0; a < algo->action_n; a++) {
-                        float p = tensor_get_f32_at(next_probs, (size_t)a);
-                        float logp = tensor_get_f32_at(next_logp, (size_t)a);
-                        float q1v = tensor_get_f32_at(tq1, (size_t)a);
-                        float q2v = tensor_get_f32_at(tq2, (size_t)a);
-                        float minq = q1v < q2v ? q1v : q2v;
-                        soft_value += p * (minq - algo->alpha * logp);
-                    }
-                    target = (float)tr->reward + algo->gamma * soft_value;
-                    tensor_free(tq2);
-                    tensor_free(tq1);
-                    tensor_free(next_logp);
-                    tensor_free(next_probs);
-                    tensor_free(next_logits);
+            if (algo->action_type != TFRL_SPACE_BOX) {
+                int obs_dim = algo->obs_type == TFRL_SPACE_BOX ? algo->obs_dim : algo->obs_n;
+                int x_shape[2] = {algo->batch_size, obs_dim};
+                int q_shape[2] = {algo->batch_size, algo->action_n};
+                Tensor *x = tensor_zeros(2, x_shape);
+                Tensor *x_next = tensor_zeros(2, x_shape);
+                Tensor *target_mat = tensor_zeros(2, q_shape);
+                Tensor *weight_mat = tensor_zeros(2, q_shape);
+                Tensor *weight_row = tensor_zeros(2, q_shape);
+                if (!x || !x_next || !target_mat || !weight_mat || !weight_row) {
+                    tensor_free(x);
+                    tensor_free(x_next);
+                    tensor_free(target_mat);
+                    tensor_free(weight_mat);
+                    tensor_free(weight_row);
+                    continue;
                 }
-            }
+                for (int i = 0; i < algo->batch_size; i++) {
+                    const tfrl_transition *tr = tfrl_replay_get(algo->replay, algo->idx[i]);
+                    if (!tr) continue;
+                    if (algo->obs_type == TFRL_SPACE_BOX) {
+                        int n = tr->obs.data_len < obs_dim ? tr->obs.data_len : obs_dim;
+                        for (int j = 0; j < n; j++) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)j;
+                            tensor_set_f32_at(x, off, tr->obs.data[j]);
+                        }
+                        n = tr->next_obs.data_len < obs_dim ? tr->next_obs.data_len : obs_dim;
+                        for (int j = 0; j < n; j++) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)j;
+                            tensor_set_f32_at(x_next, off, tr->next_obs.data[j]);
+                        }
+                    } else {
+                        if (tr->obs.index >= 0 && tr->obs.index < algo->obs_n) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)tr->obs.index;
+                            tensor_set_f32_at(x, off, 1.0f);
+                        }
+                        if (tr->next_obs.index >= 0 && tr->next_obs.index < algo->obs_n) {
+                            size_t off = (size_t)i * (size_t)obs_dim + (size_t)tr->next_obs.index;
+                            tensor_set_f32_at(x_next, off, 1.0f);
+                        }
+                    }
+                }
 
-            Tensor *q1_val = NULL;
-            Tensor *q2_val = NULL;
-            if (algo->action_type == TFRL_SPACE_BOX) {
-                q1_val = q1;
-                q2_val = q2;
-            } else {
-                Tensor *action_one = one_hot(algo->action_n, tr->action.index);
-                Tensor *q1_sel = tensor_mul(q1, action_one);
-                Tensor *q2_sel = tensor_mul(q2, action_one);
-                q1_val = tensor_sum(q1_sel);
-                q2_val = tensor_sum(q2_sel);
-                tensor_free(q2_sel);
-                tensor_free(q1_sel);
-                tensor_free(action_one);
-                tensor_free(q2);
-                tensor_free(q1);
-            }
-            Tensor *target_t = tensor_new(1, (int[1]){1});
-            tensor_set_f32_at(target_t, 0, target);
-            Tensor *diff1 = tensor_sub(q1_val, target_t);
-            Tensor *diff2 = tensor_sub(q2_val, target_t);
-            Tensor *loss1 = tensor_mul(diff1, diff1);
-            Tensor *loss2 = tensor_mul(diff2, diff2);
-            Tensor *q_loss = tensor_add(loss1, loss2);
-
-            if (weights[i] != 1.0f) {
-                Tensor *w_t = tensor_new(1, (int[1]){1});
-                tensor_set_f32_at(w_t, 0, weights[i]);
-                Tensor *weighted = tensor_mul(q_loss, w_t);
-                tensor_free(q_loss);
-                tensor_free(w_t);
-                q_loss = weighted;
-            }
-
-            if (!q_loss_sum) {
-                q_loss_sum = q_loss;
-            } else {
-                Tensor *tmp = tensor_add(q_loss_sum, q_loss);
-                tensor_free(q_loss_sum);
-                tensor_free(q_loss);
-                q_loss_sum = tmp;
-            }
-
-            Tensor *policy_loss = NULL;
-            if (algo->action_type == TFRL_SPACE_BOX) {
-                Tensor *logp = NULL;
-                Tensor *pi_action = policy_action_logp(algo, x, &logp);
-                Tensor *qa_in = concat_obs_action(algo, x, pi_action);
-                Tensor *q1_pi = linear_forward(algo->q1, qa_in);
-                Tensor *alpha_t = tensor_new(1, (int[1]){1});
-                tensor_set_f32_at(alpha_t, 0, algo->alpha);
-                Tensor *alpha_logp = tensor_mul(logp, alpha_t);
-                policy_loss = tensor_sub(alpha_logp, q1_pi);
-                tensor_free(alpha_logp);
-                tensor_free(alpha_t);
-                tensor_free(q1_pi);
-                tensor_free(qa_in);
-                tensor_free(pi_action);
-                tensor_free(logp);
-            } else {
+                Tensor *q1 = linear_forward(algo->q1, x);
+                Tensor *q2 = linear_forward(algo->q2, x);
                 Tensor *pi_logits = linear_forward(algo->policy, x);
                 Tensor *pi_probs = tensor_softmax_autograd(pi_logits);
                 Tensor *pi_logp = tensor_log(pi_probs);
                 Tensor *q1_pi = linear_forward(algo->q1, x);
                 Tensor *q2_pi = linear_forward(algo->q2, x);
-
-                int shape[2] = {1, algo->action_n};
-                Tensor *min_q = tensor_new(2, shape);
-                for (int a = 0; a < algo->action_n; a++) {
-                    float q1v = tensor_get_f32_at(q1_pi, (size_t)a);
-                    float q2v = tensor_get_f32_at(q2_pi, (size_t)a);
-                    float minv = q1v < q2v ? q1v : q2v;
-                    tensor_set_f32_at(min_q, (size_t)a, minv);
+                if (!q1 || !q2 || !pi_logits || !pi_probs || !pi_logp || !q1_pi || !q2_pi) {
+                    tensor_free(q1);
+                    tensor_free(q2);
+                    tensor_free(pi_logp);
+                    tensor_free(pi_probs);
+                    tensor_free(pi_logits);
+                    tensor_free(q1_pi);
+                    tensor_free(q2_pi);
+                    tensor_free(x);
+                    tensor_free(x_next);
+                    tensor_free(target_mat);
+                    tensor_free(weight_mat);
+                    tensor_free(weight_row);
+                    continue;
                 }
+
+                Tensor *tq1 = linear_forward(algo->tq1, x_next);
+                Tensor *tq2 = linear_forward(algo->tq2, x_next);
+                Tensor *next_logits = linear_forward(algo->policy, x_next);
+                Tensor *next_probs = tensor_softmax_autograd(next_logits);
+                Tensor *next_logp = tensor_log(next_probs);
+                if (!tq1 || !tq2 || !next_logits || !next_probs || !next_logp) {
+                    tensor_free(tq1);
+                    tensor_free(tq2);
+                    tensor_free(next_logp);
+                    tensor_free(next_probs);
+                    tensor_free(next_logits);
+                    tensor_free(q1);
+                    tensor_free(q2);
+                    tensor_free(pi_logp);
+                    tensor_free(pi_probs);
+                    tensor_free(pi_logits);
+                    tensor_free(q1_pi);
+                    tensor_free(q2_pi);
+                    tensor_free(x);
+                    tensor_free(x_next);
+                    tensor_free(target_mat);
+                    tensor_free(weight_mat);
+                    tensor_free(weight_row);
+                    continue;
+                }
+
+                int min_shape[2] = {algo->batch_size, algo->action_n};
+                Tensor *min_q = tensor_new(2, min_shape);
+                Tensor *min_tq = tensor_new(2, min_shape);
+                if (!min_q || !min_tq) {
+                    tensor_free(min_q);
+                    tensor_free(min_tq);
+                    tensor_free(tq1);
+                    tensor_free(tq2);
+                    tensor_free(next_logp);
+                    tensor_free(next_probs);
+                    tensor_free(next_logits);
+                    tensor_free(q1);
+                    tensor_free(q2);
+                    tensor_free(pi_logp);
+                    tensor_free(pi_probs);
+                    tensor_free(pi_logits);
+                    tensor_free(q1_pi);
+                    tensor_free(q2_pi);
+                    tensor_free(x);
+                    tensor_free(x_next);
+                    tensor_free(target_mat);
+                    tensor_free(weight_mat);
+                    tensor_free(weight_row);
+                    continue;
+                }
+
+                for (int i = 0; i < algo->batch_size; i++) {
+                    const tfrl_transition *tr = tfrl_replay_get(algo->replay, algo->idx[i]);
+                    if (!tr) continue;
+                    float soft_value = 0.0f;
+                    for (int a = 0; a < algo->action_n; a++) {
+                        size_t off = (size_t)i * (size_t)algo->action_n + (size_t)a;
+                        float q1v = tensor_get_f32_at(q1_pi, off);
+                        float q2v = tensor_get_f32_at(q2_pi, off);
+                        float minv = q1v < q2v ? q1v : q2v;
+                        tensor_set_f32_at(min_q, off, minv);
+
+                        float tq1v = tensor_get_f32_at(tq1, off);
+                        float tq2v = tensor_get_f32_at(tq2, off);
+                        float min_tv = tq1v < tq2v ? tq1v : tq2v;
+                        tensor_set_f32_at(min_tq, off, min_tv);
+
+                        float p = tensor_get_f32_at(next_probs, off);
+                        float logp = tensor_get_f32_at(next_logp, off);
+                        soft_value += p * (min_tv - algo->alpha * logp);
+                    }
+                    float target = (float)tr->reward;
+                    if (!tr->done) {
+                        target += algo->gamma * soft_value;
+                    }
+                    int action = tr->action.index;
+                    if (action >= 0 && action < algo->action_n) {
+                        size_t off = (size_t)i * (size_t)algo->action_n + (size_t)action;
+                        tensor_set_f32_at(target_mat, off, target);
+                        tensor_set_f32_at(weight_mat, off, algo->weights[i]);
+                    }
+                    for (int a = 0; a < algo->action_n; a++) {
+                        size_t off = (size_t)i * (size_t)algo->action_n + (size_t)a;
+                        tensor_set_f32_at(weight_row, off, algo->weights[i]);
+                    }
+                }
+
+                Tensor *diff1 = tensor_sub(q1, target_mat);
+                Tensor *diff2 = tensor_sub(q2, target_mat);
+                Tensor *diff1_sq = diff1 ? tensor_mul(diff1, diff1) : NULL;
+                Tensor *diff2_sq = diff2 ? tensor_mul(diff2, diff2) : NULL;
+                Tensor *diff_sum = NULL;
+                if (diff1_sq && diff2_sq) {
+                    diff_sum = tensor_add(diff1_sq, diff2_sq);
+                }
+                Tensor *weighted_q = diff_sum ? tensor_mul(diff_sum, weight_mat) : NULL;
+                Tensor *q_loss = weighted_q ? tensor_sum(weighted_q) : NULL;
+
                 Tensor *alpha_t = tensor_new(1, (int[1]){1});
                 tensor_set_f32_at(alpha_t, 0, algo->alpha);
                 Tensor *alpha_logp = tensor_mul(pi_logp, alpha_t);
                 Tensor *alpha_logp_sub = tensor_sub(alpha_logp, min_q);
                 Tensor *policy_elem = tensor_mul(pi_probs, alpha_logp_sub);
-                policy_loss = tensor_sum(policy_elem);
+                Tensor *policy_weighted = tensor_mul(policy_elem, weight_row);
+                Tensor *policy_loss = policy_weighted ? tensor_sum(policy_weighted) : NULL;
 
+                if (q_loss) {
+                    Tensor *scale = tensor_new(1, (int[1]){1});
+                    tensor_set_f32_at(scale, 0, 1.0f / (float)algo->batch_size);
+                    Tensor *scaled = tensor_mul(q_loss, scale);
+                    tensor_free(q_loss);
+                    tensor_free(scale);
+                    q_loss = scaled;
+                }
+                if (policy_loss) {
+                    Tensor *scale = tensor_new(1, (int[1]){1});
+                    tensor_set_f32_at(scale, 0, 1.0f / (float)algo->batch_size);
+                    Tensor *scaled = tensor_mul(policy_loss, scale);
+                    tensor_free(policy_loss);
+                    tensor_free(scale);
+                    policy_loss = scaled;
+                }
+
+                if (q_loss) {
+                    adam_zero_grad(algo->q_opt);
+                    tensor_backward(q_loss);
+                    adam_step(algo->q_opt, 0.0f);
+                    tensor_free(q_loss);
+                }
+                if (policy_loss) {
+                    adam_zero_grad(algo->policy_opt);
+                    tensor_backward(policy_loss);
+                    adam_step(algo->policy_opt, 0.0f);
+                    tensor_free(policy_loss);
+                }
+
+                algo->update_count++;
+                if (algo->update_count % SAC_TARGET_UPDATE == 0) {
+                    copy_linear(algo->tq1, algo->q1);
+                    copy_linear(algo->tq2, algo->q2);
+                }
+
+                tensor_free(policy_weighted);
                 tensor_free(policy_elem);
                 tensor_free(alpha_logp_sub);
                 tensor_free(alpha_logp);
                 tensor_free(alpha_t);
+                tensor_free(weighted_q);
+                tensor_free(diff_sum);
+                tensor_free(diff2_sq);
+                tensor_free(diff1_sq);
+                tensor_free(diff2);
+                tensor_free(diff1);
+                tensor_free(min_tq);
                 tensor_free(min_q);
+                tensor_free(next_logp);
+                tensor_free(next_probs);
+                tensor_free(next_logits);
+                tensor_free(tq2);
+                tensor_free(tq1);
                 tensor_free(q2_pi);
                 tensor_free(q1_pi);
                 tensor_free(pi_logp);
                 tensor_free(pi_probs);
                 tensor_free(pi_logits);
-            }
-
-            if (weights[i] != 1.0f) {
-                Tensor *w_t = tensor_new(1, (int[1]){1});
-                tensor_set_f32_at(w_t, 0, weights[i]);
-                Tensor *weighted = tensor_mul(policy_loss, w_t);
-                tensor_free(policy_loss);
-                tensor_free(w_t);
-                policy_loss = weighted;
-            }
-
-            if (!policy_loss_sum) {
-                policy_loss_sum = policy_loss;
+                tensor_free(q2);
+                tensor_free(q1);
+                tensor_free(weight_row);
+                tensor_free(weight_mat);
+                tensor_free(target_mat);
+                tensor_free(x_next);
+                tensor_free(x);
             } else {
-                Tensor *tmp = tensor_add(policy_loss_sum, policy_loss);
-                tensor_free(policy_loss_sum);
-                tensor_free(policy_loss);
-                policy_loss_sum = tmp;
-            }
+                Tensor *q_loss_sum = NULL;
+                Tensor *policy_loss_sum = NULL;
+                for (int i = 0; i < algo->batch_size; i++) {
+                    const tfrl_transition *tr = tfrl_replay_get(algo->replay, algo->idx[i]);
+                    if (!tr) continue;
 
-            tensor_free(q2_val);
-            tensor_free(q1_val);
-            tensor_free(loss2);
-            tensor_free(loss1);
-            tensor_free(diff2);
-            tensor_free(diff1);
-            tensor_free(target_t);
-            tensor_free(x_next);
-            tensor_free(x);
+                    Tensor *x = obs_to_tensor(algo, tr->obs);
+                    Tensor *x_next = obs_to_tensor(algo, tr->next_obs);
+                    if (!x || !x_next) {
+                        tensor_free(x);
+                        tensor_free(x_next);
+                        continue;
+                    }
+
+                    Tensor *q1 = NULL;
+                    Tensor *q2 = NULL;
+                    if (algo->action_type == TFRL_SPACE_BOX) {
+                        Tensor *a_t = action_to_tensor(algo, tr->action);
+                        Tensor *qa_in = concat_obs_action(algo, x, a_t);
+                        tensor_free(a_t);
+                        q1 = linear_forward(algo->q1, qa_in);
+                        q2 = linear_forward(algo->q2, qa_in);
+                        tensor_free(qa_in);
+                    } else {
+                        q1 = linear_forward(algo->q1, x);
+                        q2 = linear_forward(algo->q2, x);
+                    }
+
+                    float target = (float)tr->reward;
+                    if (!tr->done) {
+                        if (algo->action_type == TFRL_SPACE_BOX) {
+                            float next_buf[4] = {0};
+                            float logp = 0.0f;
+                            sample_action_stats(algo, tr->next_obs, next_buf, &logp);
+                            tfrl_action next_action = {.data_len = algo->action_dim};
+                            for (int j = 0; j < algo->action_dim; j++) next_action.data[j] = next_buf[j];
+                            Tensor *next_a = action_to_tensor(algo, next_action);
+                            Tensor *tq_in = concat_obs_action(algo, x_next, next_a);
+                            Tensor *tq1 = linear_forward(algo->tq1, tq_in);
+                            Tensor *tq2 = linear_forward(algo->tq2, tq_in);
+                            float q1v = tensor_get_f32_at(tq1, 0);
+                            float q2v = tensor_get_f32_at(tq2, 0);
+                            float minq = q1v < q2v ? q1v : q2v;
+                            target = (float)tr->reward + algo->gamma * (minq - algo->alpha * logp);
+                            tensor_free(tq2);
+                            tensor_free(tq1);
+                            tensor_free(tq_in);
+                            tensor_free(next_a);
+                        } else {
+                            Tensor *next_logits = linear_forward(algo->policy, x_next);
+                            Tensor *next_probs = tensor_softmax_autograd(next_logits);
+                            Tensor *next_logp = tensor_log(next_probs);
+                            Tensor *tq1 = linear_forward(algo->tq1, x_next);
+                            Tensor *tq2 = linear_forward(algo->tq2, x_next);
+                            float soft_value = 0.0f;
+                            for (int a = 0; a < algo->action_n; a++) {
+                                float p = tensor_get_f32_at(next_probs, (size_t)a);
+                                float logp = tensor_get_f32_at(next_logp, (size_t)a);
+                                float q1v = tensor_get_f32_at(tq1, (size_t)a);
+                                float q2v = tensor_get_f32_at(tq2, (size_t)a);
+                                float minq = q1v < q2v ? q1v : q2v;
+                                soft_value += p * (minq - algo->alpha * logp);
+                            }
+                            target = (float)tr->reward + algo->gamma * soft_value;
+                            tensor_free(tq2);
+                            tensor_free(tq1);
+                            tensor_free(next_logp);
+                            tensor_free(next_probs);
+                            tensor_free(next_logits);
+                        }
+                    }
+
+                    Tensor *q1_val = NULL;
+                    Tensor *q2_val = NULL;
+                    if (algo->action_type == TFRL_SPACE_BOX) {
+                        q1_val = q1;
+                        q2_val = q2;
+                    } else {
+                        Tensor *action_one = one_hot(algo->action_n, tr->action.index);
+                        Tensor *q1_sel = tensor_mul(q1, action_one);
+                        Tensor *q2_sel = tensor_mul(q2, action_one);
+                        q1_val = tensor_sum(q1_sel);
+                        q2_val = tensor_sum(q2_sel);
+                        tensor_free(q2_sel);
+                        tensor_free(q1_sel);
+                        tensor_free(action_one);
+                        tensor_free(q2);
+                        tensor_free(q1);
+                    }
+                    Tensor *target_t = tensor_new(1, (int[1]){1});
+                    tensor_set_f32_at(target_t, 0, target);
+                    Tensor *diff1 = tensor_sub(q1_val, target_t);
+                    Tensor *diff2 = tensor_sub(q2_val, target_t);
+                    Tensor *loss1 = tensor_mul(diff1, diff1);
+                    Tensor *loss2 = tensor_mul(diff2, diff2);
+                    Tensor *q_loss = tensor_add(loss1, loss2);
+
+                    if (algo->weights[i] != 1.0f) {
+                        Tensor *w_t = tensor_new(1, (int[1]){1});
+                        tensor_set_f32_at(w_t, 0, algo->weights[i]);
+                        Tensor *weighted = tensor_mul(q_loss, w_t);
+                        tensor_free(q_loss);
+                        tensor_free(w_t);
+                        q_loss = weighted;
+                    }
+
+                    if (!q_loss_sum) {
+                        q_loss_sum = q_loss;
+                    } else {
+                        Tensor *tmp = tensor_add(q_loss_sum, q_loss);
+                        tensor_free(q_loss_sum);
+                        tensor_free(q_loss);
+                        q_loss_sum = tmp;
+                    }
+
+                    Tensor *policy_loss = NULL;
+                    if (algo->action_type == TFRL_SPACE_BOX) {
+                        Tensor *logp = NULL;
+                        Tensor *pi_action = policy_action_logp(algo, x, &logp);
+                        Tensor *qa_in = concat_obs_action(algo, x, pi_action);
+                        Tensor *q1_pi = linear_forward(algo->q1, qa_in);
+                        Tensor *alpha_t = tensor_new(1, (int[1]){1});
+                        tensor_set_f32_at(alpha_t, 0, algo->alpha);
+                        Tensor *alpha_logp = tensor_mul(logp, alpha_t);
+                        policy_loss = tensor_sub(alpha_logp, q1_pi);
+                        tensor_free(alpha_logp);
+                        tensor_free(alpha_t);
+                        tensor_free(q1_pi);
+                        tensor_free(qa_in);
+                        tensor_free(pi_action);
+                        tensor_free(logp);
+                    } else {
+                        Tensor *pi_logits = linear_forward(algo->policy, x);
+                        Tensor *pi_probs = tensor_softmax_autograd(pi_logits);
+                        Tensor *pi_logp = tensor_log(pi_probs);
+                        Tensor *q1_pi = linear_forward(algo->q1, x);
+                        Tensor *q2_pi = linear_forward(algo->q2, x);
+
+                        int shape[2] = {1, algo->action_n};
+                        Tensor *min_q = tensor_new(2, shape);
+                        for (int a = 0; a < algo->action_n; a++) {
+                            float q1v = tensor_get_f32_at(q1_pi, (size_t)a);
+                            float q2v = tensor_get_f32_at(q2_pi, (size_t)a);
+                            float minv = q1v < q2v ? q1v : q2v;
+                            tensor_set_f32_at(min_q, (size_t)a, minv);
+                        }
+                        Tensor *alpha_t = tensor_new(1, (int[1]){1});
+                        tensor_set_f32_at(alpha_t, 0, algo->alpha);
+                        Tensor *alpha_logp = tensor_mul(pi_logp, alpha_t);
+                        Tensor *alpha_logp_sub = tensor_sub(alpha_logp, min_q);
+                        Tensor *policy_elem = tensor_mul(pi_probs, alpha_logp_sub);
+                        policy_loss = tensor_sum(policy_elem);
+
+                        tensor_free(policy_elem);
+                        tensor_free(alpha_logp_sub);
+                        tensor_free(alpha_logp);
+                        tensor_free(alpha_t);
+                        tensor_free(min_q);
+                        tensor_free(q2_pi);
+                        tensor_free(q1_pi);
+                        tensor_free(pi_logp);
+                        tensor_free(pi_probs);
+                        tensor_free(pi_logits);
+                    }
+
+                    if (algo->weights[i] != 1.0f) {
+                        Tensor *w_t = tensor_new(1, (int[1]){1});
+                        tensor_set_f32_at(w_t, 0, algo->weights[i]);
+                        Tensor *weighted = tensor_mul(policy_loss, w_t);
+                        tensor_free(policy_loss);
+                        tensor_free(w_t);
+                        policy_loss = weighted;
+                    }
+
+                    if (!policy_loss_sum) {
+                        policy_loss_sum = policy_loss;
+                    } else {
+                        Tensor *tmp = tensor_add(policy_loss_sum, policy_loss);
+                        tensor_free(policy_loss_sum);
+                        tensor_free(policy_loss);
+                        policy_loss_sum = tmp;
+                    }
+
+                    tensor_free(q2_val);
+                    tensor_free(q1_val);
+                    tensor_free(loss2);
+                    tensor_free(loss1);
+                    tensor_free(diff2);
+                    tensor_free(diff1);
+                    tensor_free(target_t);
+                    tensor_free(x_next);
+                    tensor_free(x);
+                }
+
+                if (q_loss_sum) {
+                    adam_zero_grad(algo->q_opt);
+                    tensor_backward(q_loss_sum);
+                    adam_step(algo->q_opt, 0.0f);
+                    tensor_free(q_loss_sum);
+                }
+                if (policy_loss_sum) {
+                    adam_zero_grad(algo->policy_opt);
+                    tensor_backward(policy_loss_sum);
+                    adam_step(algo->policy_opt, 0.0f);
+                    tensor_free(policy_loss_sum);
+                }
+
+                algo->update_count++;
+                if (algo->update_count % SAC_TARGET_UPDATE == 0) {
+                    copy_linear(algo->tq1, algo->q1);
+                    copy_linear(algo->tq2, algo->q2);
+                }
+            }
         }
-
-            if (q_loss_sum) {
-                adam_zero_grad(algo->q_opt);
-                tensor_backward(q_loss_sum);
-                adam_step(algo->q_opt, 0.0f);
-                tensor_free(q_loss_sum);
-            }
-            if (policy_loss_sum) {
-                adam_zero_grad(algo->policy_opt);
-                tensor_backward(policy_loss_sum);
-                adam_step(algo->policy_opt, 0.0f);
-                tensor_free(policy_loss_sum);
-            }
-
-            algo->update_count++;
-            if (algo->update_count % SAC_TARGET_UPDATE == 0) {
-                copy_linear(algo->tq1, algo->q1);
-                copy_linear(algo->tq2, algo->q2);
-            }
-        }
-        free(idx);
-        free(weights);
         return;
     }
 
@@ -812,6 +1051,8 @@ static void sac_destroy(void *ctx) {
     adam_free(algo->policy_opt);
     adam_free(algo->q_opt);
     tfrl_replay_free(algo->replay);
+    free(algo->idx);
+    free(algo->weights);
     tensor_free(algo->policy->weight);
     tensor_free(algo->policy->bias);
     tensor_free(algo->q1->weight);
@@ -912,6 +1153,14 @@ tfrl_algo tfrl_algo_sac_create(const tfrl_algo_config *cfg) {
     if (!algo->policy_opt || !algo->q_opt) {
         sac_destroy(algo);
         return out;
+    }
+    if (algo->batch_size > 0) {
+        algo->idx = (int *)calloc((size_t)algo->batch_size, sizeof(int));
+        algo->weights = (float *)calloc((size_t)algo->batch_size, sizeof(float));
+        if (!algo->idx || !algo->weights) {
+            sac_destroy(algo);
+            return out;
+        }
     }
     out.ctx = algo;
     out.vtable = &SAC_VTABLE;
