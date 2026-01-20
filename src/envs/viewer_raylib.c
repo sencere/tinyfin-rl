@@ -59,6 +59,22 @@ typedef struct {
     float value;
 } tfrl_entity_snapshot;
 
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t step;
+    uint32_t max_steps;
+    float reward;
+    uint32_t done;
+    uint32_t piece;
+    uint32_t next_piece;
+    uint32_t rot;
+    uint32_t x;
+    uint32_t y;
+    double score;
+    uint32_t lines;
+} tfrl_tetris_snapshot;
+
 struct tfrl_viewer {
     int init;
     int fps;
@@ -67,6 +83,28 @@ struct tfrl_viewer {
     int width;
     int height;
 };
+
+static const int TETRIS_BLOCKS[7][4][2] = {
+    {{0, 1}, {1, 1}, {2, 1}, {3, 1}},
+    {{1, 0}, {2, 0}, {1, 1}, {2, 1}},
+    {{1, 0}, {0, 1}, {1, 1}, {2, 1}},
+    {{0, 0}, {0, 1}, {1, 1}, {2, 1}},
+    {{2, 0}, {0, 1}, {1, 1}, {2, 1}},
+    {{1, 0}, {2, 0}, {0, 1}, {1, 1}},
+    {{0, 0}, {1, 0}, {1, 1}, {2, 1}}
+};
+
+static void tetris_rot_coord(int x, int y, int rot, int *out_x, int *out_y) {
+    int rx = x;
+    int ry = y;
+    for (int i = 0; i < rot; i++) {
+        int tmp = rx;
+        rx = ry;
+        ry = 3 - tmp;
+    }
+    *out_x = rx;
+    *out_y = ry;
+}
 
 static Color tetris_color(uint32_t id) {
     switch (id) {
@@ -118,11 +156,84 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
     const unsigned char *bytes = (const unsigned char *)snapshot;
     const tfrl_render_snapshot_header *header = (const tfrl_render_snapshot_header *)bytes;
     const unsigned char *payload = bytes + sizeof(tfrl_render_snapshot_header);
+    if (header->api_version == 0x0004 && header->payload_kind == TFRL_SNAPSHOT_KIND_TETRIS) {
+        if (header->payload_bytes < sizeof(tfrl_tetris_snapshot)) return;
+        const tfrl_tetris_snapshot *tetris = (const tfrl_tetris_snapshot *)payload;
+        size_t grid_bytes = header->payload_bytes - sizeof(tfrl_tetris_snapshot);
+        if (grid_bytes < (size_t)(tetris->width * tetris->height)) return;
+        const unsigned char *cells = payload + sizeof(tfrl_tetris_snapshot);
+        if (!ensure_init(viewer, (int)tetris->width + 6, (int)tetris->height)) return;
+        if (WindowShouldClose()) return;
+
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+        int board_w = (int)tetris->width;
+        int board_h = (int)tetris->height;
+        for (int y = 0; y < board_h; y++) {
+            for (int x = 0; x < board_w; x++) {
+                int px = x * CELL_SIZE;
+                int py = y * CELL_SIZE;
+                unsigned char cell = cells[y * board_w + x];
+                if (cell) {
+                    DrawRectangle(px, py, CELL_SIZE, CELL_SIZE, tetris_color(cell));
+                } else {
+                    DrawRectangleLines(px, py, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
+                }
+            }
+        }
+
+        int piece = (int)tetris->piece;
+        if (piece < 0) piece = 0;
+        if (piece > 6) piece = 6;
+        for (int i = 0; i < 4; i++) {
+            int bx = 0;
+            int by = 0;
+            tetris_rot_coord(TETRIS_BLOCKS[piece][i][0], TETRIS_BLOCKS[piece][i][1],
+                             (int)tetris->rot, &bx, &by);
+            int gx = (int)tetris->x + bx;
+            int gy = (int)tetris->y + by;
+            if (gx >= 0 && gx < board_w && gy >= 0 && gy < board_h) {
+                DrawRectangle(gx * CELL_SIZE, gy * CELL_SIZE, CELL_SIZE, CELL_SIZE,
+                              tetris_color((uint32_t)(piece + 1)));
+            }
+        }
+
+        int panel_x = board_w * CELL_SIZE + 10;
+        DrawText(TextFormat("score: %.1f", tetris->score), panel_x, 10, 18, DARKGRAY);
+        DrawText(TextFormat("lines: %u", tetris->lines), panel_x, 32, 18, DARKGRAY);
+        DrawText(TextFormat("step: %u/%u", tetris->step, tetris->max_steps), panel_x, 54, 18, DARKGRAY);
+        DrawText(TextFormat("reward: %.3f", tetris->reward), panel_x, 76, 18, DARKGRAY);
+        DrawText(TextFormat("done: %u", tetris->done), panel_x, 98, 18, DARKGRAY);
+
+        DrawText("next:", panel_x, 130, 18, DARKGRAY);
+        int next_piece = (int)tetris->next_piece;
+        if (next_piece < 0) next_piece = 0;
+        if (next_piece > 6) next_piece = 6;
+        int preview_x = panel_x + 10;
+        int preview_y = 160;
+        for (int i = 0; i < 4; i++) {
+            int bx = TETRIS_BLOCKS[next_piece][i][0];
+            int by = TETRIS_BLOCKS[next_piece][i][1];
+            DrawRectangle(preview_x + bx * (CELL_SIZE / 2),
+                          preview_y + by * (CELL_SIZE / 2),
+                          CELL_SIZE / 2, CELL_SIZE / 2,
+                          tetris_color((uint32_t)(next_piece + 1)));
+        }
+
+        if (viewer->meta) {
+            char meta_buf[180];
+            snprintf(meta_buf, sizeof(meta_buf), "meta: %.160s", viewer->meta);
+            DrawText(meta_buf, panel_x, board_h * CELL_SIZE - 20, 16, DARKGRAY);
+        }
+        EndDrawing();
+        return;
+    }
+    if (header->api_version == 0x0004 && header->payload_kind != TFRL_SNAPSHOT_KIND_GRID) return;
     const tfrl_grid_snapshot *grid = NULL;
     tfrl_grid_snapshot_v2 grid_v2 = {0};
     tfrl_grid_snapshot_v3 grid_v3 = {0};
     size_t payload_header_size = 0;
-    if (header->api_version == 0x0003) {
+    if (header->api_version == 0x0004 || header->api_version == 0x0003) {
         if (header->payload_bytes < sizeof(tfrl_grid_snapshot_v3)) return;
         const tfrl_grid_snapshot_v3 *grid_ptr = (const tfrl_grid_snapshot_v3 *)payload;
         grid_v3 = *grid_ptr;

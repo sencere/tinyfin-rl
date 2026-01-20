@@ -3,6 +3,7 @@
 
 #include "core/env_api.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -125,11 +126,14 @@ typedef struct tfrl_env_ops {
     tfrl_step_result (*step)(struct tfrl_env *env, tfrl_action action);
     int (*step_multi)(struct tfrl_env *env, const tfrl_action *actions, int action_count,
                       tfrl_step_result *out_steps, int max_agents);
+    size_t (*render_bytes)(const struct tfrl_env *env);
+    size_t (*render_write)(struct tfrl_env *env, void *buffer, size_t buffer_len);
 } tfrl_env_ops;
 
 struct tfrl_env {
     tfrl_env_kind kind;
     const tfrl_env_ops *ops;
+    uint32_t rng_state;
     int x;
     int y;
     int x2;
@@ -154,6 +158,26 @@ struct tfrl_env {
 };
 
 typedef struct tfrl_env tfrl_env;
+
+static inline uint32_t tfrl_env_rng_next(tfrl_env *env) {
+    env->rng_state = env->rng_state * 1664525u + 1013904223u;
+    return env->rng_state;
+}
+
+static inline float tfrl_env_rand_uniform(tfrl_env *env) {
+    return (tfrl_env_rng_next(env) & 0x00FFFFFFu) / 16777215.0f;
+}
+
+static inline int tfrl_env_rand_range_int(tfrl_env *env, int min, int max) {
+    if (max <= min) return min;
+    int span = max - min + 1;
+    return min + (int)(tfrl_env_rng_next(env) % (uint32_t)span);
+}
+
+static inline float tfrl_env_rand_range_float(tfrl_env *env, float min, float max) {
+    float r = tfrl_env_rand_uniform(env);
+    return min + (max - min) * r;
+}
 
 void tfrl_env_reset_state(tfrl_env *env);
 int tfrl_env_is_wall_maze(int x, int y);
@@ -209,5 +233,23 @@ void tfrl_env_py_close(tfrl_env *env);
 int tfrl_env_py_reset_multi(tfrl_env *env, uint64_t seed, tfrl_obs *out_obs, int max_agents);
 int tfrl_env_py_step_multi(tfrl_env *env, const tfrl_action *actions, int action_count,
                            tfrl_step_result *out_steps, int max_agents);
+
+size_t tfrl_env_render_bytes_maze(const tfrl_env *env);
+size_t tfrl_env_render_bytes_lineworld(const tfrl_env *env);
+size_t tfrl_env_render_bytes_point1d(const tfrl_env *env);
+size_t tfrl_env_render_bytes_coin_maze(const tfrl_env *env);
+size_t tfrl_env_render_bytes_tetris(const tfrl_env *env);
+size_t tfrl_env_render_bytes_snake(const tfrl_env *env);
+size_t tfrl_env_render_bytes_floppy(const tfrl_env *env);
+size_t tfrl_env_render_bytes_pang(const tfrl_env *env);
+
+size_t tfrl_env_render_write_maze(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_lineworld(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_point1d(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_coin_maze(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_tetris(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_snake(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_floppy(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_pang(tfrl_env *env, void *buffer, size_t buffer_len);
 
 #endif

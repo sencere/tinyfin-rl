@@ -1,4 +1,4 @@
-#include "envs_internal.h"
+#include "envs/envs_internal.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -6,17 +6,6 @@
 #define PLAYER_BASE_SIZE 20.0f
 #define PLAYER_SPEED 5.0f
 #define BALLS_SPEED 2.0f
-
-static int rand_range_int(int min, int max) {
-    if (max <= min) return min;
-    int span = max - min + 1;
-    return min + (rand() % span);
-}
-
-static float rand_range_float(float min, float max) {
-    float r = (float)rand() / (float)RAND_MAX;
-    return min + (max - min) * r;
-}
 
 static int circle_hit(float ax, float ay, float ar, float bx, float by, float br) {
     float dx = ax - bx;
@@ -28,13 +17,15 @@ static int circle_hit(float ax, float ay, float ar, float bx, float by, float br
 static void pang_spawn_big(tfrl_env *env) {
     for (int i = 0; i < PANG_MAX_BIG; i++) {
         env->pang.big[i].radius = 40.0f;
-        env->pang.big[i].x = rand_range_float(env->pang.big[i].radius, (float)PANG_W - env->pang.big[i].radius);
-        env->pang.big[i].y = rand_range_float(env->pang.big[i].radius, (float)PANG_H * 0.5f);
+        env->pang.big[i].x = tfrl_env_rand_range_float(env, env->pang.big[i].radius,
+                                                       (float)PANG_W - env->pang.big[i].radius);
+        env->pang.big[i].y = tfrl_env_rand_range_float(env, env->pang.big[i].radius,
+                                                       (float)PANG_H * 0.5f);
         float vx = 0.0f;
         float vy = 0.0f;
         while (vx == 0.0f || vy == 0.0f) {
-            vx = rand_range_float(-BALLS_SPEED, BALLS_SPEED);
-            vy = rand_range_float(-BALLS_SPEED, BALLS_SPEED);
+            vx = tfrl_env_rand_range_float(env, -BALLS_SPEED, BALLS_SPEED);
+            vy = tfrl_env_rand_range_float(env, -BALLS_SPEED, BALLS_SPEED);
         }
         env->pang.big[i].vx = vx;
         env->pang.big[i].vy = vy;

@@ -33,6 +33,12 @@ make
 ./build/tinyfin-rl train --algo dqn --steps 1000
 ```
 
+Perf build (aggressive local flags):
+
+```bash
+make PERF=1
+```
+
 Convenience build scripts:
 
 ```bash
@@ -129,6 +135,7 @@ Replay:
 - Multi-agent environments: `lineworld_duo`, `coin_maze_duo`.
 - DQN/REINFORCE/PPO plus A2C/A3C/TRPO/IMPALA/Rainbow/QR-DQN/IQN/SAC/TD3 are implemented in C using Tinyfin.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
+- Batch helpers include `tfrl_env_step_batch`, `tfrl_env_reset_batch`, and `tfrl_env_reset_batch_seeds`.
 - Multiprocess DQN actors (shared-memory queue) are available for higher throughput.
 
 ## Python Env Bridge (Sockets)

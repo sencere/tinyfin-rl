@@ -1,4 +1,4 @@
-#include "envs_internal.h"
+#include "envs/envs_internal.h"
 
 int tfrl_env_is_wall_maze(int x, int y) {
     if (x < 0 || x >= MAZE_W || y < 0 || y >= MAZE_H) return 1;

@@ -1,5 +1,10 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra
+PERF ?= 0
+
+ifeq ($(PERF),1)
+CFLAGS += -O3 -march=native -ffast-math -fno-math-errno
+endif
 
 TINYFIN_DIR ?= tinyfin
 TINYFIN_INC ?= $(TINYFIN_DIR)/include
@@ -12,19 +17,31 @@ RAYLIB_INC ?= $(RAYLIB_DIR)/src
 RAYLIB_LIB ?= $(RAYLIB_DIR)/src/libraylib.so
 RAYLIB_LDFLAGS ?= -L$(RAYLIB_DIR)/src -lraylib -lm -ldl -lpthread -lX11 -lrt -Wl,-rpath,$(abspath $(RAYLIB_DIR)/src)
 
-SRC_CORE = \
+ENV_SRCS = \
 	src/envs/envs.c \
 	src/envs/registry.c \
-	src/envs/maze.c \
-	src/envs/lineworld.c \
-	src/envs/point1d.c \
-	src/envs/coin_maze.c \
-	src/envs/snake_env.c \
-	src/envs/floppy_env.c \
-	src/envs/tetris_env.c \
-	src/envs/pang_env.c \
-	src/envs/py_bridge.c \
+	src/envs/maze/maze.c \
+	src/envs/maze/render.c \
+	src/envs/lineworld/lineworld.c \
+	src/envs/lineworld/render.c \
+	src/envs/point1d/point1d.c \
+	src/envs/point1d/render.c \
+	src/envs/coin_maze/coin_maze.c \
+	src/envs/coin_maze/render.c \
+	src/envs/snake/snake_env.c \
+	src/envs/snake/render.c \
+	src/envs/floppy/floppy_env.c \
+	src/envs/floppy/render.c \
+	src/envs/tetris/tetris_env.c \
+	src/envs/tetris/render.c \
+	src/envs/pang/pang_env.c \
+	src/envs/pang/render.c \
+	src/envs/py_bridge/py_bridge.c \
 	src/envs/render.c \
+	src/envs/render_grid.c
+
+SRC_CORE = \
+	$(ENV_SRCS) \
 	src/core/algo_factory.c \
 	src/core/algo_random.c \
 	src/core/algo_dqn.c \
@@ -82,7 +99,7 @@ $(BIN): $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) | $(BIN_DIR)
 		-o $@ $(SRC_CORE) $(SRC_APP) $(VIEWER_SRC) \
 		-L$(TINYFIN_DIR) -ltinyfin $(TINYFIN_RPATH) $(VIEWER_LIBS) -lpthread -lm -lrt
 
-$(ENV_LIB): src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/snake_env.c src/envs/floppy_env.c src/envs/tetris_env.c src/envs/pang_env.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
+$(ENV_LIB): $(ENV_SRCS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -fPIC -shared -Isrc -o $@ $^
 
 tests: $(TEST_REPLAY) $(TEST_POINT1D) $(TEST_LINEWORLD_DUO) $(TEST_COIN_MAZE_DUO)
@@ -90,13 +107,13 @@ tests: $(TEST_REPLAY) $(TEST_POINT1D) $(TEST_LINEWORLD_DUO) $(TEST_COIN_MAZE_DUO
 $(TEST_REPLAY): tests/test_replay_buffer.c src/core/replay_buffer.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_POINT1D): tests/test_point1d_smoke.c src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/snake_env.c src/envs/floppy_env.c src/envs/tetris_env.c src/envs/pang_env.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
+$(TEST_POINT1D): tests/test_point1d_smoke.c $(ENV_SRCS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_LINEWORLD_DUO): tests/test_lineworld_duo_smoke.c src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/snake_env.c src/envs/floppy_env.c src/envs/tetris_env.c src/envs/pang_env.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
+$(TEST_LINEWORLD_DUO): tests/test_lineworld_duo_smoke.c $(ENV_SRCS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
-$(TEST_COIN_MAZE_DUO): tests/test_coin_maze_duo_smoke.c src/envs/envs.c src/envs/registry.c src/envs/maze.c src/envs/lineworld.c src/envs/point1d.c src/envs/coin_maze.c src/envs/snake_env.c src/envs/floppy_env.c src/envs/tetris_env.c src/envs/pang_env.c src/envs/py_bridge.c src/envs/render.c | $(BIN_DIR)
+$(TEST_COIN_MAZE_DUO): tests/test_coin_maze_duo_smoke.c $(ENV_SRCS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ -lm
 
 raylib:

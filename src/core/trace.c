@@ -35,7 +35,7 @@ static int write_header(FILE *fp, const char *meta, long *out_meta_offset, uint3
             if (pos < 0) return 0;
             *out_meta_offset = pos;
         }
-        if (meta_len > 0 && fwrite(meta, 1, meta_len, fp) != meta_len) return 0;
+        if (meta && meta_len > 0 && fwrite(meta, 1, meta_len, fp) != meta_len) return 0;
     }
     return 1;
 }

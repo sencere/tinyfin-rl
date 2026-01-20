@@ -1,4 +1,4 @@
-#include "envs_internal.h"
+#include "envs/envs_internal.h"
 
 static const tfrl_env_spec COIN_MAZE_DUO_SPEC = {
     .name = "coin_maze_duo",

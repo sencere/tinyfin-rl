@@ -18,6 +18,7 @@ This is the recommended mode for regression tests and golden runs.
 With the same CLI flags, seed, and environment count (`--envs`):
 
 - Environment resets use `seed + env_index`.
+- C environments use a per-env RNG seeded from the reset seed.
 - Action selection is called in fixed index order.
 - Replay sampling uses the same RNG sequence for a fixed update order.
 
@@ -28,6 +29,7 @@ If you keep all parameters identical, results should be reproducible.
 - `--threads > 1` can change execution timing and ordering.
 - Changing `--envs`, `--batch-size`, or `--replay-size` changes sampling order.
 - Different binaries or compiler settings can change floating-point behavior.
+- Aggressive flags like `-ffast-math` or `-march=native` can change numerics.
  - Replay sampling uses deterministic RNG only when `--deterministic` is set.
  - Epsilon policies and action-noise paths use deterministic RNG only when `--deterministic` is set.
  - SAC/TD3 stochastic policy sampling uses deterministic RNG only when `--deterministic` is set.

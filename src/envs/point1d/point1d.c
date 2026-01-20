@@ -1,4 +1,4 @@
-#include "envs_internal.h"
+#include "envs/envs_internal.h"
 
 static const tfrl_env_spec POINT1D_SPEC = {
     .name = "point1d",

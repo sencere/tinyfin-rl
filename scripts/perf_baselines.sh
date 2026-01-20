@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-steps="${1:-2000}"
+steps="${1:-20000}"
 bin="${TFRL_BIN:-build/tinyfin-rl}"
 out_dir="runs/perf_baselines"
 run_cuda="${RUN_CUDA:-0}"
@@ -29,7 +29,7 @@ run_case() {
   fi
 
   echo "baseline: env=${env} backend=${backend} steps=${steps}"
-  "$bin" train --algo dqn --env "$env" --steps "$steps" --envs 16 $thread_args $train_args \
+  "$bin" train --algo dqn --env "$env" --steps "$steps" --envs 1 $thread_args $train_args \
     --backend "$backend" --device "$device" --render off --log-every 1000000 \
     --profile-json "$out"
 }

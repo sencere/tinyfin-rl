@@ -1,16 +1,10 @@
-#include "envs_internal.h"
+#include "envs/envs_internal.h"
 
 #include <stdlib.h>
 
 #define FLOPPY_TUBE_SPACING 280.0f
 #define FLOPPY_TUBE_TOP_H 255.0f
 #define FLOPPY_TUBE_GAP 90.0f
-
-static int rand_range_int(int min, int max) {
-    if (max <= min) return min;
-    int span = max - min + 1;
-    return min + (rand() % span);
-}
 
 static int circle_rect_collision(float cx, float cy, float r, float rx, float ry, float rw, float rh) {
     float closest_x = cx;
@@ -60,7 +54,7 @@ tfrl_obs tfrl_env_reset_floppy(tfrl_env *env, uint64_t seed) {
 
     for (int i = 0; i < FLOPPY_MAX_TUBES; i++) {
         env->floppy.tubes_x[i] = 400.0f + FLOPPY_TUBE_SPACING * (float)i;
-        env->floppy.tubes_offset_y[i] = -(float)rand_range_int(0, 120);
+        env->floppy.tubes_offset_y[i] = -(float)tfrl_env_rand_range_int(env, 0, 120);
         env->floppy.tubes_scored[i] = 1;
     }
 
@@ -91,7 +85,7 @@ tfrl_step_result tfrl_env_step_floppy(tfrl_env *env, tfrl_action action) {
     for (int i = 0; i < FLOPPY_MAX_TUBES; i++) {
         if (env->floppy.tubes_x[i] + FLOPPY_TUBES_WIDTH < 0.0f) {
             env->floppy.tubes_x[i] = max_x + FLOPPY_TUBE_SPACING;
-            env->floppy.tubes_offset_y[i] = -(float)rand_range_int(0, 120);
+            env->floppy.tubes_offset_y[i] = -(float)tfrl_env_rand_range_int(env, 0, 120);
             env->floppy.tubes_scored[i] = 1;
             max_x = env->floppy.tubes_x[i];
         }

@@ -155,7 +155,7 @@ static Tensor *concat_obs_action(const tfrl_sac_algo *algo, Tensor *obs_t, Tenso
     return t;
 }
 
-static void sample_action_stats(const tfrl_sac_algo *algo, tfrl_obs obs, float *out_action, float *out_logp) {
+static void sample_action_stats(tfrl_sac_algo *algo, tfrl_obs obs, float *out_action, float *out_logp) {
     Tensor *x = obs_to_tensor(algo, obs);
     if (!x) return;
     Tensor *out = linear_forward(algo->policy, x);

@@ -1,13 +1,7 @@
-#include "envs_internal.h"
+#include "envs/envs_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-static int rand_range_int(int min, int max) {
-    if (max <= min) return min;
-    int span = max - min + 1;
-    return min + (rand() % span);
-}
 
 static double tetris_lines_score(int lines) {
     static const double s[5] = {0.0, 1.0, 3.0, 5.0, 8.0};
@@ -270,7 +264,7 @@ static int tetris_clear_lines(tfrl_env *env) {
 
 static int tetris_spawn_piece(tfrl_env *env) {
     env->tetris.piece = env->tetris.next_piece;
-    env->tetris.next_piece = rand_range_int(0, 6);
+    env->tetris.next_piece = tfrl_env_rand_range_int(env, 0, 6);
     env->tetris.rot = 0;
     env->tetris.x = (TETRIS_W - 4) / 2;
     env->tetris.y = 0;
@@ -434,7 +428,7 @@ tfrl_obs tfrl_env_reset_tetris(tfrl_env *env, uint64_t seed) {
     }
     env->tetris.lines = 0;
     env->tetris.score = 0.0;
-    env->tetris.next_piece = rand_range_int(0, 6);
+    env->tetris.next_piece = tfrl_env_rand_range_int(env, 0, 6);
     tetris_spawn_piece(env);
 
     tfrl_obs obs = {0};

@@ -72,14 +72,17 @@ void tfrl_env_destroy(tfrl_env *env) {
 tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed) {
     if (!env) return (tfrl_obs){0};
     if (env->kind == TFRL_ENV_PYBRIDGE) {
-        tfrl_obs obs = {0};
-        tfrl_obs out[1] = {0};
-        if (tfrl_env_reset_multi(env, seed, out, 1) == 1) {
-            obs = out[0];
+        int count = tfrl_env_agent_count(env);
+        if (count < 1) count = 1;
+        tfrl_obs out[count];
+        for (int i = 0; i < count; i++) out[i] = (tfrl_obs){0};
+        if (tfrl_env_reset_multi(env, seed, out, count) >= 1) {
+            return out[0];
         }
-        return obs;
+        return (tfrl_obs){0};
     }
     if (!env->ops || !env->ops->reset) return (tfrl_obs){0};
+    env->rng_state = (uint32_t)(seed ^ 0xA5A5A5A5u);
     return env->ops->reset(env, seed);
 }
 
@@ -149,9 +152,95 @@ int tfrl_env_step_multi(tfrl_env *env, const tfrl_action *actions, int action_co
     return env->ops->step_multi(env, actions, action_count, out_steps, max_agents);
 }
 
-void tfrl_env_step_batch(tfrl_env **envs, int env_count, const tfrl_action *actions, tfrl_step_result *out_steps) {
+void tfrl_env_step_batch(tfrl_env **restrict envs, int env_count,
+                         const tfrl_action *restrict actions, tfrl_step_result *restrict out_steps) {
     if (!envs || !actions || !out_steps || env_count <= 0) return;
-    for (int i = 0; i < env_count; i++) {
-        out_steps[i] = tfrl_env_step(envs[i], actions[i]);
+    int i = 0;
+    while (i < env_count) {
+        tfrl_env *env = envs[i];
+        if (!env || !env->ops || env->kind == TFRL_ENV_PYBRIDGE || !env->ops->step) {
+            out_steps[i] = tfrl_env_step(env, actions[i]);
+            i++;
+            continue;
+        }
+        const tfrl_env_ops *ops = env->ops;
+        tfrl_env_kind kind = env->kind;
+        int j = i;
+        while (j < env_count) {
+            tfrl_env *cur = envs[j];
+            if (!cur || cur->ops != ops || cur->kind != kind || cur->kind == TFRL_ENV_PYBRIDGE || !ops->step) {
+                break;
+            }
+            out_steps[j] = ops->step(cur, actions[j]);
+            j++;
+        }
+        if (j == i) {
+            out_steps[i] = tfrl_env_step(env, actions[i]);
+            i++;
+            continue;
+        }
+        i = j;
+    }
+}
+
+void tfrl_env_reset_batch(tfrl_env **restrict envs, int env_count, uint64_t seed_base,
+                          tfrl_obs *restrict out_obs) {
+    if (!envs || !out_obs || env_count <= 0) return;
+    int i = 0;
+    while (i < env_count) {
+        tfrl_env *env = envs[i];
+        if (!env || !env->ops || env->kind == TFRL_ENV_PYBRIDGE || !env->ops->reset) {
+            out_obs[i] = tfrl_env_reset(env, seed_base + (uint64_t)i);
+            i++;
+            continue;
+        }
+        const tfrl_env_ops *ops = env->ops;
+        tfrl_env_kind kind = env->kind;
+        int j = i;
+        while (j < env_count) {
+            tfrl_env *cur = envs[j];
+            if (!cur || cur->ops != ops || cur->kind != kind || cur->kind == TFRL_ENV_PYBRIDGE || !ops->reset) {
+                break;
+            }
+            out_obs[j] = ops->reset(cur, seed_base + (uint64_t)j);
+            j++;
+        }
+        if (j == i) {
+            out_obs[i] = tfrl_env_reset(env, seed_base + (uint64_t)i);
+            i++;
+            continue;
+        }
+        i = j;
+    }
+}
+
+void tfrl_env_reset_batch_seeds(tfrl_env **restrict envs, int env_count,
+                                const uint64_t *restrict seeds, tfrl_obs *restrict out_obs) {
+    if (!envs || !seeds || !out_obs || env_count <= 0) return;
+    int i = 0;
+    while (i < env_count) {
+        tfrl_env *env = envs[i];
+        if (!env || !env->ops || env->kind == TFRL_ENV_PYBRIDGE || !env->ops->reset) {
+            out_obs[i] = tfrl_env_reset(env, seeds[i]);
+            i++;
+            continue;
+        }
+        const tfrl_env_ops *ops = env->ops;
+        tfrl_env_kind kind = env->kind;
+        int j = i;
+        while (j < env_count) {
+            tfrl_env *cur = envs[j];
+            if (!cur || cur->ops != ops || cur->kind != kind || cur->kind == TFRL_ENV_PYBRIDGE || !ops->reset) {
+                break;
+            }
+            out_obs[j] = ops->reset(cur, seeds[j]);
+            j++;
+        }
+        if (j == i) {
+            out_obs[i] = tfrl_env_reset(env, seeds[i]);
+            i++;
+            continue;
+        }
+        i = j;
     }
 }

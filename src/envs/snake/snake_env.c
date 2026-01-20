@@ -1,20 +1,14 @@
-#include "envs_internal.h"
+#include "envs/envs_internal.h"
 
 #include <stdlib.h>
-
-static int rand_range_int(int min, int max) {
-    if (max <= min) return min;
-    int span = max - min + 1;
-    return min + (rand() % span);
-}
 
 static void snake_place_fruit(tfrl_env *env) {
     int tries = 0;
     int fx = 0;
     int fy = 0;
     while (tries < 1000) {
-        fx = rand_range_int(0, SNAKE_W - 1);
-        fy = rand_range_int(0, SNAKE_H - 1);
+        fx = tfrl_env_rand_range_int(env, 0, SNAKE_W - 1);
+        fy = tfrl_env_rand_range_int(env, 0, SNAKE_H - 1);
         int hit = 0;
         for (int i = 0; i < env->snake.len; i++) {
             if (env->snake.xs[i] == fx && env->snake.ys[i] == fy) {

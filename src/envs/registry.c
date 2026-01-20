@@ -11,6 +11,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_maze,
         .step = tfrl_env_step_maze,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_maze,
+        .render_write = tfrl_env_render_write_maze,
     },
     {
         .name = "lineworld",
@@ -20,6 +22,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_lineworld,
         .step = tfrl_env_step_lineworld,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_lineworld,
+        .render_write = tfrl_env_render_write_lineworld,
     },
     {
         .name = "lineworld_cont",
@@ -29,6 +33,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_lineworld_cont,
         .step = tfrl_env_step_lineworld_cont,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_lineworld,
+        .render_write = tfrl_env_render_write_lineworld,
     },
     {
         .name = "lineworld_duo",
@@ -38,6 +44,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_lineworld_duo,
         .step = tfrl_env_step_lineworld_duo,
         .step_multi = tfrl_env_step_multi_lineworld_duo,
+        .render_bytes = tfrl_env_render_bytes_lineworld,
+        .render_write = tfrl_env_render_write_lineworld,
     },
     {
         .name = "point1d",
@@ -47,6 +55,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_point1d,
         .step = tfrl_env_step_point1d,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_point1d,
+        .render_write = tfrl_env_render_write_point1d,
     },
     {
         .name = "coin_maze",
@@ -56,6 +66,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_coin_maze,
         .step = tfrl_env_step_coin_maze,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_coin_maze,
+        .render_write = tfrl_env_render_write_coin_maze,
     },
     {
         .name = "coin_maze_duo",
@@ -65,6 +77,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_coin_maze_duo,
         .step = tfrl_env_step_coin_maze_duo,
         .step_multi = tfrl_env_step_multi_coin_maze_duo,
+        .render_bytes = tfrl_env_render_bytes_coin_maze,
+        .render_write = tfrl_env_render_write_coin_maze,
     },
     {
         .name = "snake",
@@ -74,6 +88,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_snake,
         .step = tfrl_env_step_snake,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_snake,
+        .render_write = tfrl_env_render_write_snake,
     },
     {
         .name = "floppy",
@@ -83,6 +99,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_floppy,
         .step = tfrl_env_step_floppy,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_floppy,
+        .render_write = tfrl_env_render_write_floppy,
     },
     {
         .name = "tetris",
@@ -92,6 +110,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_tetris,
         .step = tfrl_env_step_tetris,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_tetris,
+        .render_write = tfrl_env_render_write_tetris,
     },
     {
         .name = "tetris_disc",
@@ -101,6 +121,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_tetris_disc,
         .step = tfrl_env_step_tetris_disc,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_tetris,
+        .render_write = tfrl_env_render_write_tetris,
     },
     {
         .name = "pang",
@@ -110,6 +132,8 @@ static const tfrl_env_ops ENVS[] = {
         .reset = tfrl_env_reset_pang,
         .step = tfrl_env_step_pang,
         .step_multi = NULL,
+        .render_bytes = tfrl_env_render_bytes_pang,
+        .render_write = tfrl_env_render_write_pang,
     },
 };
 

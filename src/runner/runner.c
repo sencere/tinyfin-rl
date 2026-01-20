@@ -1336,36 +1336,55 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     tfrl_step_result *steps = (tfrl_step_result *)calloc((size_t)total_agents, sizeof(tfrl_step_result));
     double *episode_returns = (double *)calloc((size_t)total_agents, sizeof(double));
     int *episode_counts = (int *)calloc((size_t)total_agents, sizeof(int));
-    if (!obs || !actions || !steps || !episode_returns || !episode_counts) {
+    tfrl_env **reset_envs = NULL;
+    tfrl_obs *reset_obs = NULL;
+    uint64_t *reset_seeds = NULL;
+    int *reset_indices = NULL;
+    if (agent_count == 1) {
+        reset_envs = (tfrl_env **)calloc((size_t)env_count, sizeof(tfrl_env *));
+        reset_obs = (tfrl_obs *)calloc((size_t)env_count, sizeof(tfrl_obs));
+        reset_seeds = (uint64_t *)calloc((size_t)env_count, sizeof(uint64_t));
+        reset_indices = (int *)calloc((size_t)env_count, sizeof(int));
+    }
+    if (!obs || !actions || !steps || !episode_returns || !episode_counts ||
+        (agent_count == 1 && (!reset_envs || !reset_obs || !reset_seeds || !reset_indices))) {
         fprintf(stderr, "allocation failed\n");
         free(obs);
         free(actions);
         free(steps);
         free(episode_returns);
         free(episode_counts);
+        free(reset_envs);
+        free(reset_obs);
+        free(reset_seeds);
+        free(reset_indices);
         for (int i = 0; i < env_count; i++) {
             tfrl_env_destroy(envs[i]);
         }
         free(envs);
         return 1;
     }
-    for (int i = 0; i < env_count; i++) {
-        int got = tfrl_env_reset_multi(envs[i], (uint64_t)(seed + i), &obs[i * agent_count], agent_count);
-        if (got != agent_count) {
-            fprintf(stderr, "env reset failed\n");
-            for (int a = 0; a < agent_count; a++) {
-                tfrl_algo_destroy(&algos[a]);
+    if (agent_count == 1) {
+        tfrl_env_reset_batch(envs, env_count, (uint64_t)seed, obs);
+    } else {
+        for (int i = 0; i < env_count; i++) {
+            int got = tfrl_env_reset_multi(envs[i], (uint64_t)(seed + i), &obs[i * agent_count], agent_count);
+            if (got != agent_count) {
+                fprintf(stderr, "env reset failed\n");
+                for (int a = 0; a < agent_count; a++) {
+                    tfrl_algo_destroy(&algos[a]);
+                }
+                for (int j = 0; j < env_count; j++) {
+                    tfrl_env_destroy(envs[j]);
+                }
+                free(envs);
+                free(obs);
+                free(actions);
+                free(steps);
+                free(episode_returns);
+                free(episode_counts);
+                return 1;
             }
-            for (int j = 0; j < env_count; j++) {
-                tfrl_env_destroy(envs[j]);
-            }
-            free(envs);
-            free(obs);
-            free(actions);
-            free(steps);
-            free(episode_returns);
-            free(episode_counts);
-            return 1;
         }
     }
 
@@ -1435,6 +1454,8 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         int thread_count = cfg->threads > 0 ? cfg->threads : env_count;
         if (cfg->deterministic) thread_count = 1;
         int use_dashboard = dashboard_enabled();
+        const int log_every = cfg->log_every;
+        const int use_log = !use_dashboard && log_every > 0;
         int use_profile = cfg->profile || (cfg->profile_json && cfg->profile_json[0]) || use_dashboard;
         int dashboard_every = cfg->log_every > 0 ? cfg->log_every : 100;
         double start_time = use_profile ? now_seconds() : 0.0;
@@ -1529,6 +1550,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 if (use_profile) render_seconds += now_seconds() - t0;
             }
 
+            int reset_count = 0;
             for (int i = 0; i < env_count; i++) {
                 int env_done = 0;
                 for (int a = 0; a < agent_count; a++) {
@@ -1542,16 +1564,30 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                         total_episode_count += 1;
                         total_return_sum += episode_returns[idx];
                         last_return = episode_returns[idx];
-                        if (!use_dashboard && cfg->log_every > 0 && (episode_counts[idx] % cfg->log_every) == 0) {
+                        if (use_log && (episode_counts[idx] % log_every) == 0) {
                             fprintf(stdout, "env=%d agent=%d episode=%d return=%.4f\n", i, a, episode_counts[idx], episode_returns[idx]);
                         }
                         episode_returns[idx] = 0.0;
                     }
-                    int got = tfrl_env_reset_multi(envs[i], (uint64_t)(cfg->seed + i), &obs[i * agent_count], agent_count);
-                    if (got != agent_count) {
-                        fprintf(stderr, "env reset failed\n");
-                        break;
+                    if (agent_count == 1) {
+                        reset_envs[reset_count] = envs[i];
+                        reset_seeds[reset_count] = (uint64_t)(cfg->seed + i);
+                        reset_indices[reset_count] = i;
+                        reset_count++;
+                    } else {
+                        int got = tfrl_env_reset_multi(envs[i], (uint64_t)(cfg->seed + i), &obs[i * agent_count], agent_count);
+                        if (got != agent_count) {
+                            fprintf(stderr, "env reset failed\n");
+                            break;
+                        }
                     }
+                }
+            }
+            if (agent_count == 1 && reset_count > 0) {
+                tfrl_env_reset_batch_seeds(reset_envs, reset_count, reset_seeds, reset_obs);
+                for (int i = 0; i < reset_count; i++) {
+                    int idx = reset_indices[i];
+                    obs[idx] = reset_obs[i];
                 }
             }
             if (viewer && tfrl_viewer_should_close(viewer)) {
@@ -1682,5 +1718,9 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     free(steps);
     free(episode_returns);
     free(episode_counts);
+    free(reset_envs);
+    free(reset_obs);
+    free(reset_seeds);
+    free(reset_indices);
     return 0;
 }

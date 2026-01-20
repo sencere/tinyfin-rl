@@ -6,8 +6,19 @@
 multiple env instances. This is the starting point for true SIMD or parallel
 env stepping.
 
+`tfrl_env_reset_batch` and `tfrl_env_reset_batch_seeds` provide fast reset
+paths for single-agent env arrays (initial resets and sparse episode resets).
+
 Threaded stepping is available via `--threads N` to split env stepping across
 worker threads.
+
+Aggressive local build flags (use for benchmarks only):
+
+```bash
+make PERF=1
+cmake -DTFRL_PERF_FLAGS=ON -S . -B build
+cmake --build build
+```
 
 For deterministic baselines, use `--deterministic` (or `--threads 1`) to avoid
 thread scheduling variability.

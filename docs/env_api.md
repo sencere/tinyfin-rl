@@ -37,6 +37,19 @@ int agents = tfrl_env_reset_multi(env, 0, obs_multi, 2);
 int got = tfrl_env_step_multi(env, actions, agents, steps, 2);
 ```
 
+Batch helpers (single-agent env arrays):
+
+```c
+tfrl_env_reset_batch(envs, env_count, 0, obs);
+tfrl_env_step_batch(envs, env_count, actions, steps);
+```
+
+Batch reset with explicit seeds (for sparse resets):
+
+```c
+tfrl_env_reset_batch_seeds(envs, reset_count, seeds, obs);
+```
+
 ## Environments
 
 - `maze_rooms`
