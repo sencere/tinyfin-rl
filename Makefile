@@ -47,6 +47,9 @@ SRC_LIB = \
 	src/core/algo_factory.c \
 	src/core/algo_random.c \
 	src/core/algo_dqn.c \
+	src/core/algo_rnn_dqn.c \
+	src/core/algo_gru_dqn.c \
+	src/core/algo_lstm_dqn.c \
 	src/core/algo_rainbow.c \
 	src/core/algo_qrdqn.c \
 	src/core/algo_iql.c \
@@ -60,7 +63,9 @@ SRC_LIB = \
 	src/core/algo_mcts.c \
 	src/core/algo_reinforce.c \
 	src/core/algo_ppo.c \
+	src/core/algo_arkanoid_plan.c \
 	src/core/algo_tetris_plan.c \
+	src/core/obs_layout.c \
 	src/core/replay_buffer.c \
 	src/core/trace.c
 

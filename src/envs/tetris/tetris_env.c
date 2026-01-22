@@ -276,6 +276,23 @@ enum {
     TETRIS_DISC_OBS_N = 4096
 };
 
+static const tfrl_obs_field TETRIS_OBS_FIELDS[] = {
+    {.name = "heights", .len = TETRIS_W, .dims = 1, .shape = {TETRIS_W, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "holes", .len = TETRIS_W, .dims = 1, .shape = {TETRIS_W, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "y", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "rot", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "piece", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "next_piece", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "bumpiness", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "max_height", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout TETRIS_OBS_LAYOUT = {
+    .field_count = (int)(sizeof(TETRIS_OBS_FIELDS) / sizeof(TETRIS_OBS_FIELDS[0])),
+    .fields = TETRIS_OBS_FIELDS,
+};
+
 static void tetris_calc_features(const tfrl_env *env, float *heights_out, float *holes_out,
                                  float *bumpiness_out, float *max_height_out, float *total_holes_out) {
     int heights[TETRIS_W] = {0};
@@ -328,19 +345,19 @@ static void tetris_fill_obs(const tfrl_env *env, tfrl_obs *obs) {
     float max_height = 0.0f;
     float total_holes = 0.0f;
     tetris_calc_features(env, heights, holes, &bumpiness, &max_height, &total_holes);
+    (void)total_holes;
 
-    obs->data_len = TETRIS_OBS_DIMS;
-    int idx = 0;
-    for (int x = 0; x < TETRIS_W; x++) obs->data[idx++] = heights[x];
-    for (int x = 0; x < TETRIS_W; x++) obs->data[idx++] = holes[x];
-    obs->data[idx++] = (float)env->tetris.x / (float)(TETRIS_W - 1);
-    obs->data[idx++] = (float)env->tetris.y / (float)(TETRIS_H - 1);
-    obs->data[idx++] = (float)env->tetris.rot / 3.0f;
-    obs->data[idx++] = (float)env->tetris.piece / 6.0f;
-    obs->data[idx++] = (float)env->tetris.next_piece / 6.0f;
-    obs->data[idx++] = bumpiness;
-    obs->data[idx++] = max_height;
-    obs->data[idx++] = total_holes;
+    float pos_x[1] = {(float)env->tetris.x / (float)(TETRIS_W - 1)};
+    float pos_y[1] = {(float)env->tetris.y / (float)(TETRIS_H - 1)};
+    float rot[1] = {(float)env->tetris.rot / 3.0f};
+    float piece[1] = {(float)env->tetris.piece / 6.0f};
+    float next_piece[1] = {(float)env->tetris.next_piece / 6.0f};
+    float bump[1] = {bumpiness};
+    float max_h[1] = {max_height};
+    const float *fields[] = {heights, holes, pos_x, pos_y, rot, piece, next_piece, bump, max_h};
+    if (!tfrl_obs_flatten(&TETRIS_OBS_LAYOUT, fields, obs)) {
+        obs->data_len = 0;
+    }
 }
 
 static int tetris_hash_obs(const tfrl_env *env) {
@@ -386,6 +403,7 @@ static const tfrl_env_spec TETRIS_SPEC = {
     .action_low = 0.0,
     .action_high = 4.0,
     .agent_count = 1,
+    .obs_layout = &TETRIS_OBS_LAYOUT,
 };
 
 static const tfrl_env_spec TETRIS_DISC_SPEC = {
@@ -408,6 +426,7 @@ static const tfrl_env_spec TETRIS_DISC_SPEC = {
     .action_low = 0.0,
     .action_high = 4.0,
     .agent_count = 1,
+    .obs_layout = NULL,
 };
 
 const tfrl_env_spec *tfrl_env_spec_tetris(void) {

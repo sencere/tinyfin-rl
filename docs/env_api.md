@@ -8,6 +8,7 @@ The environment API is a small C interface and is exported via `libtfrl_env.so`.
 - `tfrl_step_result` (observation, reward, done)
 - `tfrl_env_spec` (spaces, shapes, dtypes, bounds)
 - `tfrl_env_spec.agent_count` (number of agents in the env)
+- `tfrl_obs_layout` / `tfrl_obs_field` (optional layout for structured observations)
 
 ## Example
 
@@ -25,6 +26,36 @@ For box spaces, use `data_len` + `data[]` (up to `TFRL_MAX_BOX_DIMS`):
 tfrl_action action = {0};
 action.data_len = 1;
 action.data[0] = 0.25f;
+```
+
+## Observation Layout (Optional)
+
+You can describe structured observations as a set of fields that are flattened
+into a single 1D box. The layout lives in `tfrl_env_spec.obs_layout` and can be
+used to pack or unpack fields consistently.
+
+```c
+static const tfrl_obs_field MY_FIELDS[] = {
+    {.name = "pos", .len = 2, .dims = 1, .shape = {2, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "vel", .len = 2, .dims = 1, .shape = {2, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout MY_LAYOUT = {
+    .field_count = 2,
+    .fields = MY_FIELDS,
+};
+
+static const tfrl_env_spec MY_SPEC = {
+    /* ... */
+    .obs_type = TFRL_SPACE_BOX,
+    .obs_dims = 4,
+    .obs_layout = &MY_LAYOUT,
+};
+
+float pos[2] = {x, y};
+float vel[2] = {vx, vy};
+const float *fields[] = {pos, vel};
+tfrl_obs_flatten(&MY_LAYOUT, fields, &obs);
 ```
 
 Multi-agent helpers:

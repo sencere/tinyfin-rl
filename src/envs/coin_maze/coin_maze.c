@@ -20,6 +20,7 @@ static const tfrl_env_spec COIN_MAZE_DUO_SPEC = {
     .action_low = 0.0,
     .action_high = 3.0,
     .agent_count = LINEWORLD_DUO_AGENTS,
+    .obs_layout = NULL,
 };
 
 static const tfrl_env_spec COIN_MAZE_SPEC = {
@@ -42,6 +43,7 @@ static const tfrl_env_spec COIN_MAZE_SPEC = {
     .action_low = 0.0,
     .action_high = 3.0,
     .agent_count = 1,
+    .obs_layout = NULL,
 };
 
 const tfrl_env_spec *tfrl_env_spec_coin_maze(void) {

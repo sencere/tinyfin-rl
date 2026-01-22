@@ -87,7 +87,8 @@ typedef struct {
     float player_w;
     float player_h;
     uint32_t life;
-    float reward_vec[4];
+    float score;
+    float reward_vec[5];
     float ball_x;
     float ball_y;
     float ball_vx;
@@ -319,12 +320,14 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
 
         DrawText(TextFormat("step: %u/%u", ark->step, ark->max_steps), 20, 10, 18, DARKGRAY);
         DrawText(TextFormat("reward: %.3f", ark->reward), 20, 32, 18, DARKGRAY);
-        DrawText(TextFormat("vec: b %.2f l %.2f c %.2f tr %.3f",
+        DrawText(TextFormat("vec: b %.2f l %.2f c %.2f tr %.3f p %.2f",
                             ark->reward_vec[0], ark->reward_vec[1],
-                            ark->reward_vec[2], ark->reward_vec[3]),
+                            ark->reward_vec[2], ark->reward_vec[3],
+                            ark->reward_vec[4]),
                  20, 54, 18, DARKGRAY);
-        DrawText(TextFormat("done: %u", ark->done), 20, 76, 18, DARKGRAY);
-        DrawText(TextFormat("lives: %u", ark->life), 20, 98, 18, DARKGRAY);
+        DrawText(TextFormat("score: %.0f", ark->score), 20, 76, 18, DARKGRAY);
+        DrawText(TextFormat("done: %u", ark->done), 20, 98, 18, DARKGRAY);
+        DrawText(TextFormat("lives: %u", ark->life), 20, 120, 18, DARKGRAY);
         if (viewer->meta) {
             char meta_buf[180];
             snprintf(meta_buf, sizeof(meta_buf), "meta: %.160s", viewer->meta);

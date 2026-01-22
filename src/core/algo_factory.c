@@ -5,6 +5,9 @@
 
 tfrl_algo tfrl_algo_random_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_dqn_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_rnn_dqn_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_gru_dqn_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_lstm_dqn_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_rainbow_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_qrdqn_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_iql_create(const tfrl_algo_config *cfg);
@@ -18,6 +21,7 @@ tfrl_algo tfrl_algo_mcts_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_ppo_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_iqn_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_arkanoid_plan_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_tetris_plan_create(const tfrl_algo_config *cfg);
 
 static void apply_algo_defaults(tfrl_algo_config *cfg);
@@ -80,6 +84,9 @@ static const tfrl_algo_schema ALGO_SCHEMA_DEFAULT = {
 
 static const tfrl_algo_schema ALGO_SCHEMAS[] = {
     {.name = "dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
+    {.name = "rnn_dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0005f, .epsilon = 0.1f},
+    {.name = "gru_dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0005f, .epsilon = 0.1f},
+    {.name = "lstm_dqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0005f, .epsilon = 0.1f},
     {.name = "rainbow", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f, .c51_atoms = 51, .c51_vmin = -10.0f, .c51_vmax = 10.0f},
     {.name = "qrdqn", .defaults_version = 1, .gamma = 0.99f, .lr = 0.05f, .epsilon = 0.1f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "iql", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .epsilon = 0.1f, .replay_size = 10000, .batch_size = 64, .per_alpha = 0.0f, .per_beta = 0.4f},
@@ -94,6 +101,7 @@ static const tfrl_algo_schema ALGO_SCHEMAS[] = {
     {.name = "td3", .defaults_version = 1, .gamma = 0.99f, .lr = 0.0003f, .replay_size = 1000, .batch_size = 32, .per_alpha = 0.0f, .per_beta = 0.4f},
     {.name = "mcts", .defaults_version = 1, .gamma = 0.99f, .mcts_sims = 200, .mcts_depth = 50},
     {.name = "random", .defaults_version = 1, .gamma = 0.99f},
+    {.name = "arkanoid_plan", .defaults_version = 1, .gamma = 0.99f},
     {.name = "tetris_plan", .defaults_version = 1, .gamma = 0.99f},
 };
 
@@ -320,6 +328,15 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     if (strcmp(cfg_use->name, "dqn") == 0) {
         return tfrl_algo_dqn_create(cfg_use);
     }
+    if (strcmp(cfg_use->name, "rnn_dqn") == 0) {
+        return tfrl_algo_rnn_dqn_create(cfg_use);
+    }
+    if (strcmp(cfg_use->name, "gru_dqn") == 0) {
+        return tfrl_algo_gru_dqn_create(cfg_use);
+    }
+    if (strcmp(cfg_use->name, "lstm_dqn") == 0) {
+        return tfrl_algo_lstm_dqn_create(cfg_use);
+    }
     if (strcmp(cfg_use->name, "rainbow") == 0) {
         return tfrl_algo_rainbow_create(cfg_use);
     }
@@ -355,6 +372,9 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     }
     if (strcmp(cfg_use->name, "iqn") == 0) {
         return tfrl_algo_iqn_create(cfg_use);
+    }
+    if (strcmp(cfg_use->name, "arkanoid_plan") == 0) {
+        return tfrl_algo_arkanoid_plan_create(cfg_use);
     }
     if (strcmp(cfg_use->name, "tetris_plan") == 0) {
         return tfrl_algo_tetris_plan_create(cfg_use);

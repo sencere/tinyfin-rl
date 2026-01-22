@@ -75,6 +75,7 @@ int tfrl_env_py_connect(tfrl_env *env, const char *socket_path, const char *kind
     env->py_spec.action_low = action_low;
     env->py_spec.action_high = action_high;
     env->py_spec.agent_count = env->py_agent_count;
+    env->py_spec.obs_layout = NULL;
     return 1;
 }
 

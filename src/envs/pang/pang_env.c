@@ -48,6 +48,18 @@ static int pang_spawn_smaller(tfrl_pang_ball *arr, int max, float x, float y, fl
     return 0;
 }
 
+static const tfrl_obs_field PANG_OBS_FIELDS[] = {
+    {.name = "player_x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "nearest_x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "nearest_y", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "shot_active", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout PANG_OBS_LAYOUT = {
+    .field_count = (int)(sizeof(PANG_OBS_FIELDS) / sizeof(PANG_OBS_FIELDS[0])),
+    .fields = PANG_OBS_FIELDS,
+};
+
 static const tfrl_env_spec PANG_SPEC = {
     .name = "pang",
     .obs_n = 4,
@@ -68,6 +80,7 @@ static const tfrl_env_spec PANG_SPEC = {
     .action_low = 0.0,
     .action_high = 3.0,
     .agent_count = 1,
+    .obs_layout = &PANG_OBS_LAYOUT,
 };
 
 const tfrl_env_spec *tfrl_env_spec_pang(void) {
@@ -91,11 +104,14 @@ tfrl_obs tfrl_env_reset_pang(tfrl_env *env, uint64_t seed) {
     pang_spawn_big(env);
 
     tfrl_obs obs = {0};
-    obs.data_len = 4;
-    obs.data[0] = env->pang.player_x / (float)PANG_W;
-    obs.data[1] = 0.5f;
-    obs.data[2] = 0.5f;
-    obs.data[3] = 0.0f;
+    float player_x[1] = {env->pang.player_x / (float)PANG_W};
+    float nearest_x[1] = {0.5f};
+    float nearest_y[1] = {0.5f};
+    float shot_active[1] = {0.0f};
+    const float *fields[] = {player_x, nearest_x, nearest_y, shot_active};
+    if (!tfrl_obs_flatten(&PANG_OBS_LAYOUT, fields, &obs)) {
+        obs.data_len = 0;
+    }
     return obs;
 }
 
@@ -282,11 +298,14 @@ tfrl_step_result tfrl_env_step_pang(tfrl_env *env, tfrl_action action) {
     }
 
     tfrl_step_result out = {0};
-    out.observation.data_len = 4;
-    out.observation.data[0] = env->pang.player_x / (float)PANG_W;
-    out.observation.data[1] = nearest_x;
-    out.observation.data[2] = nearest_y;
-    out.observation.data[3] = env->pang.shot_active ? 1.0f : 0.0f;
+    float player_x[1] = {env->pang.player_x / (float)PANG_W};
+    float nearest_x_f[1] = {nearest_x};
+    float nearest_y_f[1] = {nearest_y};
+    float shot_active[1] = {env->pang.shot_active ? 1.0f : 0.0f};
+    const float *fields[] = {player_x, nearest_x_f, nearest_y_f, shot_active};
+    if (!tfrl_obs_flatten(&PANG_OBS_LAYOUT, fields, &out.observation)) {
+        out.observation.data_len = 0;
+    }
     out.reward = reward;
     out.done = done;
     env->last_reward = (float)out.reward;

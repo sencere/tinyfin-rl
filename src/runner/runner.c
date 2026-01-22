@@ -35,6 +35,27 @@ static int should_render(int step, int render_every) {
     return (step % render_every) == 0;
 }
 
+static int use_arkanoid_plan_reward(const tfrl_runner_config *cfg, const tfrl_env_spec *spec) {
+    if (!cfg || !cfg->algo || !spec || !spec->name) return 0;
+    return strcmp(cfg->algo, "arkanoid_plan") == 0 && strcmp(spec->name, "arkanoid") == 0;
+}
+
+static double arkanoid_plan_reward(const tfrl_env_spec *spec, const tfrl_obs *prev, const tfrl_obs *next) {
+    float prev_bricks = 0.0f;
+    float next_bricks = 0.0f;
+    if (spec && spec->obs_layout && prev && next) {
+        int len = 0;
+        const float *field = tfrl_obs_unflatten_field(spec->obs_layout, prev, 3, &len);
+        if (field && len >= 1) prev_bricks = field[0];
+        field = tfrl_obs_unflatten_field(spec->obs_layout, next, 3, &len);
+        if (field && len >= 1) next_bricks = field[0];
+    } else if (prev && next) {
+        if (prev->data_len >= 6) prev_bricks = prev->data[5];
+        if (next->data_len >= 6) next_bricks = next->data[5];
+    }
+    return (next_bricks < prev_bricks) ? 1.0 : 0.0;
+}
+
 static int parse_device_name(const char *name, int *out_device) {
     if (!name || !out_device) return 0;
     if (strcmp(name, "0") == 0 || strcmp(name, "cpu") == 0) {
@@ -1419,6 +1440,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         }
     }
     const tfrl_env_spec *spec = tfrl_env_get_spec(envs[0]);
+    const int shape_arkanoid_reward = use_arkanoid_plan_reward(cfg, spec);
     int agent_count = tfrl_env_agent_count(envs[0]);
     if (agent_count <= 0) {
         fprintf(stderr, "env agent count invalid\n");
@@ -1427,6 +1449,18 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         }
         free(envs);
         return 1;
+    }
+    if (cfg->algo &&
+        (strcmp(cfg->algo, "rnn_dqn") == 0 || strcmp(cfg->algo, "gru_dqn") == 0 ||
+         strcmp(cfg->algo, "lstm_dqn") == 0)) {
+        if (agent_count != 1 || env_count != 1) {
+            fprintf(stderr, "rnn/gru/lstm dqn requires single-agent single-env\n");
+            for (int i = 0; i < env_count; i++) {
+                tfrl_env_destroy(envs[i]);
+            }
+            free(envs);
+            return 1;
+        }
     }
     for (int i = 1; i < env_count; i++) {
         if (tfrl_env_agent_count(envs[i]) != agent_count) {
@@ -1724,17 +1758,21 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 for (int i = 0; i < env_count; i++) {
                     for (int a = 0; a < agent_count; a++) {
                         int idx = i * agent_count + a;
+                        double reward = steps[idx].reward;
+                        if (shape_arkanoid_reward) {
+                            reward = arkanoid_plan_reward(spec, &obs[idx], &steps[idx].observation);
+                        }
                         tfrl_transition transition = {
                             .obs = obs[idx],
                             .action = actions[idx],
-                            .reward = steps[idx].reward,
+                            .reward = reward,
                             .next_obs = steps[idx].observation,
                             .done = steps[idx].done,
                         };
                         int algo_idx = cfg->share_policy ? 0 : a;
                         algos[algo_idx].vtable->update(algos[algo_idx].ctx, &transition);
                         obs[idx] = steps[idx].observation;
-                        episode_returns[idx] += steps[idx].reward;
+                        episode_returns[idx] += reward;
                     }
                 }
                 if (use_profile) update_seconds += now_seconds() - t0;

@@ -8,7 +8,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define TFRL_MAX_BOX_DIMS 32
+#define TFRL_MAX_BOX_DIMS 128
 
 typedef struct {
     int index;
@@ -40,6 +40,19 @@ typedef enum {
 
 typedef struct {
     const char *name;
+    int len;
+    int dims;
+    int shape[2];
+    tfrl_dtype dtype;
+} tfrl_obs_field;
+
+typedef struct {
+    int field_count;
+    const tfrl_obs_field *fields;
+} tfrl_obs_layout;
+
+typedef struct {
+    const char *name;
     int obs_n;
     int action_n;
     int max_steps;
@@ -58,6 +71,7 @@ typedef struct {
     double action_low;
     double action_high;
     int agent_count;
+    const tfrl_obs_layout *obs_layout;
 } tfrl_env_spec;
 
 typedef struct {
@@ -85,6 +99,13 @@ void tfrl_env_reset_batch(tfrl_env **restrict envs, int env_count, uint64_t seed
                           tfrl_obs *restrict out_obs);
 void tfrl_env_reset_batch_seeds(tfrl_env **restrict envs, int env_count,
                                 const uint64_t *restrict seeds, tfrl_obs *restrict out_obs);
+
+int tfrl_obs_layout_total_len(const tfrl_obs_layout *layout);
+int tfrl_obs_layout_validate(const tfrl_obs_layout *layout);
+int tfrl_obs_flatten(const tfrl_obs_layout *layout, const float *const *fields, tfrl_obs *out_obs);
+int tfrl_obs_unflatten_copy(const tfrl_obs_layout *layout, const tfrl_obs *obs, float *const *out_fields);
+const float *tfrl_obs_unflatten_field(const tfrl_obs_layout *layout, const tfrl_obs *obs,
+                                      int field_index, int *out_len);
 
 size_t tfrl_env_render_bytes_needed(const tfrl_env *env);
 size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len);

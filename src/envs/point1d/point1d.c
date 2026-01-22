@@ -1,5 +1,14 @@
 #include "envs/envs_internal.h"
 
+static const tfrl_obs_field POINT1D_OBS_FIELDS[] = {
+    {.name = "pos", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout POINT1D_OBS_LAYOUT = {
+    .field_count = (int)(sizeof(POINT1D_OBS_FIELDS) / sizeof(POINT1D_OBS_FIELDS[0])),
+    .fields = POINT1D_OBS_FIELDS,
+};
+
 static const tfrl_env_spec POINT1D_SPEC = {
     .name = "point1d",
     .obs_n = 1,
@@ -20,6 +29,7 @@ static const tfrl_env_spec POINT1D_SPEC = {
     .action_low = -1.0,
     .action_high = 1.0,
     .agent_count = 1,
+    .obs_layout = &POINT1D_OBS_LAYOUT,
 };
 
 const tfrl_env_spec *tfrl_env_spec_point1d(void) {
@@ -30,8 +40,11 @@ tfrl_obs tfrl_env_reset_point1d(tfrl_env *env, uint64_t seed) {
     (void)seed;
     tfrl_env_reset_state(env);
     tfrl_obs obs = {0};
-    obs.data_len = 1;
-    obs.data[0] = env->pos;
+    float pos[1] = {env->pos};
+    const float *fields[] = {pos};
+    if (!tfrl_obs_flatten(&POINT1D_OBS_LAYOUT, fields, &obs)) {
+        obs.data_len = 0;
+    }
     return obs;
 }
 
@@ -51,8 +64,11 @@ tfrl_step_result tfrl_env_step_point1d(tfrl_env *env, tfrl_action action) {
     int done = reached || (env->steps >= POINT1D_MAX_STEPS);
 
     tfrl_step_result out = {0};
-    out.observation.data_len = 1;
-    out.observation.data[0] = env->pos;
+    float pos[1] = {env->pos};
+    const float *fields[] = {pos};
+    if (!tfrl_obs_flatten(&POINT1D_OBS_LAYOUT, fields, &out.observation)) {
+        out.observation.data_len = 0;
+    }
     float dist = 1.0f - env->pos;
     if (dist < 0.0f) dist = -dist;
     out.reward = reached ? 1.0 : -dist;

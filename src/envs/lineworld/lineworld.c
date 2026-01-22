@@ -20,6 +20,16 @@ static const tfrl_env_spec LINEWORLD_SPEC = {
     .action_low = 0.0,
     .action_high = 1.0,
     .agent_count = 1,
+    .obs_layout = NULL,
+};
+
+static const tfrl_obs_field LINEWORLD_CONT_OBS_FIELDS[] = {
+    {.name = "pos", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout LINEWORLD_CONT_OBS_LAYOUT = {
+    .field_count = (int)(sizeof(LINEWORLD_CONT_OBS_FIELDS) / sizeof(LINEWORLD_CONT_OBS_FIELDS[0])),
+    .fields = LINEWORLD_CONT_OBS_FIELDS,
 };
 
 static const tfrl_env_spec LINEWORLD_CONT_SPEC = {
@@ -42,6 +52,7 @@ static const tfrl_env_spec LINEWORLD_CONT_SPEC = {
     .action_low = 0.0,
     .action_high = 1.0,
     .agent_count = 1,
+    .obs_layout = &LINEWORLD_CONT_OBS_LAYOUT,
 };
 
 static const tfrl_env_spec LINEWORLD_DUO_SPEC = {
@@ -64,6 +75,7 @@ static const tfrl_env_spec LINEWORLD_DUO_SPEC = {
     .action_low = 0.0,
     .action_high = 1.0,
     .agent_count = LINEWORLD_DUO_AGENTS,
+    .obs_layout = NULL,
 };
 
 const tfrl_env_spec *tfrl_env_spec_lineworld(void) {
@@ -90,8 +102,11 @@ tfrl_obs tfrl_env_reset_lineworld_cont(tfrl_env *env, uint64_t seed) {
     (void)seed;
     tfrl_env_reset_state(env);
     tfrl_obs obs = {0};
-    obs.data_len = 1;
-    obs.data[0] = (float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f;
+    float pos[1] = {(float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f};
+    const float *fields[] = {pos};
+    if (!tfrl_obs_flatten(&LINEWORLD_CONT_OBS_LAYOUT, fields, &obs)) {
+        obs.data_len = 0;
+    }
     return obs;
 }
 
@@ -133,8 +148,11 @@ tfrl_step_result tfrl_env_step_lineworld_cont(tfrl_env *env, tfrl_action action)
     int done = reached || (env->steps >= LINEWORLD_MAX_STEPS);
 
     tfrl_step_result out = {0};
-    out.observation.data_len = 1;
-    out.observation.data[0] = (float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f;
+    float pos[1] = {(float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f};
+    const float *fields[] = {pos};
+    if (!tfrl_obs_flatten(&LINEWORLD_CONT_OBS_LAYOUT, fields, &out.observation)) {
+        out.observation.data_len = 0;
+    }
     out.reward = reached ? 1.0 : -0.01;
     out.done = done;
     env->last_reward = (float)out.reward;

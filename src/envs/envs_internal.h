@@ -113,6 +113,7 @@ typedef struct {
     float player_w;
     float player_h;
     int life;
+    float score;
     float ball_x;
     float ball_y;
     float ball_vx;
@@ -123,7 +124,7 @@ typedef struct {
     float brick_h;
     int bricks_left;
     float prev_phi;
-    float reward_vec[4];
+    float reward_vec[5];
     int bricks[ARKANOID_LINES][ARKANOID_BRICKS_PER_LINE];
 } tfrl_arkanoid_state;
 

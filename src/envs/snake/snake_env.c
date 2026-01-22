@@ -23,6 +23,16 @@ static void snake_place_fruit(tfrl_env *env) {
     env->snake.fruit_y = fy;
 }
 
+static const tfrl_obs_field SNAKE_OBS_FIELDS[] = {
+    {.name = "head_pos", .len = 2, .dims = 1, .shape = {2, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "fruit_pos", .len = 2, .dims = 1, .shape = {2, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout SNAKE_OBS_LAYOUT = {
+    .field_count = (int)(sizeof(SNAKE_OBS_FIELDS) / sizeof(SNAKE_OBS_FIELDS[0])),
+    .fields = SNAKE_OBS_FIELDS,
+};
+
 static const tfrl_env_spec SNAKE_SPEC = {
     .name = "snake",
     .obs_n = 4,
@@ -43,6 +53,7 @@ static const tfrl_env_spec SNAKE_SPEC = {
     .action_low = 0.0,
     .action_high = 3.0,
     .agent_count = 1,
+    .obs_layout = &SNAKE_OBS_LAYOUT,
 };
 
 const tfrl_env_spec *tfrl_env_spec_snake(void) {
@@ -61,11 +72,14 @@ tfrl_obs tfrl_env_reset_snake(tfrl_env *env, uint64_t seed) {
     env->y = env->snake.ys[0];
 
     tfrl_obs obs = {0};
-    obs.data_len = 4;
-    obs.data[0] = (float)env->snake.xs[0] / (float)(SNAKE_W - 1);
-    obs.data[1] = (float)env->snake.ys[0] / (float)(SNAKE_H - 1);
-    obs.data[2] = (float)env->snake.fruit_x / (float)(SNAKE_W - 1);
-    obs.data[3] = (float)env->snake.fruit_y / (float)(SNAKE_H - 1);
+    float head[2] = {(float)env->snake.xs[0] / (float)(SNAKE_W - 1),
+                     (float)env->snake.ys[0] / (float)(SNAKE_H - 1)};
+    float fruit[2] = {(float)env->snake.fruit_x / (float)(SNAKE_W - 1),
+                      (float)env->snake.fruit_y / (float)(SNAKE_H - 1)};
+    const float *fields[] = {head, fruit};
+    if (!tfrl_obs_flatten(&SNAKE_OBS_LAYOUT, fields, &obs)) {
+        obs.data_len = 0;
+    }
     return obs;
 }
 
@@ -135,11 +149,14 @@ tfrl_step_result tfrl_env_step_snake(tfrl_env *env, tfrl_action action) {
     env->y = env->snake.ys[0];
 
     tfrl_step_result out = {0};
-    out.observation.data_len = 4;
-    out.observation.data[0] = (float)env->snake.xs[0] / (float)(SNAKE_W - 1);
-    out.observation.data[1] = (float)env->snake.ys[0] / (float)(SNAKE_H - 1);
-    out.observation.data[2] = (float)env->snake.fruit_x / (float)(SNAKE_W - 1);
-    out.observation.data[3] = (float)env->snake.fruit_y / (float)(SNAKE_H - 1);
+    float head[2] = {(float)env->snake.xs[0] / (float)(SNAKE_W - 1),
+                     (float)env->snake.ys[0] / (float)(SNAKE_H - 1)};
+    float fruit[2] = {(float)env->snake.fruit_x / (float)(SNAKE_W - 1),
+                      (float)env->snake.fruit_y / (float)(SNAKE_H - 1)};
+    const float *fields[] = {head, fruit};
+    if (!tfrl_obs_flatten(&SNAKE_OBS_LAYOUT, fields, &out.observation)) {
+        out.observation.data_len = 0;
+    }
     out.reward = reward;
     out.done = done;
     env->last_reward = (float)out.reward;

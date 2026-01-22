@@ -39,9 +39,46 @@ static float arkanoid_predict_landing_x(const tfrl_env *env) {
     return reflect_x(x, min_x, max_x);
 }
 
+static float arkanoid_predict_landing_t(const tfrl_env *env) {
+    float vy = env->arkanoid.ball_vy;
+    if (vy <= 0.0f) return 0.0f;
+    float r = env->arkanoid.ball_radius;
+    float paddle_y = env->arkanoid.player_y - env->arkanoid.player_h * 0.5f - r;
+    float dy = paddle_y - env->arkanoid.ball_y;
+    if (dy <= 0.0f) return 0.0f;
+    float t = dy / vy;
+    float max_t = (float)ARKANOID_H / ARKANOID_BALL_SPEED;
+    if (max_t <= 0.0f) return 0.0f;
+    float tn = t / max_t;
+    if (tn < 0.0f) tn = 0.0f;
+    if (tn > 1.0f) tn = 1.0f;
+    return tn;
+}
+
 enum {
-    ARKANOID_OBS_DIMS = 9,
+    ARKANOID_BRICK_OBS = ARKANOID_LINES * ARKANOID_BRICKS_PER_LINE,
+    ARKANOID_OBS_DIMS = 12 + ARKANOID_BRICK_OBS,
     ARKANOID_DISC_OBS_N = 4096
+};
+
+static const tfrl_obs_field ARKANOID_OBS_FIELDS[] = {
+    {.name = "player_x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "ball_pos", .len = 2, .dims = 1, .shape = {2, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "ball_vel", .len = 2, .dims = 1, .shape = {2, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "bricks_left", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "ball_active", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "rel_ball_x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "life", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "landing_x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "landing_t", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "score", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "bricks", .len = ARKANOID_BRICK_OBS, .dims = 2,
+     .shape = {ARKANOID_LINES, ARKANOID_BRICKS_PER_LINE}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout ARKANOID_OBS_LAYOUT = {
+    .field_count = (int)(sizeof(ARKANOID_OBS_FIELDS) / sizeof(ARKANOID_OBS_FIELDS[0])),
+    .fields = ARKANOID_OBS_FIELDS,
 };
 
 static int arkanoid_quantize(float v, float max, int bins) {
@@ -111,6 +148,7 @@ static const tfrl_env_spec ARKANOID_SPEC = {
     .action_low = 0.0,
     .action_high = 3.0,
     .agent_count = 1,
+    .obs_layout = &ARKANOID_OBS_LAYOUT,
 };
 
 static const tfrl_env_spec ARKANOID_DISC_SPEC = {
@@ -133,6 +171,7 @@ static const tfrl_env_spec ARKANOID_DISC_SPEC = {
     .action_low = 0.0,
     .action_high = 3.0,
     .agent_count = 1,
+    .obs_layout = NULL,
 };
 
 const tfrl_env_spec *tfrl_env_spec_arkanoid(void) {
@@ -145,20 +184,39 @@ const tfrl_env_spec *tfrl_env_spec_arkanoid_disc(void) {
 
 static void arkanoid_fill_obs(const tfrl_env *env, tfrl_obs *obs) {
     if (!obs) return;
-    obs->data_len = ARKANOID_OBS_DIMS;
-    obs->data[0] = env->arkanoid.player_x / (float)ARKANOID_W;
-    obs->data[1] = env->arkanoid.ball_x / (float)ARKANOID_W;
-    obs->data[2] = env->arkanoid.ball_y / (float)ARKANOID_H;
     float vx = clamp_float(env->arkanoid.ball_vx, -ARKANOID_BALL_SPEED, ARKANOID_BALL_SPEED);
     float vy = clamp_float(env->arkanoid.ball_vy, -ARKANOID_BALL_SPEED, ARKANOID_BALL_SPEED);
-    obs->data[3] = (vx / ARKANOID_BALL_SPEED + 1.0f) * 0.5f;
-    obs->data[4] = (vy / ARKANOID_BALL_SPEED + 1.0f) * 0.5f;
-    obs->data[5] = (float)env->arkanoid.bricks_left / (float)(ARKANOID_LINES * ARKANOID_BRICKS_PER_LINE);
-    obs->data[6] = env->arkanoid.ball_active ? 1.0f : 0.0f;
     float rel_x = (env->arkanoid.ball_x - env->arkanoid.player_x) / ((float)ARKANOID_W * 0.5f);
     rel_x = clamp_float(rel_x, -1.0f, 1.0f);
-    obs->data[7] = (rel_x + 1.0f) * 0.5f;
-    obs->data[8] = (float)env->arkanoid.life / (float)ARKANOID_PLAYER_MAX_LIFE;
+    float landing_x = env->arkanoid.ball_x;
+    if (env->arkanoid.ball_active && env->arkanoid.ball_vy > 0.0f) {
+        landing_x = arkanoid_predict_landing_x(env);
+    }
+    float player_x[1] = {env->arkanoid.player_x / (float)ARKANOID_W};
+    float ball_pos[2] = {env->arkanoid.ball_x / (float)ARKANOID_W,
+                         env->arkanoid.ball_y / (float)ARKANOID_H};
+    float ball_vel[2] = {(vx / ARKANOID_BALL_SPEED + 1.0f) * 0.5f,
+                         (vy / ARKANOID_BALL_SPEED + 1.0f) * 0.5f};
+    float bricks_left[1] = {(float)env->arkanoid.bricks_left /
+                            (float)(ARKANOID_LINES * ARKANOID_BRICKS_PER_LINE)};
+    float ball_active[1] = {env->arkanoid.ball_active ? 1.0f : 0.0f};
+    float rel_ball_x[1] = {(rel_x + 1.0f) * 0.5f};
+    float life[1] = {(float)env->arkanoid.life / (float)ARKANOID_PLAYER_MAX_LIFE};
+    float landing[1] = {landing_x / (float)ARKANOID_W};
+    float landing_t[1] = {arkanoid_predict_landing_t(env)};
+    float score[1] = {env->arkanoid.score / (float)ARKANOID_BRICK_OBS};
+    float bricks[ARKANOID_BRICK_OBS];
+    int brick_idx = 0;
+    for (int i = 0; i < ARKANOID_LINES; i++) {
+        for (int j = 0; j < ARKANOID_BRICKS_PER_LINE; j++) {
+            bricks[brick_idx++] = env->arkanoid.bricks[i][j] ? 1.0f : 0.0f;
+        }
+    }
+    const float *fields[] = {player_x, ball_pos, ball_vel, bricks_left, ball_active,
+                             rel_ball_x, life, landing, landing_t, score, bricks};
+    if (!tfrl_obs_flatten(&ARKANOID_OBS_LAYOUT, fields, obs)) {
+        obs->data_len = 0;
+    }
 }
 
 tfrl_obs tfrl_env_reset_arkanoid(tfrl_env *env, uint64_t seed) {
@@ -169,6 +227,7 @@ tfrl_obs tfrl_env_reset_arkanoid(tfrl_env *env, uint64_t seed) {
     env->arkanoid.player_x = (float)ARKANOID_W / 2.0f;
     env->arkanoid.player_y = (float)ARKANOID_H * 7.0f / 8.0f;
     env->arkanoid.life = ARKANOID_PLAYER_MAX_LIFE;
+    env->arkanoid.score = 0.0f;
 
     env->arkanoid.ball_radius = ARKANOID_BALL_RADIUS;
     env->arkanoid.ball_active = 0;
@@ -187,7 +246,7 @@ tfrl_obs tfrl_env_reset_arkanoid(tfrl_env *env, uint64_t seed) {
         }
     }
     env->arkanoid.prev_phi = 0.0f;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         env->arkanoid.reward_vec[i] = 0.0f;
     }
 
@@ -230,13 +289,18 @@ tfrl_step_result tfrl_env_step_arkanoid(tfrl_env *env, tfrl_action action) {
 
     const float brick_reward = 1.0f;
     const float life_penalty = -1.0f;
-    const float clear_bonus = 10.0f;
-    const float track_weight = 0.2f;
+    const float clear_bonus = 5.0f;
+    const float track_weight = 0.1f;
+    const float landing_weight = 0.6f;
+    const float miss_penalty = -0.08f;
+    const float paddle_hit_reward = 8.0f;
+    const float survival_bonus = 0.01f;
+    const float step_penalty = -0.01f;
     double reward = 0.0;
     int done = 0;
     float r = env->arkanoid.ball_radius;
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         env->arkanoid.reward_vec[i] = 0.0f;
     }
 
@@ -249,6 +313,9 @@ tfrl_step_result tfrl_env_step_arkanoid(tfrl_env *env, tfrl_action action) {
         if ((env->arkanoid.ball_y - r) <= 0.0f) {
             env->arkanoid.ball_vy *= -1.0f;
             env->arkanoid.ball_y = r;
+            if (fabsf(env->arkanoid.ball_vx) < 0.2f) {
+                env->arkanoid.ball_vx = (env->arkanoid.ball_x < (float)ARKANOID_W * 0.5f) ? 1.0f : -1.0f;
+            }
         } else if ((env->arkanoid.ball_y + r) >= (float)ARKANOID_H) {
             env->arkanoid.ball_vx = 0.0f;
             env->arkanoid.ball_vy = 0.0f;
@@ -268,6 +335,8 @@ tfrl_step_result tfrl_env_step_arkanoid(tfrl_env *env, tfrl_action action) {
             env->arkanoid.ball_vy = -fabsf(env->arkanoid.ball_vy);
             float rel = (env->arkanoid.ball_x - env->arkanoid.player_x) / half_w;
             env->arkanoid.ball_vx = clamp_float(rel * ARKANOID_BALL_SPEED, -ARKANOID_BALL_SPEED, ARKANOID_BALL_SPEED);
+            float center_bonus = 1.0f - fabsf(clamp_float(rel, -1.0f, 1.0f));
+            env->arkanoid.reward_vec[4] += paddle_hit_reward * center_bonus;
         }
     }
 
@@ -306,6 +375,7 @@ tfrl_step_result tfrl_env_step_arkanoid(tfrl_env *env, tfrl_action action) {
                     env->arkanoid.bricks[i][j] = 0;
                     env->arkanoid.bricks_left -= 1;
                     env->arkanoid.reward_vec[0] += brick_reward;
+                    env->arkanoid.score += 1.0f;
                 }
             }
         }
@@ -316,21 +386,37 @@ tfrl_step_result tfrl_env_step_arkanoid(tfrl_env *env, tfrl_action action) {
         env->arkanoid.reward_vec[2] += clear_bonus;
     }
 
-    if (env->arkanoid.ball_active && env->arkanoid.ball_vy > 0.0f) {
+    if (env->arkanoid.ball_active) {
         float half_w = env->arkanoid.player_w * 0.5f;
         if (half_w > 0.0f) {
-            float target_x = arkanoid_predict_landing_x(env);
-            float rel = (target_x - env->arkanoid.player_x) / half_w;
-            rel = clamp_float(rel, -1.0f, 1.0f);
-            float align = 1.0f - fabsf(rel);
-            env->arkanoid.reward_vec[3] += track_weight * align;
-            env->arkanoid.prev_phi = align;
+            float rel_now = (env->arkanoid.ball_x - env->arkanoid.player_x) / half_w;
+            rel_now = clamp_float(rel_now, -1.0f, 1.0f);
+            float align_now = 1.0f - fabsf(rel_now);
+            env->arkanoid.reward_vec[3] += track_weight * align_now;
+
+            float miss_any = fabsf(env->arkanoid.ball_x - env->arkanoid.player_x) / half_w;
+            if (miss_any > 1.0f) miss_any = 1.0f;
+            env->arkanoid.reward_vec[3] += miss_penalty * miss_any;
+
+            if (env->arkanoid.ball_vy > 0.0f) {
+                float target_x = arkanoid_predict_landing_x(env);
+                float rel_pred = (target_x - env->arkanoid.player_x) / half_w;
+                rel_pred = clamp_float(rel_pred, -1.0f, 1.0f);
+                float align_pred = 1.0f - fabsf(rel_pred);
+                env->arkanoid.reward_vec[3] += landing_weight * align_pred;
+                env->arkanoid.prev_phi = align_pred;
+            } else {
+                env->arkanoid.prev_phi = align_now;
+            }
         }
+        env->arkanoid.reward_vec[3] += survival_bonus;
     } else {
         env->arkanoid.prev_phi = 0.0f;
     }
+    env->arkanoid.reward_vec[3] += step_penalty;
     reward = env->arkanoid.reward_vec[0] + env->arkanoid.reward_vec[1] +
-             env->arkanoid.reward_vec[2] + env->arkanoid.reward_vec[3];
+             env->arkanoid.reward_vec[2] + env->arkanoid.reward_vec[3] +
+             env->arkanoid.reward_vec[4];
 
     env->steps += 1;
     if (env->steps >= ARKANOID_MAX_STEPS) done = 1;

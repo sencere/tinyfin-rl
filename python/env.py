@@ -3,7 +3,7 @@ import os
 from ctypes import c_int32, c_uint64, c_double, c_char_p, c_float
 from dataclasses import dataclass
 
-TFRL_MAX_BOX_DIMS = 32
+TFRL_MAX_BOX_DIMS = 128
 
 
 class TfrlObs(ctypes.Structure):
@@ -51,6 +51,7 @@ class TfrlEnvSpec(ctypes.Structure):
         ("action_low", c_double),
         ("action_high", c_double),
         ("agent_count", c_int32),
+        ("obs_layout", ctypes.c_void_p),
     ]
 
 

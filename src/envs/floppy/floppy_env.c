@@ -18,6 +18,18 @@ static int circle_rect_collision(float cx, float cy, float r, float rx, float ry
     return (dx * dx + dy * dy) <= (r * r);
 }
 
+static const tfrl_obs_field FLOPPY_OBS_FIELDS[] = {
+    {.name = "y", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "next_dx", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "gap_center", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "last_action", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
+};
+
+static const tfrl_obs_layout FLOPPY_OBS_LAYOUT = {
+    .field_count = (int)(sizeof(FLOPPY_OBS_FIELDS) / sizeof(FLOPPY_OBS_FIELDS[0])),
+    .fields = FLOPPY_OBS_FIELDS,
+};
+
 static const tfrl_env_spec FLOPPY_SPEC = {
     .name = "floppy",
     .obs_n = 4,
@@ -38,6 +50,7 @@ static const tfrl_env_spec FLOPPY_SPEC = {
     .action_low = 0.0,
     .action_high = 1.0,
     .agent_count = 1,
+    .obs_layout = &FLOPPY_OBS_LAYOUT,
 };
 
 const tfrl_env_spec *tfrl_env_spec_floppy(void) {
@@ -59,11 +72,14 @@ tfrl_obs tfrl_env_reset_floppy(tfrl_env *env, uint64_t seed) {
     }
 
     tfrl_obs obs = {0};
-    obs.data_len = 4;
-    obs.data[0] = env->floppy.y / (float)FLOPPY_H;
-    obs.data[1] = 1.0f;
-    obs.data[2] = 0.5f;
-    obs.data[3] = 0.0f;
+    float y_norm[1] = {env->floppy.y / (float)FLOPPY_H};
+    float next_dx[1] = {1.0f};
+    float gap_center[1] = {0.5f};
+    float last_action[1] = {0.0f};
+    const float *fields[] = {y_norm, next_dx, gap_center, last_action};
+    if (!tfrl_obs_flatten(&FLOPPY_OBS_LAYOUT, fields, &obs)) {
+        obs.data_len = 0;
+    }
     return obs;
 }
 
@@ -152,11 +168,14 @@ tfrl_step_result tfrl_env_step_floppy(tfrl_env *env, tfrl_action action) {
     }
 
     tfrl_step_result out = {0};
-    out.observation.data_len = 4;
-    out.observation.data[0] = env->floppy.y / (float)FLOPPY_H;
-    out.observation.data[1] = next_dx_norm;
-    out.observation.data[2] = gap_center_norm;
-    out.observation.data[3] = (float)env->floppy.last_action;
+    float y_norm[1] = {env->floppy.y / (float)FLOPPY_H};
+    float next_dx[1] = {next_dx_norm};
+    float gap_center[1] = {gap_center_norm};
+    float last_action[1] = {(float)env->floppy.last_action};
+    const float *fields[] = {y_norm, next_dx, gap_center, last_action};
+    if (!tfrl_obs_flatten(&FLOPPY_OBS_LAYOUT, fields, &out.observation)) {
+        out.observation.data_len = 0;
+    }
     out.reward = reward;
     out.done = done;
     env->last_reward = (float)out.reward;

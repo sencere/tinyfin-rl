@@ -16,7 +16,8 @@ typedef struct {
     float player_w;
     float player_h;
     uint32_t life;
-    float reward_vec[4];
+    float score;
+    float reward_vec[5];
     float ball_x;
     float ball_y;
     float ball_vx;
@@ -63,11 +64,13 @@ size_t tfrl_env_render_write_arkanoid(tfrl_env *env, void *buffer, size_t buffer
         .player_w = env->arkanoid.player_w,
         .player_h = env->arkanoid.player_h,
         .life = (uint32_t)env->arkanoid.life,
+        .score = env->arkanoid.score,
         .reward_vec = {
             env->arkanoid.reward_vec[0],
             env->arkanoid.reward_vec[1],
             env->arkanoid.reward_vec[2],
             env->arkanoid.reward_vec[3],
+            env->arkanoid.reward_vec[4],
         },
         .ball_x = env->arkanoid.ball_x,
         .ball_y = env->arkanoid.ball_y,
