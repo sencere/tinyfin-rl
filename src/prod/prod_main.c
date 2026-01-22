@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     cfg.env_name = env_name;
     tfrl_algo_config_apply_defaults(&cfg);
     tfrl_algo algo = tfrl_algo_create(&cfg, spec);
-    if (!algo.vtable || !algo.vtable->act) {
+    if (!algo.vtable || (!algo.vtable->act && !algo.vtable->act_env)) {
         fprintf(stderr, "failed to create algo '%s'\n", algo_name);
         tfrl_env_destroy(env);
         return 1;
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     uint64_t reset_seed = (uint64_t)seed;
     tfrl_obs obs = tfrl_env_reset(env, reset_seed);
     for (int step = 0; step < steps; step++) {
-        tfrl_action action = algo.vtable->act(algo.ctx, obs);
+        tfrl_action action = tfrl_algo_act(&algo, env, obs);
         tfrl_step_result out = tfrl_env_step(env, action);
         if (print_every > 0 && (step % print_every) == 0) {
             fprintf(stdout, "step=%d reward=%.4f done=%d ", step, out.reward, out.done);

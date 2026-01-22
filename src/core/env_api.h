@@ -73,6 +73,9 @@ tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed);
 tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action);
 const tfrl_env_spec *tfrl_env_get_spec(const tfrl_env *env);
 int tfrl_env_agent_count(const tfrl_env *env);
+size_t tfrl_env_state_size(const tfrl_env *env);
+int tfrl_env_state_save(const tfrl_env *env, void *buffer, size_t buffer_len);
+int tfrl_env_state_load(tfrl_env *env, const void *buffer, size_t buffer_len);
 int tfrl_env_reset_multi(tfrl_env *env, uint64_t seed, tfrl_obs *out_obs, int max_agents);
 int tfrl_env_step_multi(tfrl_env *env, const tfrl_action *actions, int action_count, tfrl_step_result *out_steps, int max_agents);
 

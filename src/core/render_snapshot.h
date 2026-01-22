@@ -12,7 +12,8 @@ extern "C" {
 
 typedef enum {
     TFRL_SNAPSHOT_KIND_GRID = 1,
-    TFRL_SNAPSHOT_KIND_TETRIS = 2
+    TFRL_SNAPSHOT_KIND_TETRIS = 2,
+    TFRL_SNAPSHOT_KIND_ARKANOID = 3
 } tfrl_snapshot_kind;
 
 typedef struct {

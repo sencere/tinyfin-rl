@@ -116,6 +116,27 @@ int tfrl_env_agent_count(const tfrl_env *env) {
     return env->ops->agent_count;
 }
 
+size_t tfrl_env_state_size(const tfrl_env *env) {
+    if (!env || env->kind == TFRL_ENV_PYBRIDGE) return 0;
+    return sizeof(*env);
+}
+
+int tfrl_env_state_save(const tfrl_env *env, void *buffer, size_t buffer_len) {
+    if (!env || !buffer) return 0;
+    size_t size = tfrl_env_state_size(env);
+    if (size == 0 || buffer_len < size) return 0;
+    memcpy(buffer, env, size);
+    return (int)size;
+}
+
+int tfrl_env_state_load(tfrl_env *env, const void *buffer, size_t buffer_len) {
+    if (!env || !buffer) return 0;
+    size_t size = tfrl_env_state_size(env);
+    if (size == 0 || buffer_len < size) return 0;
+    memcpy(env, buffer, size);
+    return 1;
+}
+
 int tfrl_env_reset_multi(tfrl_env *env, uint64_t seed, tfrl_obs *out_obs, int max_agents) {
     if (!env || !out_obs || max_agents <= 0) return 0;
     if (env->kind == TFRL_ENV_PYBRIDGE) {

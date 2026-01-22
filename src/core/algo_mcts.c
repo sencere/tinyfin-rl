@@ -9,6 +9,7 @@ typedef enum {
     MCTS_ENV_NONE = 0,
     MCTS_ENV_MAZE = 1,
     MCTS_ENV_LINEWORLD = 2,
+    MCTS_ENV_SIM = 3,
 } mcts_env_kind;
 
 typedef struct {
@@ -19,6 +20,10 @@ typedef struct {
     int max_depth;
     float c_uct;
     mcts_env_kind env;
+    char env_name[64];
+    tfrl_env *sim_env;
+    void *state_buf;
+    size_t state_size;
     int *visits;
     float *value_sum;
     int *child_visits;
@@ -86,6 +91,20 @@ static float rollout(tfrl_mcts_algo *algo, int state, int depth) {
     return total;
 }
 
+static float rollout_env(tfrl_mcts_algo *algo, tfrl_env *env, int depth) {
+    float total = 0.0f;
+    float discount = 1.0f;
+    for (int d = depth; d < algo->max_depth; d++) {
+        int action = rand() % algo->action_n;
+        tfrl_action act = {.index = action};
+        tfrl_step_result step = tfrl_env_step(env, act);
+        total += discount * (float)step.reward;
+        if (step.done) break;
+        discount *= algo->gamma;
+    }
+    return total;
+}
+
 static int select_action(tfrl_mcts_algo *algo, int state) {
     int offset = state * algo->action_n;
     int best = 0;
@@ -131,6 +150,33 @@ static float simulate(tfrl_mcts_algo *algo, int state, int depth) {
     return total;
 }
 
+static float simulate_env(tfrl_mcts_algo *algo, tfrl_env *env, int state, int depth) {
+    if (depth >= algo->max_depth) return 0.0f;
+    if (state < 0 || state >= algo->obs_n) return 0.0f;
+    if (algo->visits[state] == 0) {
+        float r = rollout_env(algo, env, depth);
+        algo->visits[state] += 1;
+        algo->value_sum[state] += r;
+        return r;
+    }
+
+    int action = select_action(algo, state);
+    tfrl_action act = {.index = action};
+    tfrl_step_result step = tfrl_env_step(env, act);
+    int next = step.observation.index;
+    float total = (float)step.reward;
+    if (!step.done && next >= 0 && next < algo->obs_n) {
+        total += algo->gamma * simulate_env(algo, env, next, depth + 1);
+    }
+
+    int offset = state * algo->action_n + action;
+    algo->child_visits[offset] += 1;
+    algo->child_value_sum[offset] += total;
+    algo->visits[state] += 1;
+    algo->value_sum[state] += total;
+    return total;
+}
+
 static void reset_tree(tfrl_mcts_algo *algo) {
     size_t state_count = (size_t)algo->obs_n;
     size_t child_count = state_count * (size_t)algo->action_n;
@@ -166,6 +212,49 @@ static tfrl_action mcts_act(void *ctx, tfrl_obs obs) {
     return action;
 }
 
+static tfrl_action mcts_act_env(void *ctx, tfrl_env *env, tfrl_obs obs) {
+    tfrl_mcts_algo *algo = (tfrl_mcts_algo *)ctx;
+    tfrl_action action = {0};
+    if (!algo || !env) return action;
+    if (algo->env != MCTS_ENV_SIM) return mcts_act(ctx, obs);
+    int state = obs.index;
+    if (state < 0 || state >= algo->obs_n) return action;
+
+    if (!algo->sim_env) {
+        tfrl_env_config cfg = {.name = algo->env_name, .seed = 0};
+        algo->sim_env = tfrl_env_create(&cfg);
+        if (!algo->sim_env) return action;
+    }
+    size_t size = tfrl_env_state_size(env);
+    if (size == 0) return action;
+    if (algo->state_size != size || !algo->state_buf) {
+        free(algo->state_buf);
+        algo->state_buf = calloc(1, size);
+        algo->state_size = size;
+        if (!algo->state_buf) return action;
+    }
+    if (!tfrl_env_state_save(env, algo->state_buf, algo->state_size)) return action;
+
+    reset_tree(algo);
+    for (int i = 0; i < algo->sims; i++) {
+        if (!tfrl_env_state_load(algo->sim_env, algo->state_buf, algo->state_size)) break;
+        simulate_env(algo, algo->sim_env, state, 0);
+    }
+
+    int offset = state * algo->action_n;
+    int best = 0;
+    int best_visits = -1;
+    for (int a = 0; a < algo->action_n; a++) {
+        int n = algo->child_visits[offset + a];
+        if (n > best_visits) {
+            best_visits = n;
+            best = a;
+        }
+    }
+    action.index = best;
+    return action;
+}
+
 static void mcts_update(void *ctx, const tfrl_transition *transition) {
     (void)ctx;
     (void)transition;
@@ -178,11 +267,16 @@ static void mcts_destroy(void *ctx) {
     free(algo->value_sum);
     free(algo->child_visits);
     free(algo->child_value_sum);
+    free(algo->state_buf);
+    if (algo->sim_env) {
+        tfrl_env_destroy(algo->sim_env);
+    }
     free(algo);
 }
 
 static const tfrl_algo_vtable MCTS_VTABLE = {
     .act = mcts_act,
+    .act_env = mcts_act_env,
     .act_batch = NULL,
     .update = mcts_update,
     .save = NULL,
@@ -207,6 +301,9 @@ tfrl_algo tfrl_algo_mcts_create(const tfrl_algo_config *cfg) {
         algo->env = MCTS_ENV_MAZE;
     } else if (cfg->env_name && strcmp(cfg->env_name, "lineworld") == 0) {
         algo->env = MCTS_ENV_LINEWORLD;
+    } else if (cfg->env_name && strcmp(cfg->env_name, "arkanoid_disc") == 0) {
+        algo->env = MCTS_ENV_SIM;
+        snprintf(algo->env_name, sizeof(algo->env_name), "%s", cfg->env_name);
     }
     if (algo->env == MCTS_ENV_NONE) {
         free(algo);

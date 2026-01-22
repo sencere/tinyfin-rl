@@ -34,6 +34,8 @@ ENV_SRCS = \
 	src/envs/floppy/render.c \
 	src/envs/tetris/tetris_env.c \
 	src/envs/tetris/render.c \
+	src/envs/arkanoid/arkanoid_env.c \
+	src/envs/arkanoid/render.c \
 	src/envs/pang/pang_env.c \
 	src/envs/pang/render.c \
 	src/envs/py_bridge/py_bridge.c \

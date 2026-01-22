@@ -276,8 +276,10 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
         if (!require_discrete("mcts", cfg)) return 0;
         if (!require_positive("mcts_sims", cfg->mcts_sims)) return 0;
         if (!require_positive("mcts_depth", cfg->mcts_depth)) return 0;
-        if (!cfg->env_name || (strcmp(cfg->env_name, "maze_rooms") != 0 && strcmp(cfg->env_name, "lineworld") != 0)) {
-            fprintf(stderr, "mcts requires env maze_rooms or lineworld\n");
+        if (!cfg->env_name || (strcmp(cfg->env_name, "maze_rooms") != 0 &&
+                               strcmp(cfg->env_name, "lineworld") != 0 &&
+                               strcmp(cfg->env_name, "arkanoid_disc") != 0)) {
+            fprintf(stderr, "mcts requires env maze_rooms, lineworld, or arkanoid_disc\n");
             return 0;
         }
     }
@@ -310,7 +312,7 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
     if (strcmp(cfg_use->name, "mcts") == 0) {
         tfrl_algo algo = tfrl_algo_mcts_create(cfg_use);
         if (!algo.ctx) {
-            fprintf(stderr, "mcts requires maze_rooms or lineworld; using random policy\n");
+            fprintf(stderr, "mcts requires maze_rooms, lineworld, or arkanoid_disc; using random policy\n");
             return tfrl_algo_random_create(cfg_use);
         }
         return algo;

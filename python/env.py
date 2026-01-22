@@ -3,7 +3,7 @@ import os
 from ctypes import c_int32, c_uint64, c_double, c_char_p, c_float
 from dataclasses import dataclass
 
-TFRL_MAX_BOX_DIMS = 4
+TFRL_MAX_BOX_DIMS = 32
 
 
 class TfrlObs(ctypes.Structure):

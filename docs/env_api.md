@@ -59,6 +59,11 @@ tfrl_env_reset_batch_seeds(envs, reset_count, seeds, obs);
 - `point1d`
 - `coin_maze`
 - `coin_maze_duo`
+- `snake`
+- `floppy`
+- `tetris`
+- `arkanoid`
+- `pang`
 - `py:gymnasium:ENV_ID` (Python bridge)
 - `py:pettingzoo:MODULE` (Python bridge)
 - `py:retro:ENV_ID` (Python bridge)

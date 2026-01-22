@@ -739,7 +739,7 @@ static void *a3c_worker_main(void *arg) {
         (*worker->steps_done)++;
         pthread_mutex_unlock(worker->step_lock);
 
-        tfrl_action action = worker->algo->vtable->act(worker->algo->ctx, obs);
+        tfrl_action action = tfrl_algo_act(worker->algo, worker->env, obs);
         tfrl_step_result step = tfrl_env_step(worker->env, action);
         tfrl_transition transition = {
             .obs = obs,
@@ -821,7 +821,7 @@ static void *impala_actor_main(void *arg) {
         pthread_mutex_unlock(actor->step_lock);
 
         pthread_mutex_lock(actor->policy_lock);
-        tfrl_action action = actor->algo->vtable->act(actor->algo->ctx, obs);
+        tfrl_action action = tfrl_algo_act(actor->algo, actor->env, obs);
         pthread_mutex_unlock(actor->policy_lock);
         tfrl_step_result step = tfrl_env_step(actor->env, action);
         tfrl_transition transition = {
@@ -1022,7 +1022,7 @@ static void mp_actor_main(const tfrl_mp_actor *actor) {
             tfrl_algo_config_apply_defaults(&algo_cfg);
             algo = tfrl_algo_create(&algo_cfg, spec);
         }
-        tfrl_action action = algo.vtable->act(algo.ctx, obs);
+        tfrl_action action = tfrl_algo_act(&algo, env, obs);
         tfrl_step_result step = tfrl_env_step(env, action);
         tfrl_transition transition = {
             .obs = obs,
@@ -1075,7 +1075,7 @@ static void mp_actor_main_ppo(const tfrl_mp_actor *actor) {
             tfrl_algo_config_apply_defaults(&algo_cfg);
             algo = tfrl_algo_create(&algo_cfg, spec);
         }
-        tfrl_action action = algo.vtable->act(algo.ctx, obs);
+        tfrl_action action = tfrl_algo_act(&algo, env, obs);
         tfrl_step_result step = tfrl_env_step(env, action);
         tfrl_transition transition = {
             .obs = obs,
@@ -1677,15 +1677,28 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         }
         for (int step = 0; step < total_steps; step++) {
             if (agent_count == 1 || cfg->share_policy) {
-                tfrl_algo_act_batch(&algos[0], obs, total_agents, actions);
+                if (algos[0].vtable && algos[0].vtable->act_env) {
+                    for (int i = 0; i < env_count; i++) {
+                        actions[i] = tfrl_algo_act(&algos[0], envs[i], obs[i]);
+                    }
+                } else {
+                    tfrl_algo_act_batch(&algos[0], obs, total_agents, actions);
+                }
             } else {
                 for (int a = 0; a < agent_count; a++) {
-                    for (int i = 0; i < env_count; i++) {
-                        obs_batch[i] = obs[i * agent_count + a];
-                    }
-                    tfrl_algo_act_batch(&algos[a], obs_batch, env_count, act_batch);
-                    for (int i = 0; i < env_count; i++) {
-                        actions[i * agent_count + a] = act_batch[i];
+                    if (algos[a].vtable && algos[a].vtable->act_env) {
+                        for (int i = 0; i < env_count; i++) {
+                            int idx = i * agent_count + a;
+                            actions[idx] = tfrl_algo_act(&algos[a], envs[i], obs[idx]);
+                        }
+                    } else {
+                        for (int i = 0; i < env_count; i++) {
+                            obs_batch[i] = obs[i * agent_count + a];
+                        }
+                        tfrl_algo_act_batch(&algos[a], obs_batch, env_count, act_batch);
+                        for (int i = 0; i < env_count; i++) {
+                            actions[i * agent_count + a] = act_batch[i];
+                        }
                     }
                 }
             }
@@ -1842,7 +1855,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             while (!done) {
                 for (int a = 0; a < agent_count; a++) {
                     int algo_idx = cfg->share_policy ? 0 : a;
-                    actions[a] = algos[algo_idx].vtable->act(algos[algo_idx].ctx, obs[a]);
+                    actions[a] = tfrl_algo_act(&algos[algo_idx], envs[0], obs[a]);
                 }
                 if (tfrl_env_step_multi(envs[0], actions, agent_count, steps, agent_count) != agent_count) {
                     fprintf(stderr, "env step failed\n");

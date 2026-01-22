@@ -19,7 +19,8 @@ typedef enum {
     TFRL_ENV_SNAKE = 8,
     TFRL_ENV_FLOPPY = 9,
     TFRL_ENV_TETRIS = 10,
-    TFRL_ENV_PANG = 11
+    TFRL_ENV_PANG = 11,
+    TFRL_ENV_ARKANOID = 12
 } tfrl_env_kind;
 
 #define MAZE_W 10
@@ -57,6 +58,18 @@ typedef enum {
 #define TETRIS_H 20
 #define TETRIS_MAX_STEPS 2000
 
+#define ARKANOID_W 800
+#define ARKANOID_H 450
+#define ARKANOID_MAX_STEPS 10000
+#define ARKANOID_PLAYER_MAX_LIFE 5
+#define ARKANOID_LINES 5
+#define ARKANOID_BRICKS_PER_LINE 20
+#define ARKANOID_BRICK_HEIGHT 40.0f
+#define ARKANOID_BRICK_OFFSET_Y 50.0f
+#define ARKANOID_PLAYER_SPEED 5.0f
+#define ARKANOID_BALL_SPEED 5.0f
+#define ARKANOID_BALL_RADIUS 7.0f
+
 #define PANG_W 800
 #define PANG_H 450
 #define PANG_MAX_STEPS 2000
@@ -93,6 +106,26 @@ typedef struct {
     int lines;
     double score;
 } tfrl_tetris_state;
+
+typedef struct {
+    float player_x;
+    float player_y;
+    float player_w;
+    float player_h;
+    int life;
+    float ball_x;
+    float ball_y;
+    float ball_vx;
+    float ball_vy;
+    float ball_radius;
+    int ball_active;
+    float brick_w;
+    float brick_h;
+    int bricks_left;
+    float prev_phi;
+    float reward_vec[4];
+    int bricks[ARKANOID_LINES][ARKANOID_BRICKS_PER_LINE];
+} tfrl_arkanoid_state;
 
 typedef struct {
     float x;
@@ -154,6 +187,7 @@ struct tfrl_env {
     tfrl_snake_state snake;
     tfrl_floppy_state floppy;
     tfrl_tetris_state tetris;
+    tfrl_arkanoid_state arkanoid;
     tfrl_pang_state pang;
 };
 
@@ -197,6 +231,8 @@ const tfrl_env_spec *tfrl_env_spec_snake(void);
 const tfrl_env_spec *tfrl_env_spec_floppy(void);
 const tfrl_env_spec *tfrl_env_spec_tetris(void);
 const tfrl_env_spec *tfrl_env_spec_tetris_disc(void);
+const tfrl_env_spec *tfrl_env_spec_arkanoid_disc(void);
+const tfrl_env_spec *tfrl_env_spec_arkanoid(void);
 const tfrl_env_spec *tfrl_env_spec_pang(void);
 
 tfrl_obs tfrl_env_reset_maze(tfrl_env *env, uint64_t seed);
@@ -210,6 +246,8 @@ tfrl_obs tfrl_env_reset_snake(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_floppy(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_tetris(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_tetris_disc(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_arkanoid_disc(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_arkanoid(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_pang(tfrl_env *env, uint64_t seed);
 
 tfrl_step_result tfrl_env_step_maze(tfrl_env *env, tfrl_action action);
@@ -223,6 +261,8 @@ tfrl_step_result tfrl_env_step_snake(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_floppy(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_tetris(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_tetris_disc(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_arkanoid_disc(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_arkanoid(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_pang(tfrl_env *env, tfrl_action action);
 
 int tfrl_env_step_multi_lineworld_duo(tfrl_env *env, const tfrl_action *actions, int action_count,
@@ -241,6 +281,7 @@ size_t tfrl_env_render_bytes_lineworld(const tfrl_env *env);
 size_t tfrl_env_render_bytes_point1d(const tfrl_env *env);
 size_t tfrl_env_render_bytes_coin_maze(const tfrl_env *env);
 size_t tfrl_env_render_bytes_tetris(const tfrl_env *env);
+size_t tfrl_env_render_bytes_arkanoid(const tfrl_env *env);
 size_t tfrl_env_render_bytes_snake(const tfrl_env *env);
 size_t tfrl_env_render_bytes_floppy(const tfrl_env *env);
 size_t tfrl_env_render_bytes_pang(const tfrl_env *env);
@@ -250,6 +291,7 @@ size_t tfrl_env_render_write_lineworld(tfrl_env *env, void *buffer, size_t buffe
 size_t tfrl_env_render_write_point1d(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_coin_maze(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_tetris(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_arkanoid(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_snake(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_floppy(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_pang(tfrl_env *env, void *buffer, size_t buffer_len);
