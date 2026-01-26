@@ -5,23 +5,34 @@
 #include "cli.h"
 #include "envs/envs_internal.h"
 
-static int arg_int(int argc, char **argv, const char *name, int def) {
-    for (int i = 1; i < argc - 1; i++) {
-        if (strcmp(argv[i], name) == 0) return atoi(argv[i + 1]);
+static const char *arg_str(int argc, char **argv, const char *name, const char *def);
+
+static const char *arg_str(int argc, char **argv, const char *name, const char *def) {
+    size_t name_len = strlen(name);
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], name) == 0) {
+            if (i + 1 < argc) return argv[i + 1];
+            return def;
+        }
+        if (strncmp(argv[i], name, name_len) == 0 && argv[i][name_len] == '=') {
+            return argv[i] + name_len + 1;
+        }
     }
     return def;
 }
 
-static const char *arg_str(int argc, char **argv, const char *name, const char *def) {
-    for (int i = 1; i < argc - 1; i++) {
-        if (strcmp(argv[i], name) == 0) return argv[i + 1];
-    }
-    return def;
+static int arg_int(int argc, char **argv, const char *name, int def) {
+    const char *v = arg_str(argc, argv, name, NULL);
+    return v ? atoi(v) : def;
 }
 
 static int arg_flag(int argc, char **argv, const char *name) {
+    size_t name_len = strlen(name);
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], name) == 0) return 1;
+        if (strncmp(argv[i], name, name_len) == 0 && argv[i][name_len] == '=') {
+            return atoi(argv[i] + name_len + 1) != 0;
+        }
     }
     return 0;
 }
@@ -35,14 +46,15 @@ void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "\033[1;34mTINYFIN\033[0m\n\n");
     fprintf(stderr, "usage:\n");
     fprintf(stderr, "  %s list-envs\n", name);
-    fprintf(stderr, "  %s train --algo dqn|rainbow|qrdqn|iql|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s train --algo dqn|cnn_dqn|rnn_dqn|gru_dqn|lstm_dqn|rainbow|qrdqn|iql|iqn|ppo|cnn_ppo|cnn_ppo_fast|cnn_ppo_tiny|cnn_lstm_ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "           [--backend cpu|cuda|blas] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "           [--profile] [--profile-json FILE]\n");
     fprintf(stderr, "           [--mp-actors N] [--mp-queue N] [--mp-sync-every N] [--mp-sync-path PATH]\n");
-    fprintf(stderr, "  %s eval --algo dqn|rainbow|qrdqn|iql|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s eval --algo dqn|cnn_dqn|rnn_dqn|gru_dqn|lstm_dqn|rainbow|qrdqn|iql|iqn|ppo|cnn_ppo|cnn_ppo_fast|cnn_ppo_tiny|cnn_lstm_ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "          [--backend cpu|cuda|blas] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N] [--dump-meta-json]\n", name);
     fprintf(stderr, "algo params:\n");
+    fprintf(stderr, "  --gamma G --lr LR (all)\n");
     fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N --gae-lambda N --kl-target N (ppo)\n");
     fprintf(stderr, "  --entropy-coef N (a2c/impala/sac)\n");
     fprintf(stderr, "  --replay-size N --batch-size N --per-alpha N --per-beta N (dqn)\n");

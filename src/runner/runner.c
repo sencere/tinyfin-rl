@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <pthread.h>
+#include <sys/ioctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -351,6 +352,73 @@ static int dashboard_enabled(void) {
     return isatty(fileno(stdout));
 }
 
+static int dashboard_term_width(void) {
+    int width = 0;
+    const char *cols = getenv("COLUMNS");
+    if (cols && cols[0]) {
+        char *end = NULL;
+        long parsed = strtol(cols, &end, 10);
+        if (end && *end == '\0' && parsed > 0 && parsed < 1000) {
+            width = (int)parsed;
+        }
+    }
+    if (width <= 0) {
+        struct winsize ws;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
+            width = (int)ws.ws_col;
+        }
+    }
+    if (width < 80) width = 80;
+    if (width > 180) width = 180;
+    return width;
+}
+
+static void format_duration(double seconds, char *out, size_t out_len) {
+    if (!out || out_len == 0) return;
+    int total = (int)(seconds + 0.5);
+    int hrs = total / 3600;
+    int mins = (total % 3600) / 60;
+    int secs = total % 60;
+    if (hrs > 0) {
+        snprintf(out, out_len, "%02d:%02d:%02d", hrs, mins, secs);
+    } else {
+        snprintf(out, out_len, "%02d:%02d", mins, secs);
+    }
+}
+
+static void dashboard_box(const char *title, const char *const *lines, int line_count, int width, const char *color) {
+    if (width < 20) width = 20;
+    int inner = width - 2;
+    if (inner < 1) inner = 1;
+    fprintf(stdout, "%s┌", color);
+    for (int i = 0; i < inner; i++) fputc('-', stdout);
+    fprintf(stdout, "┐\033[0m\n");
+
+    char title_buf[256];
+    snprintf(title_buf, sizeof(title_buf), " %s ", title ? title : "");
+    int title_len = (int)strlen(title_buf);
+    if (title_len > inner) title_len = inner;
+
+    fprintf(stdout, "%s│\033[0m", color);
+    fwrite(title_buf, 1, (size_t)title_len, stdout);
+    for (int i = title_len; i < inner; i++) fputc(' ', stdout);
+    fprintf(stdout, "%s│\033[0m\n", color);
+
+    for (int li = 0; li < line_count; li++) {
+        const char *line = lines[li] ? lines[li] : "";
+        int len = (int)strlen(line);
+        if (len > inner) len = inner;
+        fprintf(stdout, "%s│\033[0m", color);
+        fwrite(line, 1, (size_t)len, stdout);
+        for (int i = len; i < inner; i++) fputc(' ', stdout);
+        fprintf(stdout, "%s│\033[0m\n", color);
+    }
+
+    fprintf(stdout, "%s└", color);
+    for (int i = 0; i < inner; i++) fputc('-', stdout);
+    fprintf(stdout, "┘\033[0m\n");
+}
+
 static void dashboard_render(const tfrl_runner_config *cfg,
                              int step,
                              int total_steps,
@@ -375,32 +443,113 @@ static void dashboard_render(const tfrl_runner_config *cfg,
     }
     double progress = total_steps > 0 ? (double)(step + 1) * 100.0 / (double)total_steps : 0.0;
     int steps_left = total_steps - (step + 1);
+    if (progress < 0.0) progress = 0.0;
+    if (progress > 100.0) progress = 100.0;
+    if (steps_left < 0) steps_left = 0;
+    double episodes_per_sec = elapsed_seconds > 0.0 ? (double)total_episodes / elapsed_seconds : 0.0;
+    double eta_seconds = steps_per_sec > 0.0 ? (double)steps_left / steps_per_sec : 0.0;
+    char elapsed_buf[16];
+    char eta_buf[16];
+    format_duration(elapsed_seconds, elapsed_buf, sizeof(elapsed_buf));
+    format_duration(eta_seconds, eta_buf, sizeof(eta_buf));
 
-    fprintf(stdout, "\033[2J\033[H");
-    fprintf(stdout, "\033[1;34mTINYFIN 🐟\033[0m\n");
-    fprintf(stdout, "progress: %6.2f%%  steps: %d/%d  left: %d\n",
-            progress, step + 1, total_steps, steps_left);
-    fprintf(stdout, "episodes: %d  est_left: %.0f  last_return: %.4f  avg_return: %.4f\n",
-            total_episodes, est_eps_left, last_return, avg_return);
-    fprintf(stdout, "perf: elapsed %.1fs  steps/s %.1f  sps %.1f\n",
-            elapsed_seconds, steps_per_sec, samples_per_sec);
+    fprintf(stdout, "\033[H\033[J");
+    fprintf(stdout, "\033[1;34m[TINYFIN 🐟]\033[0m\n\n");
+    const char *border = "\033[38;5;34m";
+    int term_width = dashboard_term_width();
+    int box_width = term_width - 2;
+    if (box_width > 120) box_width = 120;
+    if (box_width < 60) box_width = 60;
+    int inner_width = box_width - 2;
+
+    char progress_bar[160];
+    int bar_space = inner_width - 28;
+    if (bar_space < 10) bar_space = 10;
+    if (bar_space > 80) bar_space = 80;
+    int filled = (int)((progress / 100.0) * (double)bar_space);
+    if (filled < 0) filled = 0;
+    if (filled > bar_space) filled = bar_space;
+    int pos = 0;
+    pos += snprintf(progress_bar + pos, sizeof(progress_bar) - (size_t)pos, "[");
+    for (int i = 0; i < bar_space && pos < (int)sizeof(progress_bar) - 1; i++) {
+        progress_bar[pos++] = (i < filled) ? '=' : ' ';
+    }
+    if (pos < (int)sizeof(progress_bar) - 1) progress_bar[pos++] = ']';
+    progress_bar[pos] = '\0';
+
+    char line_p1[192];
+    char line_p2[192];
+    snprintf(line_p1, sizeof(line_p1), "%s %6.2f%%  step %d/%d", progress_bar, progress, step + 1, total_steps);
+    snprintf(line_p2, sizeof(line_p2), "left %d  eta %s  elapsed %s", steps_left, eta_buf, elapsed_buf);
+    const char *progress_lines[] = { line_p1, line_p2 };
+    dashboard_box("Progress", progress_lines, 2, box_width, border);
+
+    char line_t1[192];
+    char line_t2[192];
+    snprintf(line_t1, sizeof(line_t1), "steps/s %8.1f  samples/s %10.1f  episodes/s %6.2f",
+             steps_per_sec, samples_per_sec, episodes_per_sec);
+    snprintf(line_t2, sizeof(line_t2), "env_steps %lld  avg_len %7.1f  est_episodes_left %7.0f",
+             total_env_steps, avg_ep_len, est_eps_left);
+    const char *throughput_lines[] = { line_t1, line_t2 };
+    dashboard_box("Throughput", throughput_lines, 2, box_width, border);
+
+    char line_r1[192];
+    char line_r2[192];
+    snprintf(line_r1, sizeof(line_r1), "last_return %9.4f  avg_return %9.4f", last_return, avg_return);
+    snprintf(line_r2, sizeof(line_r2), "episodes %d  envs %d  agents %d", total_episodes, env_count, agent_count);
+    const char *return_lines[] = { line_r1, line_r2 };
+    dashboard_box("Learning", return_lines, 2, box_width, border);
+
+    char line_c1[192];
+    char line_c2[192];
+    snprintf(line_c1, sizeof(line_c1), "algo=%s env=%s backend=%s device=%s",
+             cfg->algo ? cfg->algo : "dqn",
+             cfg->env_name ? cfg->env_name : "maze_rooms",
+             cfg->backend ? cfg->backend : "cpu",
+             cfg->device ? cfg->device : "cpu");
+    snprintf(line_c2, sizeof(line_c2), "threads=%d  render_every=%d  log_every=%d",
+             cfg->threads > 0 ? cfg->threads : env_count,
+             cfg->render_every,
+             cfg->log_every);
+    const char *config_lines[] = { line_c1, line_c2 };
+    dashboard_box("Config", config_lines, 2, box_width, border);
+
     if (elapsed_seconds > 0.0) {
         double other = elapsed_seconds - env_seconds - update_seconds - render_seconds;
         if (other < 0.0) other = 0.0;
-        fprintf(stdout, "timers: env %.1fs (%.0f%%)  update %.1fs (%.0f%%)  render %.1fs (%.0f%%)  other %.1fs (%.0f%%)\n",
-                env_seconds, (env_seconds / elapsed_seconds) * 100.0,
-                update_seconds, (update_seconds / elapsed_seconds) * 100.0,
-                render_seconds, (render_seconds / elapsed_seconds) * 100.0,
-                other, (other / elapsed_seconds) * 100.0);
+        double p_env = env_seconds / elapsed_seconds;
+        double p_upd = update_seconds / elapsed_seconds;
+        double p_rnd = render_seconds / elapsed_seconds;
+        double p_oth = other / elapsed_seconds;
+        const char *bottleneck = "env";
+        double bottleneck_pct = p_env;
+        if (p_upd > bottleneck_pct) {
+            bottleneck = "update";
+            bottleneck_pct = p_upd;
+        }
+        if (p_rnd > bottleneck_pct) {
+            bottleneck = "render";
+            bottleneck_pct = p_rnd;
+        }
+        if (p_oth > bottleneck_pct) {
+            bottleneck = "other";
+            bottleneck_pct = p_oth;
+        }
+        char line_tm1[192];
+        char line_tm2[192];
+        char line_tm3[192];
+        snprintf(line_tm1, sizeof(line_tm1),
+                 "env %6.1fs (%3.0f%%)  update %6.1fs (%3.0f%%)",
+                 env_seconds, p_env * 100.0,
+                 update_seconds, p_upd * 100.0);
+        snprintf(line_tm2, sizeof(line_tm2),
+                 "render %6.1fs (%3.0f%%)  other %6.1fs (%3.0f%%)",
+                 render_seconds, p_rnd * 100.0,
+                 other, p_oth * 100.0);
+        snprintf(line_tm3, sizeof(line_tm3), "bottleneck: %s (%.0f%%)", bottleneck, bottleneck_pct * 100.0);
+        const char *timer_lines[] = { line_tm1, line_tm2, line_tm3 };
+        dashboard_box("Timers", timer_lines, 3, box_width, border);
     }
-    fprintf(stdout, "config: algo=%s env=%s envs=%d agents=%d threads=%d backend=%s device=%s\n",
-            cfg->algo ? cfg->algo : "dqn",
-            cfg->env_name ? cfg->env_name : "maze_rooms",
-            env_count,
-            agent_count,
-            cfg->threads > 0 ? cfg->threads : env_count,
-            cfg->backend ? cfg->backend : "cpu",
-            cfg->device ? cfg->device : "cpu");
     fflush(stdout);
 }
 
