@@ -91,10 +91,12 @@ size_t tfrl_env_state_size(const tfrl_env *env);
 int tfrl_env_state_save(const tfrl_env *env, void *buffer, size_t buffer_len);
 int tfrl_env_state_load(tfrl_env *env, const void *buffer, size_t buffer_len);
 int tfrl_env_reset_multi(tfrl_env *env, uint64_t seed, tfrl_obs *out_obs, int max_agents);
-int tfrl_env_step_multi(tfrl_env *env, const tfrl_action *actions, int action_count, tfrl_step_result *out_steps, int max_agents);
+int tfrl_env_step_multi(tfrl_env *env, const tfrl_action *actions, int action_count,
+                        tfrl_step_result *out_steps, int max_agents);
 
 void tfrl_env_step_batch(tfrl_env **restrict envs, int env_count,
-                         const tfrl_action *restrict actions, tfrl_step_result *restrict out_steps);
+                         const tfrl_action *restrict actions,
+                         tfrl_step_result *restrict out_steps);
 void tfrl_env_reset_batch(tfrl_env **restrict envs, int env_count, uint64_t seed_base,
                           tfrl_obs *restrict out_obs);
 void tfrl_env_reset_batch_seeds(tfrl_env **restrict envs, int env_count,
@@ -102,8 +104,10 @@ void tfrl_env_reset_batch_seeds(tfrl_env **restrict envs, int env_count,
 
 int tfrl_obs_layout_total_len(const tfrl_obs_layout *layout);
 int tfrl_obs_layout_validate(const tfrl_obs_layout *layout);
-int tfrl_obs_flatten(const tfrl_obs_layout *layout, const float *const *fields, tfrl_obs *out_obs);
-int tfrl_obs_unflatten_copy(const tfrl_obs_layout *layout, const tfrl_obs *obs, float *const *out_fields);
+int tfrl_obs_flatten(const tfrl_obs_layout *layout, const float *const *fields,
+                     tfrl_obs *out_obs);
+int tfrl_obs_unflatten_copy(const tfrl_obs_layout *layout, const tfrl_obs *obs,
+                            float *const *out_fields);
 const float *tfrl_obs_unflatten_field(const tfrl_obs_layout *layout, const tfrl_obs *obs,
                                       int field_index, int *out_len);
 

@@ -49,6 +49,7 @@ typedef struct {
     float c51_vmax;
     int iqn_quantiles;
     int iqn_tau_samples;
+    float action_bias_right;
     const char *save_path;
     const char *load_path;
     const char *env_name;
@@ -88,7 +89,8 @@ static inline tfrl_action tfrl_algo_act(tfrl_algo *algo, tfrl_env *env, tfrl_obs
     if (algo->vtable->act) return algo->vtable->act(algo->ctx, obs);
     return (tfrl_action){0};
 }
-void tfrl_algo_act_batch(tfrl_algo *algo, const tfrl_obs *obs, int count, tfrl_action *out_actions);
+void tfrl_algo_act_batch(tfrl_algo *algo, const tfrl_obs *obs, int count,
+                         tfrl_action *out_actions);
 int tfrl_algo_diagnostics(tfrl_algo *algo, char *buffer, size_t buffer_len);
 
 #ifdef __cplusplus

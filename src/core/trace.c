@@ -1,163 +1,208 @@
+#include "trace.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
-#include "render_snapshot.h"
-#include "trace.h"
+#define TRACE_META_PREFIX "#META "
 
-#define TFRL_TRACE_MAGIC "TFT1"
-#define TFRL_TRACE_VERSION 2
+typedef struct {
+    uint32_t len;
+} trace_frame_header;
 
 struct tfrl_trace_writer {
-    FILE *fp;
-    long meta_offset;
-    uint32_t meta_len;
+    FILE *f;
+    char *path;
+    char *meta;
+    long meta_end_offset;
 };
 
 struct tfrl_trace_reader {
-    FILE *fp;
+    FILE *f;
     char *meta;
 };
 
-static int write_header(FILE *fp, const char *meta, long *out_meta_offset, uint32_t *out_meta_len) {
-    char magic[4] = TFRL_TRACE_MAGIC;
-    uint32_t version = TFRL_TRACE_VERSION;
-    uint32_t meta_len = meta ? (uint32_t)strlen(meta) : 0;
-    if (out_meta_offset) *out_meta_offset = -1;
-    if (out_meta_len) *out_meta_len = meta_len;
-    if (fwrite(magic, 1, sizeof(magic), fp) != sizeof(magic)) return 0;
-    if (fwrite(&version, sizeof(version), 1, fp) != 1) return 0;
-    if (version >= 2) {
-        if (fwrite(&meta_len, sizeof(meta_len), 1, fp) != 1) return 0;
-        if (out_meta_offset) {
-            long pos = ftell(fp);
-            if (pos < 0) return 0;
-            *out_meta_offset = pos;
-        }
-        if (meta && meta_len > 0 && fwrite(meta, 1, meta_len, fp) != meta_len) return 0;
+static char *dup_cstr(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *out = (char *)calloc(n + 1, 1);
+    if (!out) return NULL;
+    memcpy(out, s, n);
+    out[n] = '\0';
+    return out;
+}
+
+static int write_meta_line(FILE *f, const char *meta, long *out_end_offset) {
+    if (!f) return 0;
+    const char *m = meta ? meta : "";
+    if (fprintf(f, TRACE_META_PREFIX "%s\n", m) < 0) return 0;
+    if (out_end_offset) {
+        long pos = ftell(f);
+        *out_end_offset = pos;
     }
     return 1;
-}
-
-static int read_header(FILE *fp, char **out_meta) {
-    char magic[4];
-    uint32_t version = 0;
-    if (fread(magic, 1, sizeof(magic), fp) != sizeof(magic)) return 0;
-    if (memcmp(magic, TFRL_TRACE_MAGIC, sizeof(magic)) != 0) return 0;
-    if (fread(&version, sizeof(version), 1, fp) != 1) return 0;
-    if (version == 1) {
-        if (out_meta) *out_meta = NULL;
-        return 1;
-    }
-    if (version == 2) {
-        uint32_t meta_len = 0;
-        if (fread(&meta_len, sizeof(meta_len), 1, fp) != 1) return 0;
-        if (meta_len > 0 && out_meta) {
-            char *meta = (char *)calloc((size_t)meta_len + 1, 1);
-            if (!meta) return 0;
-            if (fread(meta, 1, meta_len, fp) != meta_len) {
-                free(meta);
-                return 0;
-            }
-            meta[meta_len] = '\0';
-            *out_meta = meta;
-        } else if (meta_len > 0) {
-            if (fseek(fp, (long)meta_len, SEEK_CUR) != 0) return 0;
-        } else if (out_meta) {
-            *out_meta = NULL;
-        }
-        return 1;
-    }
-    return 0;
-}
-
-tfrl_trace_writer *tfrl_trace_writer_open(const char *path) {
-    return tfrl_trace_writer_open_with_meta(path, NULL);
 }
 
 tfrl_trace_writer *tfrl_trace_writer_open_with_meta(const char *path, const char *meta) {
     if (!path) return NULL;
-    FILE *fp = fopen(path, "wb");
-    if (!fp) return NULL;
-    long meta_offset = -1;
-    uint32_t meta_len = 0;
-    if (!write_header(fp, meta, &meta_offset, &meta_len)) {
-        fclose(fp);
+    FILE *f = fopen(path, "wb");
+    if (!f) return NULL;
+    tfrl_trace_writer *w = (tfrl_trace_writer *)calloc(1, sizeof(*w));
+    if (!w) {
+        fclose(f);
         return NULL;
     }
-    tfrl_trace_writer *writer = (tfrl_trace_writer *)calloc(1, sizeof(tfrl_trace_writer));
-    if (!writer) {
-        fclose(fp);
+    w->f = f;
+    w->path = dup_cstr(path);
+    w->meta = dup_cstr(meta ? meta : "");
+    if (!write_meta_line(w->f, w->meta, &w->meta_end_offset)) {
+        tfrl_trace_writer_close(w);
         return NULL;
     }
-    writer->fp = fp;
-    writer->meta_offset = meta_offset;
-    writer->meta_len = meta_len;
-    return writer;
+    return w;
+}
+
+int tfrl_trace_writer_write(tfrl_trace_writer *writer, const void *data, size_t len) {
+    if (!writer || !writer->f || !data || len == 0) return 0;
+    if (len > 0xFFFFFFFFu) return 0;
+    trace_frame_header hdr = {.len = (uint32_t)len};
+    if (fwrite(&hdr, sizeof(hdr), 1, writer->f) != 1) return 0;
+    if (fwrite(data, 1, len, writer->f) != len) return 0;
+    return 1;
+}
+
+int tfrl_trace_writer_update_meta(tfrl_trace_writer *writer, const char *meta) {
+    if (!writer || !writer->path) return 0;
+    const char *new_meta = meta ? meta : "";
+
+    FILE *in = fopen(writer->path, "rb");
+    if (!in) return 0;
+
+    char tmp_path[512];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", writer->path);
+    FILE *out = fopen(tmp_path, "wb");
+    if (!out) {
+        fclose(in);
+        return 0;
+    }
+
+    long old_meta_end = writer->meta_end_offset;
+    if (old_meta_end <= 0) {
+        // Fallback: read the first line to find the end of meta.
+        int c = 0;
+        old_meta_end = 0;
+        while ((c = fgetc(in)) != EOF) {
+            old_meta_end++;
+            if (c == '\n') break;
+        }
+    } else {
+        if (fseek(in, old_meta_end, SEEK_SET) != 0) {
+            fclose(in);
+            fclose(out);
+            remove(tmp_path);
+            return 0;
+        }
+    }
+
+    long new_meta_end = 0;
+    if (!write_meta_line(out, new_meta, &new_meta_end)) {
+        fclose(in);
+        fclose(out);
+        remove(tmp_path);
+        return 0;
+    }
+
+    char buffer[64 * 1024];
+    size_t nread = 0;
+    while ((nread = fread(buffer, 1, sizeof(buffer), in)) > 0) {
+        if (fwrite(buffer, 1, nread, out) != nread) {
+            fclose(in);
+            fclose(out);
+            remove(tmp_path);
+            return 0;
+        }
+    }
+
+    fclose(in);
+    fclose(out);
+
+    if (rename(tmp_path, writer->path) != 0) {
+        remove(tmp_path);
+        return 0;
+    }
+
+    free(writer->meta);
+    writer->meta = dup_cstr(new_meta);
+    writer->meta_end_offset = new_meta_end;
+
+    // Reopen for appending at end of file.
+    if (writer->f) fclose(writer->f);
+    writer->f = fopen(writer->path, "ab");
+    return writer->f != NULL;
 }
 
 void tfrl_trace_writer_close(tfrl_trace_writer *writer) {
     if (!writer) return;
-    if (writer->fp) fclose(writer->fp);
+    if (writer->f) fclose(writer->f);
+    free(writer->path);
+    free(writer->meta);
     free(writer);
-}
-
-int tfrl_trace_writer_write(tfrl_trace_writer *writer, const void *buffer, size_t len) {
-    if (!writer || !writer->fp || !buffer || len == 0) return 0;
-    return fwrite(buffer, 1, len, writer->fp) == len;
-}
-
-int tfrl_trace_writer_update_meta(tfrl_trace_writer *writer, const char *meta) {
-    if (!writer || !writer->fp || !meta) return 0;
-    if (writer->meta_len == 0 || writer->meta_offset < 0) return 0;
-    size_t meta_len = strlen(meta);
-    if (meta_len != writer->meta_len) return 0;
-    if (fseek(writer->fp, writer->meta_offset, SEEK_SET) != 0) return 0;
-    if (fwrite(meta, 1, writer->meta_len, writer->fp) != writer->meta_len) return 0;
-    fflush(writer->fp);
-    return 1;
 }
 
 tfrl_trace_reader *tfrl_trace_reader_open(const char *path) {
     if (!path) return NULL;
-    FILE *fp = fopen(path, "rb");
-    if (!fp) return NULL;
-    char *meta = NULL;
-    if (!read_header(fp, &meta)) {
-        fclose(fp);
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    tfrl_trace_reader *r = (tfrl_trace_reader *)calloc(1, sizeof(*r));
+    if (!r) {
+        fclose(f);
         return NULL;
     }
-    tfrl_trace_reader *reader = (tfrl_trace_reader *)calloc(1, sizeof(tfrl_trace_reader));
-    if (!reader) {
-        free(meta);
-        fclose(fp);
+    r->f = f;
+
+    char meta_line[2048];
+    if (!fgets(meta_line, sizeof(meta_line), r->f)) {
+        tfrl_trace_reader_close(r);
         return NULL;
     }
-    reader->fp = fp;
-    reader->meta = meta;
-    return reader;
+    const char *meta_start = meta_line;
+    if (strncmp(meta_line, TRACE_META_PREFIX, strlen(TRACE_META_PREFIX)) == 0) {
+        meta_start = meta_line + (int)strlen(TRACE_META_PREFIX);
+    }
+    size_t len = strlen(meta_start);
+    while (len > 0 && (meta_start[len - 1] == '\n' || meta_start[len - 1] == '\r')) {
+        len--;
+    }
+    r->meta = (char *)calloc(len + 1, 1);
+    if (!r->meta) {
+        tfrl_trace_reader_close(r);
+        return NULL;
+    }
+    memcpy(r->meta, meta_start, len);
+    r->meta[len] = '\0';
+    return r;
+}
+
+const char *tfrl_trace_reader_meta(tfrl_trace_reader *reader) {
+    return reader ? reader->meta : NULL;
+}
+
+int tfrl_trace_reader_next(tfrl_trace_reader *reader, void *buffer, size_t buffer_cap,
+                           size_t *out_len) {
+    if (!reader || !reader->f || !buffer || buffer_cap == 0) return 0;
+    trace_frame_header hdr = {0};
+    if (fread(&hdr, sizeof(hdr), 1, reader->f) != 1) return 0;
+    size_t need = (size_t)hdr.len;
+    if (need == 0 || need > buffer_cap) return 0;
+    if (fread(buffer, 1, need, reader->f) != need) return 0;
+    if (out_len) *out_len = need;
+    return 1;
 }
 
 void tfrl_trace_reader_close(tfrl_trace_reader *reader) {
     if (!reader) return;
-    if (reader->fp) fclose(reader->fp);
+    if (reader->f) fclose(reader->f);
     free(reader->meta);
     free(reader);
-}
-
-int tfrl_trace_reader_next(tfrl_trace_reader *reader, void *buffer, size_t buffer_len, size_t *out_len) {
-    if (!reader || !reader->fp || !buffer || buffer_len == 0) return 0;
-    tfrl_render_snapshot_header header;
-    if (fread(&header, sizeof(header), 1, reader->fp) != 1) return 0;
-    size_t total = sizeof(header) + header.payload_bytes;
-    if (buffer_len < total) return 0;
-    memcpy(buffer, &header, sizeof(header));
-    if (fread((char *)buffer + sizeof(header), 1, header.payload_bytes, reader->fp) != header.payload_bytes) return 0;
-    if (out_len) *out_len = total;
-    return 1;
-}
-
-const char *tfrl_trace_reader_meta(const tfrl_trace_reader *reader) {
-    return reader ? reader->meta : NULL;
 }

@@ -31,7 +31,8 @@ int tfrl_obs_layout_validate(const tfrl_obs_layout *layout) {
     return total > 0 && total <= TFRL_MAX_BOX_DIMS;
 }
 
-int tfrl_obs_flatten(const tfrl_obs_layout *layout, const float *const *fields, tfrl_obs *out_obs) {
+int tfrl_obs_flatten(const tfrl_obs_layout *layout, const float *const *fields,
+                     tfrl_obs *out_obs) {
     if (!layout || !fields || !out_obs) return 0;
     int total = tfrl_obs_layout_total_len(layout);
     if (total <= 0 || total > TFRL_MAX_BOX_DIMS) return 0;
@@ -50,7 +51,8 @@ int tfrl_obs_flatten(const tfrl_obs_layout *layout, const float *const *fields, 
     return 1;
 }
 
-int tfrl_obs_unflatten_copy(const tfrl_obs_layout *layout, const tfrl_obs *obs, float *const *out_fields) {
+int tfrl_obs_unflatten_copy(const tfrl_obs_layout *layout, const tfrl_obs *obs,
+                            float *const *out_fields) {
     if (!layout || !obs || !out_fields) return 0;
     int total = tfrl_obs_layout_total_len(layout);
     if (total <= 0 || obs->data_len < total) return 0;
