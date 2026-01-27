@@ -239,6 +239,12 @@ static int require_discrete(const char *algo, const tfrl_algo_config *cfg) {
     return 0;
 }
 
+static int require_discrete_actions(const char *algo, const tfrl_algo_config *cfg) {
+    if (cfg->action_type == TFRL_SPACE_DISCRETE) return 1;
+    fprintf(stderr, "%s requires discrete action space\n", algo);
+    return 0;
+}
+
 static int validate_algo_config(const tfrl_algo_config *cfg) {
     if (!cfg || !cfg->name) return 1;
     if (!require_positive("obs_n", cfg->obs_n)) return 0;
@@ -248,7 +254,7 @@ static int validate_algo_config(const tfrl_algo_config *cfg) {
     if (!require_nonneg("batch_size", cfg->batch_size)) return 0;
 
     if (strcmp(cfg->name, "ppo") == 0) {
-        if (!require_discrete("ppo", cfg)) return 0;
+        if (!require_discrete_actions("ppo", cfg)) return 0;
         if (!require_positive("steps_per_batch", cfg->steps_per_batch)) return 0;
         if (!require_positive("epochs", cfg->epochs)) return 0;
         if (!require_float_positive("clip_eps", cfg->clip_eps)) return 0;

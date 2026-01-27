@@ -39,6 +39,49 @@ static int should_render(int step, int render_every) {
     return (step % render_every) == 0;
 }
 
+static int action_multidiscrete_bins(const tfrl_env_spec *spec, int *out_b0, int *out_b1) {
+    if (!spec || spec->action_type != TFRL_SPACE_DISCRETE) return 0;
+    if (spec->action_dims != 2) return 0;
+    int b0 = spec->action_shape[0];
+    int b1 = spec->action_shape[1];
+    if (b0 <= 1 || b1 <= 1) return 0;
+    if (out_b0) *out_b0 = b0;
+    if (out_b1) *out_b1 = b1;
+    return 1;
+}
+
+static int action_effective_n(const tfrl_env_spec *spec) {
+    int b0 = 0, b1 = 0;
+    if (action_multidiscrete_bins(spec, &b0, &b1)) {
+        long long prod = (long long)b0 * (long long)b1;
+        if (prod > 0 && prod < 1000000000LL) {
+            return (int)prod;
+        }
+    }
+    return spec ? spec->action_n : 0;
+}
+
+static tfrl_action action_decode_for_spec(const tfrl_env_spec *spec, tfrl_action action) {
+    int b0 = 0, b1 = 0;
+    if (!action_multidiscrete_bins(spec, &b0, &b1)) return action;
+    int total = b0 * b1;
+    int idx = action.index;
+    if (idx < 0) idx = 0;
+    if (idx >= total) idx = total - 1;
+    int a0 = idx % b0;
+    int a1 = (idx / b0) % b1;
+    action.data_len = 2;
+    action.data[0] = (float)a0;
+    action.data[1] = (float)a1;
+    action.index = idx;
+    return action;
+}
+
+static tfrl_action action_decode_for_env(tfrl_env *env, tfrl_action action) {
+    const tfrl_env_spec *spec = tfrl_env_get_spec(env);
+    return action_decode_for_spec(spec, action);
+}
+
 static int use_arkanoid_plan_reward(const tfrl_runner_config *cfg, const tfrl_env_spec *spec) {
     if (!cfg || !cfg->algo || !spec || !spec->name) return 0;
     if (strcmp(cfg->algo, "arkanoid_plan") != 0) return 0;
@@ -126,11 +169,12 @@ static void fill_algo_config(tfrl_algo_config *out,
                              int seed,
                              const char *load_path) {
     if (!out || !cfg || !spec) return;
-    const char *algo_name = cfg->algo ? cfg->algo : "dqn";
+    const char *algo_name = cfg->algo ? cfg->algo : "ppo";
+    const int effective_action_n = action_effective_n(spec);
     *out = (tfrl_algo_config){
         .name = algo_name,
         .obs_n = spec->obs_n,
-        .action_n = spec->action_n,
+        .action_n = effective_action_n > 0 ? effective_action_n : spec->action_n,
         .obs_type = spec->obs_type,
         .action_type = spec->action_type,
         .obs_dims = spec->obs_dims,
@@ -188,6 +232,57 @@ static void fill_algo_config(tfrl_algo_config *out,
         if (cfg->learning_starts < 0) out->learning_starts = 10000;
         if (cfg->train_every < 0) out->train_every = 4;
         if (cfg->grad_steps < 0) out->grad_steps = 1;
+    }
+
+    const int is_breakout = spec->name && strcmp(spec->name, "breakout") == 0;
+    const int is_snake = spec->name && strcmp(spec->name, "snake") == 0;
+    const int is_tetris = spec->name && strcmp(spec->name, "tetris") == 0;
+    const int is_maze = spec->name && strcmp(spec->name, "maze_rooms") == 0;
+    if (is_value_algo && (is_breakout || is_snake || is_tetris)) {
+        // These simple game envs benefit from starting updates much earlier and updating every step.
+        if (cfg->learning_starts < 0) out->learning_starts = 1000;
+        if (cfg->train_every < 0) out->train_every = 1;
+        if (cfg->batch_size < 0) out->batch_size = 32;
+        if (cfg->epsilon < 0.0f && cfg->mode == TFRL_MODE_TRAIN) out->epsilon = 0.3f;
+    }
+
+    const int is_ppo = strcmp(algo_name, "ppo") == 0;
+    if (is_ppo) {
+        if (cfg->steps_per_batch < 0) out->steps_per_batch = 64;
+        if (cfg->epochs < 0) out->epochs = 2;
+        if (cfg->lr < 0.0f) out->lr = 0.0003f;
+        if (cfg->entropy_coef < 0.0f) out->entropy_coef = 0.01f;
+        if (cfg->clip_eps < 0.0f) out->clip_eps = 0.2f;
+        if (cfg->gae_lambda < 0.0f) out->gae_lambda = 0.95f;
+    }
+    if (is_ppo && (is_breakout || is_snake || is_tetris)) {
+        if (cfg->steps_per_batch < 0) out->steps_per_batch = 128;
+        if (cfg->epochs < 0) out->epochs = 2;
+        if (cfg->entropy_coef < 0.0f) out->entropy_coef = 0.02f;
+    }
+    if (is_ppo && is_breakout) {
+        if (cfg->steps_per_batch < 0) out->steps_per_batch = 192;
+        if (cfg->epochs < 0) out->epochs = 3;
+        if (cfg->lr < 0.0f) out->lr = 0.0005f;
+        if (cfg->entropy_coef < 0.0f) out->entropy_coef = 0.015f;
+    }
+    if (is_ppo && is_snake) {
+        if (cfg->steps_per_batch < 0) out->steps_per_batch = 256;
+        if (cfg->epochs < 0) out->epochs = 3;
+        if (cfg->lr < 0.0f) out->lr = 0.0005f;
+        if (cfg->entropy_coef < 0.0f) out->entropy_coef = 0.02f;
+    }
+    if (is_ppo && is_tetris) {
+        if (cfg->steps_per_batch < 0) out->steps_per_batch = 256;
+        if (cfg->epochs < 0) out->epochs = 2;
+        if (cfg->lr < 0.0f) out->lr = 0.0003f;
+        if (cfg->entropy_coef < 0.0f) out->entropy_coef = 0.02f;
+    }
+    if (is_ppo && is_maze) {
+        if (cfg->steps_per_batch < 0) out->steps_per_batch = 256;
+        if (cfg->epochs < 0) out->epochs = 4;
+        if (cfg->lr < 0.0f) out->lr = 0.0007f;
+        if (cfg->entropy_coef < 0.0f) out->entropy_coef = 0.01f;
     }
 }
 
@@ -576,7 +671,7 @@ static void dashboard_render(const tfrl_runner_config *cfg,
     char line_c1[192];
     char line_c2[192];
     snprintf(line_c1, sizeof(line_c1), "algo=%s env=%s backend=%s device=%s",
-             cfg->algo ? cfg->algo : "dqn",
+             cfg->algo ? cfg->algo : "ppo",
              cfg->env_name ? cfg->env_name : "maze_rooms",
              cfg->backend ? cfg->backend : "cpu",
              cfg->device ? cfg->device : "cpu");
@@ -651,7 +746,7 @@ static void profile_write_json(const tfrl_runner_config *cfg,
     if (other < 0.0) other = 0.0;
 
     fprintf(fp, "{\n");
-    fprintf(fp, "  \"algo\": \"%s\",\n", cfg->algo ? cfg->algo : "dqn");
+    fprintf(fp, "  \"algo\": \"%s\",\n", cfg->algo ? cfg->algo : "ppo");
     fprintf(fp, "  \"env\": \"%s\",\n", cfg->env_name ? cfg->env_name : "maze_rooms");
     fprintf(fp, "  \"backend\": \"%s\",\n", cfg->backend ? cfg->backend : "cpu");
     fprintf(fp, "  \"device\": \"%s\",\n", cfg->device ? cfg->device : "cpu");
@@ -811,15 +906,45 @@ static void *step_worker(void *arg) {
     tfrl_step_job *job = (tfrl_step_job *)arg;
     int end = job->start + job->count;
     for (int i = job->start; i < end; i++) {
-        job->steps[i] = tfrl_env_step(job->envs[i], job->actions[i]);
+        tfrl_action decoded = action_decode_for_env(job->envs[i], job->actions[i]);
+        job->steps[i] = tfrl_env_step(job->envs[i], decoded);
     }
     return NULL;
 }
 
 static void step_envs_threaded(tfrl_env **envs, int env_count, const tfrl_action *actions, tfrl_step_result *steps, int threads) {
     if (env_count <= 0) return;
+    int needs_decode = 0;
+    for (int i = 0; i < env_count; i++) {
+        const tfrl_env_spec *spec = tfrl_env_get_spec(envs[i]);
+        if (action_multidiscrete_bins(spec, NULL, NULL)) {
+            needs_decode = 1;
+            break;
+        }
+    }
+
+    tfrl_action *decoded_actions = NULL;
+    const tfrl_action *use_actions = actions;
+    if (needs_decode) {
+        decoded_actions = (tfrl_action *)calloc((size_t)env_count, sizeof(tfrl_action));
+        if (decoded_actions) {
+            for (int i = 0; i < env_count; i++) {
+                const tfrl_env_spec *spec = tfrl_env_get_spec(envs[i]);
+                decoded_actions[i] = action_decode_for_spec(spec, actions[i]);
+            }
+            use_actions = decoded_actions;
+        }
+    }
+
     if (threads <= 1 || env_count == 1) {
-        tfrl_env_step_batch(envs, env_count, actions, steps);
+        if (!decoded_actions) {
+            tfrl_env_step_batch(envs, env_count, use_actions, steps);
+        } else {
+            for (int i = 0; i < env_count; i++) {
+                steps[i] = tfrl_env_step(envs[i], use_actions[i]);
+            }
+        }
+        free(decoded_actions);
         return;
     }
     if (threads > env_count) threads = env_count;
@@ -828,7 +953,14 @@ static void step_envs_threaded(tfrl_env **envs, int env_count, const tfrl_action
     if (!tids || !jobs) {
         free(tids);
         free(jobs);
-        tfrl_env_step_batch(envs, env_count, actions, steps);
+        if (!decoded_actions) {
+            tfrl_env_step_batch(envs, env_count, use_actions, steps);
+        } else {
+            for (int i = 0; i < env_count; i++) {
+                steps[i] = tfrl_env_step(envs[i], use_actions[i]);
+            }
+        }
+        free(decoded_actions);
         return;
     }
 
@@ -838,7 +970,7 @@ static void step_envs_threaded(tfrl_env **envs, int env_count, const tfrl_action
     for (int t = 0; t < threads; t++) {
         int count = base + (t < extra ? 1 : 0);
         jobs[t].envs = envs;
-        jobs[t].actions = actions;
+        jobs[t].actions = use_actions;
         jobs[t].steps = steps;
         jobs[t].start = start;
         jobs[t].count = count;
@@ -850,6 +982,7 @@ static void step_envs_threaded(tfrl_env **envs, int env_count, const tfrl_action
     }
     free(tids);
     free(jobs);
+    free(decoded_actions);
 }
 
 typedef struct {
@@ -983,10 +1116,11 @@ static void *a3c_worker_main(void *arg) {
         pthread_mutex_unlock(worker->step_lock);
 
         tfrl_action action = tfrl_algo_act(worker->algo, worker->env, obs);
-        tfrl_step_result step = tfrl_env_step(worker->env, action);
+        tfrl_action decoded = action_decode_for_env(worker->env, action);
+        tfrl_step_result step = tfrl_env_step(worker->env, decoded);
         tfrl_transition transition = {
             .obs = obs,
-            .action = action,
+            .action = decoded,
             .reward = step.reward,
             .next_obs = step.observation,
             .done = step.done,
@@ -1066,10 +1200,11 @@ static void *impala_actor_main(void *arg) {
         pthread_mutex_lock(actor->policy_lock);
         tfrl_action action = tfrl_algo_act(actor->algo, actor->env, obs);
         pthread_mutex_unlock(actor->policy_lock);
-        tfrl_step_result step = tfrl_env_step(actor->env, action);
+        tfrl_action decoded = action_decode_for_env(actor->env, action);
+        tfrl_step_result step = tfrl_env_step(actor->env, decoded);
         tfrl_transition transition = {
             .obs = obs,
-            .action = action,
+            .action = decoded,
             .reward = step.reward,
             .next_obs = step.observation,
             .done = step.done,
@@ -1266,10 +1401,11 @@ static void mp_actor_main(const tfrl_mp_actor *actor) {
             algo = tfrl_algo_create(&algo_cfg, spec);
         }
         tfrl_action action = tfrl_algo_act(&algo, env, obs);
-        tfrl_step_result step = tfrl_env_step(env, action);
+        tfrl_action decoded = action_decode_for_env(env, action);
+        tfrl_step_result step = tfrl_env_step(env, decoded);
         tfrl_transition transition = {
             .obs = obs,
-            .action = action,
+            .action = decoded,
             .reward = step.reward,
             .next_obs = step.observation,
             .done = step.done,
@@ -1319,10 +1455,11 @@ static void mp_actor_main_ppo(const tfrl_mp_actor *actor) {
             algo = tfrl_algo_create(&algo_cfg, spec);
         }
         tfrl_action action = tfrl_algo_act(&algo, env, obs);
-        tfrl_step_result step = tfrl_env_step(env, action);
+        tfrl_action decoded = action_decode_for_env(env, action);
+        tfrl_step_result step = tfrl_env_step(env, decoded);
         tfrl_transition transition = {
             .obs = obs,
-            .action = action,
+            .action = decoded,
             .reward = step.reward,
             .next_obs = step.observation,
             .done = step.done,
@@ -1900,6 +2037,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         double env_seconds = 0.0;
         double update_seconds = 0.0;
         double render_seconds = 0.0;
+        long long update_calls = 0;
         if (use_profile) {
             tfrl_replay_profile_reset();
         }
@@ -1996,6 +2134,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                         };
                         int algo_idx = cfg->share_policy ? 0 : a;
                         algos[algo_idx].vtable->update(algos[algo_idx].ctx, &transition);
+                        update_calls++;
                         obs[idx] = steps[idx].observation;
                         episode_returns[idx] += reward;
                     }
@@ -2089,10 +2228,10 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             if (cfg->profile || (cfg->profile_json && cfg->profile_json[0])) {
                 fprintf(stdout,
                         "profile: steps=%d envs=%d agents=%d elapsed=%.2fs sps=%.1f samples=%.1f "
-                        "env=%.2fs update=%.2fs render=%.2fs other=%.2fs replay_sample=%.2fs "
-                        "replay_calls=%lld replay_avg_ms=%.3f\n",
+                        "env=%.2fs update=%.2fs render=%.2fs other=%.2fs updates=%lld "
+                        "replay_sample=%.2fs replay_calls=%lld replay_avg_ms=%.3f\n",
                         total_steps, env_count, agent_count, elapsed, steps_per_sec, samples_per_sec,
-                        env_seconds, update_seconds, render_seconds, other,
+                        env_seconds, update_seconds, render_seconds, other, update_calls,
                         replay_stats.sample_seconds, replay_stats.sample_calls, replay_avg_ms);
             }
             if (cfg->profile_json && cfg->profile_json[0]) {

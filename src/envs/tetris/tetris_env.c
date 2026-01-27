@@ -474,6 +474,8 @@ static void tetris_step_apply(tfrl_env *env, tfrl_action action, tetris_step_inf
     if (act < 0) {
         act = tetris_plan_action(env);
     }
+    if (act < 0) act = 0;
+    if (act > 4) act = 4;
     if (act == 1) {
         if (tetris_piece_fits(env, env->tetris.x - 1, env->tetris.y, env->tetris.rot)) {
             env->tetris.x -= 1;
