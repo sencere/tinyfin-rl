@@ -1,5 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <math.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "replay_buffer.h"
 
@@ -11,6 +14,15 @@ struct tfrl_replay_buffer {
     tfrl_transition *data;
     float *priorities;
 };
+
+static double sample_seconds_total = 0.0;
+static long long sample_calls_total = 0;
+
+static double replay_now_seconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
 
 static unsigned int lcg_next(unsigned int *state) {
     *state = (*state * 1664525u) + 1013904223u;
@@ -74,11 +86,14 @@ void tfrl_replay_push(tfrl_replay_buffer *buf, const tfrl_transition *transition
 int tfrl_replay_sample(tfrl_replay_buffer *buf, int batch, int *out_idx, float *out_weights, float beta) {
     if (!buf || batch <= 0 || !out_idx) return 0;
     if (buf->size < batch) return 0;
+    double t0 = replay_now_seconds();
     if (!buf->priorities || buf->alpha <= 0.0f) {
         for (int i = 0; i < batch; i++) {
             out_idx[i] = rand() % buf->size;
             if (out_weights) out_weights[i] = 1.0f;
         }
+        sample_seconds_total += replay_now_seconds() - t0;
+        sample_calls_total += 1;
         return batch;
     }
 
@@ -116,18 +131,23 @@ int tfrl_replay_sample(tfrl_replay_buffer *buf, int batch, int *out_idx, float *
             out_weights[i] /= max_weight;
         }
     }
+    sample_seconds_total += replay_now_seconds() - t0;
+    sample_calls_total += 1;
     return batch;
 }
 
 int tfrl_replay_sample_deterministic(tfrl_replay_buffer *buf, int batch, int *out_idx, float *out_weights, float beta, unsigned int seed) {
     if (!buf || batch <= 0 || !out_idx) return 0;
     if (buf->size < batch) return 0;
+    double t0 = replay_now_seconds();
     unsigned int state = seed;
     if (!buf->priorities || buf->alpha <= 0.0f) {
         for (int i = 0; i < batch; i++) {
             out_idx[i] = (int)(lcg_next(&state) % (unsigned int)buf->size);
             if (out_weights) out_weights[i] = 1.0f;
         }
+        sample_seconds_total += replay_now_seconds() - t0;
+        sample_calls_total += 1;
         return batch;
     }
 
@@ -165,6 +185,8 @@ int tfrl_replay_sample_deterministic(tfrl_replay_buffer *buf, int batch, int *ou
             out_weights[i] /= max_weight;
         }
     }
+    sample_seconds_total += replay_now_seconds() - t0;
+    sample_calls_total += 1;
     return batch;
 }
 
@@ -181,4 +203,15 @@ const tfrl_transition *tfrl_replay_get(const tfrl_replay_buffer *buf, int idx) {
 
 int tfrl_replay_size(const tfrl_replay_buffer *buf) {
     return buf ? buf->size : 0;
+}
+
+void tfrl_replay_profile_get(tfrl_replay_profile_stats *out_stats) {
+    if (!out_stats) return;
+    out_stats->sample_seconds = sample_seconds_total;
+    out_stats->sample_calls = sample_calls_total;
+}
+
+void tfrl_replay_profile_reset(void) {
+    sample_seconds_total = 0.0;
+    sample_calls_total = 0;
 }

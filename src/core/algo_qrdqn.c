@@ -5,6 +5,7 @@
 #include "tinyfin/autograd.h"
 #include "tinyfin/nn.h"
 #include "tinyfin/optim.h"
+#include "tinyfin/ops_activation.h"
 #include "tinyfin/ops_add.h"
 #include "tinyfin/ops_huber.h"
 #include "tinyfin/ops_mul.h"
@@ -19,7 +20,11 @@
 #define QRDQN_TARGET_UPDATE 200
 
 typedef struct {
+    Linear *fc1;
+    Linear *fc2;
     Linear *q;
+    Linear *target_fc1;
+    Linear *target_fc2;
     Linear *target_q;
     Adam *opt;
     tfrl_replay_buffer *replay;
@@ -29,6 +34,9 @@ typedef struct {
     int action_n;
     float gamma;
     float epsilon;
+    float epsilon_start;
+    float epsilon_end;
+    int epsilon_decay_steps;
     int batch_size;
     int train_every;
     int learning_starts;
@@ -43,6 +51,26 @@ typedef struct {
     int *idx;
     float *weights;
 } tfrl_qrdqn_algo;
+
+static Tensor *mlp_forward(tfrl_qrdqn_algo *algo, Tensor *x, int target,
+                           Tensor **h1_out, Tensor **a1_out,
+                           Tensor **h2_out, Tensor **a2_out) {
+    if (!algo || !x) return NULL;
+    Linear *l1 = target ? algo->target_fc1 : algo->fc1;
+    Linear *l2 = target ? algo->target_fc2 : algo->fc2;
+    Linear *lq = target ? algo->target_q : algo->q;
+    if (!l1 || !l2 || !lq) return NULL;
+    Tensor *h1 = linear_forward(l1, x);
+    Tensor *a1 = h1 ? tensor_relu(h1) : NULL;
+    Tensor *h2 = a1 ? linear_forward(l2, a1) : NULL;
+    Tensor *a2 = h2 ? tensor_relu(h2) : NULL;
+    Tensor *out = a2 ? linear_forward(lq, a2) : NULL;
+    if (h1_out) *h1_out = h1; else tensor_free(h1);
+    if (a1_out) *a1_out = a1; else tensor_free(a1);
+    if (h2_out) *h2_out = h2; else tensor_free(h2);
+    if (a2_out) *a2_out = a2; else tensor_free(a2);
+    return out;
+}
 
 static unsigned int qrdqn_lcg_next(unsigned int *state) {
     *state = (*state * 1664525u) + 1013904223u;
@@ -174,9 +202,14 @@ static tfrl_action qrdqn_act(void *ctx, tfrl_obs obs) {
         return action;
     }
     Tensor *x = obs_to_tensor(algo, obs);
-    Tensor *q_values = linear_forward(algo->q, x);
+    Tensor *h1 = NULL, *a1 = NULL, *h2 = NULL, *a2 = NULL;
+    Tensor *q_values = mlp_forward(algo, x, 0, &h1, &a1, &h2, &a2);
     action.index = qrdqn_argmax(q_values, algo->action_n);
     tensor_free(q_values);
+    tensor_free(a2);
+    tensor_free(h2);
+    tensor_free(a1);
+    tensor_free(h1);
     tensor_free(x);
     return action;
 }
@@ -202,7 +235,8 @@ static void qrdqn_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_acti
         }
     }
 
-    Tensor *q_values = linear_forward(algo->q, x);
+    Tensor *h1 = NULL, *a1 = NULL, *h2 = NULL, *a2 = NULL;
+    Tensor *q_values = mlp_forward(algo, x, 0, &h1, &a1, &h2, &a2);
     for (int i = 0; i < count; i++) {
         float r = qrdqn_rand_uniform(algo);
         if (r < algo->epsilon) {
@@ -215,12 +249,17 @@ static void qrdqn_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_acti
         out_actions[i].index = qrdqn_argmax(&view, algo->action_n);
     }
     tensor_free(q_values);
+    tensor_free(a2);
+    tensor_free(h2);
+    tensor_free(a1);
+    tensor_free(h1);
     tensor_free(x);
 }
 
 static float qrdqn_apply_update(tfrl_qrdqn_algo *algo, const tfrl_transition *transition, float weight) {
     Tensor *x = obs_to_tensor(algo, transition->obs);
-    Tensor *q_values = linear_forward(algo->q, x);
+    Tensor *h1 = NULL, *a1 = NULL, *h2 = NULL, *a2 = NULL;
+    Tensor *q_values = mlp_forward(algo, x, 0, &h1, &a1, &h2, &a2);
 
     int action = transition->action.index;
     float targets[QRDQN_QUANTILES];
@@ -230,15 +269,25 @@ static float qrdqn_apply_update(tfrl_qrdqn_algo *algo, const tfrl_transition *tr
 
     if (!transition->done) {
         Tensor *x_next = obs_to_tensor(algo, transition->next_obs);
-        Tensor *q_next_online = linear_forward(algo->q, x_next);
+        Tensor *n_h1 = NULL, *n_a1 = NULL, *n_h2 = NULL, *n_a2 = NULL;
+        Tensor *q_next_online = mlp_forward(algo, x_next, 0, &n_h1, &n_a1, &n_h2, &n_a2);
         int next_a = qrdqn_argmax(q_next_online, algo->action_n);
-        Tensor *q_next_target = linear_forward(algo->target_q, x_next);
+        Tensor *t_h1 = NULL, *t_a1 = NULL, *t_h2 = NULL, *t_a2 = NULL;
+        Tensor *q_next_target = mlp_forward(algo, x_next, 1, &t_h1, &t_a1, &t_h2, &t_a2);
         for (int k = 0; k < QRDQN_QUANTILES; k++) {
             size_t idx = (size_t)next_a * (size_t)QRDQN_QUANTILES + (size_t)k;
             targets[k] = (float)transition->reward + algo->gamma * tensor_get_f32_at(q_next_target, idx);
         }
         tensor_free(q_next_target);
         tensor_free(q_next_online);
+        tensor_free(t_a2);
+        tensor_free(t_h2);
+        tensor_free(t_a1);
+        tensor_free(t_h1);
+        tensor_free(n_a2);
+        tensor_free(n_h2);
+        tensor_free(n_a1);
+        tensor_free(n_h1);
         tensor_free(x_next);
     }
 
@@ -288,10 +337,16 @@ static float qrdqn_apply_update(tfrl_qrdqn_algo *algo, const tfrl_transition *tr
     }
 
     tensor_free(q_values);
+    tensor_free(a2);
+    tensor_free(h2);
+    tensor_free(a1);
+    tensor_free(h1);
     tensor_free(x);
 
     algo->update_count++;
     if (algo->update_count % QRDQN_TARGET_UPDATE == 0) {
+        copy_linear(algo->target_fc1, algo->fc1);
+        copy_linear(algo->target_fc2, algo->fc2);
         copy_linear(algo->target_q, algo->q);
     }
     return td_err / (float)QRDQN_QUANTILES;
@@ -302,6 +357,12 @@ static void qrdqn_update(void *ctx, const tfrl_transition *transition) {
     if (!transition) return;
     algo->step_count++;
     int step_id = algo->step_count;
+
+    if (algo->epsilon_decay_steps > 0) {
+        float t = (float)step_id / (float)algo->epsilon_decay_steps;
+        if (t > 1.0f) t = 1.0f;
+        algo->epsilon = algo->epsilon_start + t * (algo->epsilon_end - algo->epsilon_start);
+    }
 
     if (algo->replay) {
         tfrl_replay_push(algo->replay, transition, 1.0f);
@@ -340,18 +401,44 @@ static void qrdqn_destroy(void *ctx) {
     tfrl_replay_free(algo->replay);
     free(algo->idx);
     free(algo->weights);
-    tensor_free(algo->q->weight);
-    tensor_free(algo->q->bias);
-    tensor_free(algo->target_q->weight);
-    tensor_free(algo->target_q->bias);
-    free(algo->q);
-    free(algo->target_q);
+    if (algo->fc1) {
+        tensor_free(algo->fc1->weight);
+        tensor_free(algo->fc1->bias);
+        free(algo->fc1);
+    }
+    if (algo->fc2) {
+        tensor_free(algo->fc2->weight);
+        tensor_free(algo->fc2->bias);
+        free(algo->fc2);
+    }
+    if (algo->target_fc1) {
+        tensor_free(algo->target_fc1->weight);
+        tensor_free(algo->target_fc1->bias);
+        free(algo->target_fc1);
+    }
+    if (algo->target_fc2) {
+        tensor_free(algo->target_fc2->weight);
+        tensor_free(algo->target_fc2->bias);
+        free(algo->target_fc2);
+    }
+    if (algo->q) {
+        tensor_free(algo->q->weight);
+        tensor_free(algo->q->bias);
+        free(algo->q);
+    }
+    if (algo->target_q) {
+        tensor_free(algo->target_q->weight);
+        tensor_free(algo->target_q->bias);
+        free(algo->target_q);
+    }
     free(algo);
 }
 
 static void qrdqn_save(void *ctx, const char *path) {
     tfrl_qrdqn_algo *algo = (tfrl_qrdqn_algo *)ctx;
     if (!algo) return;
+    if (algo->fc1) save_linear(algo->fc1, path, "fc1");
+    if (algo->fc2) save_linear(algo->fc2, path, "fc2");
     save_linear(algo->q, path, "q");
 }
 
@@ -374,7 +461,10 @@ tfrl_algo tfrl_algo_qrdqn_create(const tfrl_algo_config *cfg) {
     algo->obs_dim = cfg->obs_dims > 0 ? cfg->obs_dims : cfg->obs_n;
     algo->action_n = cfg->action_n;
     algo->gamma = cfg->gamma > 0.0f ? cfg->gamma : 0.99f;
-    algo->epsilon = cfg->epsilon;
+    algo->epsilon_start = cfg->epsilon > 0.0f ? cfg->epsilon : 0.1f;
+    algo->epsilon_end = 0.02f;
+    algo->epsilon_decay_steps = 200000;
+    algo->epsilon = algo->epsilon_start;
     algo->batch_size = cfg->batch_size > 0 ? cfg->batch_size : 32;
     algo->train_every = cfg->train_every > 0 ? cfg->train_every : 1;
     algo->learning_starts = cfg->learning_starts > 0 ? cfg->learning_starts : 0;
@@ -388,21 +478,41 @@ tfrl_algo tfrl_algo_qrdqn_create(const tfrl_algo_config *cfg) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }
     int input_dim = algo->obs_type == TFRL_SPACE_BOX ? algo->obs_dim : algo->obs_n;
-    algo->q = linear_create(input_dim, algo->action_n * QRDQN_QUANTILES);
-    algo->target_q = linear_create(input_dim, algo->action_n * QRDQN_QUANTILES);
-    if (!algo->q || !algo->target_q) {
+    const int hidden = 128;
+    algo->fc1 = linear_create(input_dim, hidden);
+    algo->fc2 = linear_create(hidden, hidden);
+    algo->q = linear_create(hidden, algo->action_n * QRDQN_QUANTILES);
+    algo->target_fc1 = linear_create(input_dim, hidden);
+    algo->target_fc2 = linear_create(hidden, hidden);
+    algo->target_q = linear_create(hidden, algo->action_n * QRDQN_QUANTILES);
+    if (!algo->fc1 || !algo->fc2 || !algo->q ||
+        !algo->target_fc1 || !algo->target_fc2 || !algo->target_q) {
         qrdqn_destroy(algo);
         return out;
     }
+    init_linear(algo->fc1);
+    init_linear(algo->fc2);
     init_linear(algo->q);
+    init_linear(algo->target_fc1);
+    init_linear(algo->target_fc2);
     init_linear(algo->target_q);
+    copy_linear(algo->target_fc1, algo->fc1);
+    copy_linear(algo->target_fc2, algo->fc2);
     copy_linear(algo->target_q, algo->q);
     if (cfg->load_path) {
+        load_linear(algo->fc1, cfg->load_path, "fc1");
+        load_linear(algo->fc2, cfg->load_path, "fc2");
         load_linear(algo->q, cfg->load_path, "q");
+        copy_linear(algo->target_fc1, algo->fc1);
+        copy_linear(algo->target_fc2, algo->fc2);
         copy_linear(algo->target_q, algo->q);
     }
-    Tensor *params[2] = {algo->q->weight, algo->q->bias};
-    algo->opt = adam_create(params, 2, cfg->lr > 0.0f ? cfg->lr : 0.001f, 0.9f, 0.999f, 1e-8f, 0.0f);
+    Tensor *params[6] = {
+        algo->fc1->weight, algo->fc1->bias,
+        algo->fc2->weight, algo->fc2->bias,
+        algo->q->weight, algo->q->bias,
+    };
+    algo->opt = adam_create(params, 6, cfg->lr > 0.0f ? cfg->lr : 0.001f, 0.9f, 0.999f, 1e-8f, 0.0f);
     if (!algo->opt) {
         qrdqn_destroy(algo);
         return out;

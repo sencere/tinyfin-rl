@@ -10,7 +10,7 @@ typedef struct {
 
 static int env_is_arkanoid(const tfrl_env_spec *spec) {
     if (!spec || !spec->name) return 0;
-    return strncmp(spec->name, "arkanoid", 8) == 0;
+    return strncmp(spec->name, "arkanoid", 8) == 0 || strcmp(spec->name, "breakout") == 0;
 }
 
 static void arkanoid_extract_obs(const tfrl_env_spec *spec, const tfrl_obs *obs,

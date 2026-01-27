@@ -46,23 +46,24 @@ void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "\033[1;34mTINYFIN\033[0m\n\n");
     fprintf(stderr, "usage:\n");
     fprintf(stderr, "  %s list-envs\n", name);
-    fprintf(stderr, "  %s train --algo dqn|cnn_dqn|rnn_dqn|gru_dqn|lstm_dqn|rainbow|qrdqn|iql|iqn|ppo|cnn_ppo|cnn_ppo_fast|cnn_ppo_tiny|cnn_lstm_ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s train --algo random|dqn|rnn_dqn|gru_dqn|lstm_dqn|rainbow|qrdqn|iqn|iql|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|arkanoid_plan|tetris_plan [--env NAME] [--envs N] [--threads N] [--steps N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "           [--backend cpu|cuda|blas] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-env N] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "           [--profile] [--profile-json FILE]\n");
     fprintf(stderr, "           [--mp-actors N] [--mp-queue N] [--mp-sync-every N] [--mp-sync-path PATH]\n");
-    fprintf(stderr, "  %s eval --algo dqn|cnn_dqn|rnn_dqn|gru_dqn|lstm_dqn|rainbow|qrdqn|iql|iqn|ppo|cnn_ppo|cnn_ppo_fast|cnn_ppo_tiny|cnn_lstm_ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
+    fprintf(stderr, "  %s eval --algo random|dqn|rnn_dqn|gru_dqn|lstm_dqn|rainbow|qrdqn|iqn|iql|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|arkanoid_plan|tetris_plan [--env NAME] [--episodes N] [--seed N] [--gamma G] [--lr LR] [--epsilon E] [--deterministic]\n", name);
     fprintf(stderr, "          [--backend cpu|cuda|blas] [--device cpu|gpu] [--log-every N] [--render off|live] [--render-every N] [--render-fps N] [--trace-out FILE] [--agents N] [--share-policy]\n");
     fprintf(stderr, "  %s replay --trace-in FILE [--render-fps N] [--dump-meta-json]\n", name);
     fprintf(stderr, "algo params:\n");
     fprintf(stderr, "  --gamma G --lr LR (all)\n");
     fprintf(stderr, "  --clip-eps N --steps-per-batch N --epochs N --gae-lambda N --kl-target N (ppo)\n");
     fprintf(stderr, "  --entropy-coef N (a2c/impala/sac)\n");
-    fprintf(stderr, "  --replay-size N --batch-size N --per-alpha N --per-beta N (dqn)\n");
-    fprintf(stderr, "  --train-every N --learning-starts N --grad-steps N (dqn/rainbow/qrdqn/iqn/sac/td3)\n");
+    fprintf(stderr, "  --replay-size N --batch-size N --per-alpha N --per-beta N (dqn family)\n");
+    fprintf(stderr, "  --train-every N --learning-starts N --grad-steps N (dqn/rnn_dqn/gru_dqn/lstm_dqn/rainbow/qrdqn/iqn/iql/sac/td3)\n");
     fprintf(stderr, "  --c51-atoms N --c51-vmin V --c51-vmax V (rainbow)\n");
     fprintf(stderr, "  --iqn-quantiles N --iqn-tau-samples N (iqn)\n");
     fprintf(stderr, "  --actor-count N --learner-batch N --learner-batch-auto --queue-capacity N (impala split)\n");
     fprintf(stderr, "  --mcts-sims N --mcts-depth N (mcts)\n");
+    fprintf(stderr, "  sequential algos: rnn_dqn|gru_dqn|lstm_dqn\n");
     fprintf(stderr, "checkpoint params:\n");
     fprintf(stderr, "  --save PATH --load PATH\n");
 }

@@ -21,6 +21,7 @@
 #include "runner/runner.h"
 #include "core/algo_api.h"
 #include "core/env_api.h"
+#include "core/replay_buffer.h"
 #include "core/trace.h"
 #include "envs/viewer.h"
 #include "tinyfin/backend.h"
@@ -40,7 +41,8 @@ static int should_render(int step, int render_every) {
 
 static int use_arkanoid_plan_reward(const tfrl_runner_config *cfg, const tfrl_env_spec *spec) {
     if (!cfg || !cfg->algo || !spec || !spec->name) return 0;
-    return strcmp(cfg->algo, "arkanoid_plan") == 0 && strcmp(spec->name, "arkanoid") == 0;
+    if (strcmp(cfg->algo, "arkanoid_plan") != 0) return 0;
+    return strcmp(spec->name, "arkanoid") == 0 || strcmp(spec->name, "breakout") == 0;
 }
 
 static double arkanoid_plan_reward(const tfrl_env_spec *spec, const tfrl_obs *prev, const tfrl_obs *next) {
@@ -124,8 +126,9 @@ static void fill_algo_config(tfrl_algo_config *out,
                              int seed,
                              const char *load_path) {
     if (!out || !cfg || !spec) return;
+    const char *algo_name = cfg->algo ? cfg->algo : "dqn";
     *out = (tfrl_algo_config){
-        .name = cfg->algo ? cfg->algo : "dqn",
+        .name = algo_name,
         .obs_n = spec->obs_n,
         .action_n = spec->action_n,
         .obs_type = spec->obs_type,
@@ -169,6 +172,23 @@ static void fill_algo_config(tfrl_algo_config *out,
         .seed = seed,
         .deterministic = cfg->deterministic,
     };
+
+    // Breakout benefits from gentler value-based defaults. Only apply when the
+    // user did not explicitly set the parameter (negative/unset in CLI).
+    const int is_value_algo =
+        strcmp(algo_name, "dqn") == 0 || strcmp(algo_name, "rnn_dqn") == 0 ||
+        strcmp(algo_name, "gru_dqn") == 0 || strcmp(algo_name, "lstm_dqn") == 0 ||
+        strcmp(algo_name, "rainbow") == 0 || strcmp(algo_name, "qrdqn") == 0 ||
+        strcmp(algo_name, "iqn") == 0 || strcmp(algo_name, "iql") == 0;
+    if (is_value_algo) {
+        if (cfg->lr < 0.0f) out->lr = 0.001f;
+        if (cfg->epsilon < 0.0f && cfg->mode == TFRL_MODE_TRAIN) out->epsilon = 0.2f;
+        if (cfg->replay_size < 0) out->replay_size = 100000;
+        if (cfg->batch_size < 0) out->batch_size = 64;
+        if (cfg->learning_starts < 0) out->learning_starts = 10000;
+        if (cfg->train_every < 0) out->train_every = 4;
+        if (cfg->grad_steps < 0) out->grad_steps = 1;
+    }
 }
 
 typedef struct {
@@ -1880,6 +1900,9 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         double env_seconds = 0.0;
         double update_seconds = 0.0;
         double render_seconds = 0.0;
+        if (use_profile) {
+            tfrl_replay_profile_reset();
+        }
         double total_return_sum = 0.0;
         double last_return = 0.0;
         int total_episode_count = 0;
@@ -2057,12 +2080,20 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             double samples_per_sec = elapsed > 0.0 ? (double)total_env_steps / elapsed : 0.0;
             double other = elapsed - env_seconds - update_seconds - render_seconds;
             if (other < 0.0) other = 0.0;
+            tfrl_replay_profile_stats replay_stats = {0};
+            tfrl_replay_profile_get(&replay_stats);
+            double replay_avg_ms =
+                replay_stats.sample_calls > 0
+                    ? (replay_stats.sample_seconds * 1000.0) / (double)replay_stats.sample_calls
+                    : 0.0;
             if (cfg->profile || (cfg->profile_json && cfg->profile_json[0])) {
                 fprintf(stdout,
                         "profile: steps=%d envs=%d agents=%d elapsed=%.2fs sps=%.1f samples=%.1f "
-                        "env=%.2fs update=%.2fs render=%.2fs other=%.2fs\n",
+                        "env=%.2fs update=%.2fs render=%.2fs other=%.2fs replay_sample=%.2fs "
+                        "replay_calls=%lld replay_avg_ms=%.3f\n",
                         total_steps, env_count, agent_count, elapsed, steps_per_sec, samples_per_sec,
-                        env_seconds, update_seconds, render_seconds, other);
+                        env_seconds, update_seconds, render_seconds, other,
+                        replay_stats.sample_seconds, replay_stats.sample_calls, replay_avg_ms);
             }
             if (cfg->profile_json && cfg->profile_json[0]) {
                 profile_write_json(cfg, cfg->profile_json, total_steps, env_count, agent_count,

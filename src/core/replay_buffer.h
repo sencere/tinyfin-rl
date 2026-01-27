@@ -9,6 +9,11 @@ extern "C" {
 
 typedef struct tfrl_replay_buffer tfrl_replay_buffer;
 
+typedef struct {
+    double sample_seconds;
+    long long sample_calls;
+} tfrl_replay_profile_stats;
+
 tfrl_replay_buffer *tfrl_replay_create(int capacity, float alpha);
 void tfrl_replay_free(tfrl_replay_buffer *buf);
 void tfrl_replay_push(tfrl_replay_buffer *buf, const tfrl_transition *transition, float priority);
@@ -17,6 +22,8 @@ int tfrl_replay_sample_deterministic(tfrl_replay_buffer *buf, int batch, int *ou
 void tfrl_replay_update_priority(tfrl_replay_buffer *buf, int idx, float priority);
 const tfrl_transition *tfrl_replay_get(const tfrl_replay_buffer *buf, int idx);
 int tfrl_replay_size(const tfrl_replay_buffer *buf);
+void tfrl_replay_profile_get(tfrl_replay_profile_stats *out_stats);
+void tfrl_replay_profile_reset(void);
 
 #ifdef __cplusplus
 }

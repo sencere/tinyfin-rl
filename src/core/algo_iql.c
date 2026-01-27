@@ -8,6 +8,7 @@
 #include "tinyfin/optim.h"
 #include "tinyfin/ops_add.h"
 #include "tinyfin/ops_mul.h"
+#include "tinyfin/ops_activation.h"
 #include "tinyfin/ops_reduce.h"
 #include "tinyfin/ops_sub.h"
 #include "tinyfin/tensor.h"
@@ -18,6 +19,8 @@
 #define IQL_EXPECTILE 0.7f
 
 typedef struct {
+    Linear *fc1;
+    Linear *fc2;
     Linear *q;
     Linear *v;
     Adam *q_opt;
@@ -29,6 +32,9 @@ typedef struct {
     int action_n;
     float gamma;
     float epsilon;
+    float epsilon_start;
+    float epsilon_end;
+    int epsilon_decay_steps;
     int batch_size;
     int train_every;
     int learning_starts;
@@ -48,6 +54,8 @@ typedef struct {
     Tensor *q_sa;
     Tensor *weight_v;
 } tfrl_iql_algo;
+
+static void iql_destroy(void *ctx);
 
 static unsigned int iql_lcg_next(unsigned int *state) {
     *state = (*state * 1664525u) + 1013904223u;
@@ -155,6 +163,37 @@ static int load_linear(Linear *layer, const char *prefix, const char *tag) {
     return 1;
 }
 
+static Tensor *mlp_features(tfrl_iql_algo *algo, Tensor *x,
+                            Tensor **h1_out, Tensor **a1_out,
+                            Tensor **h2_out, Tensor **a2_out) {
+    if (!algo->fc1 || !algo->fc2) return NULL;
+    Tensor *h1 = linear_forward(algo->fc1, x);
+    if (!h1) return NULL;
+    Tensor *a1 = tensor_relu(h1);
+    if (!a1) {
+        tensor_free(h1);
+        return NULL;
+    }
+    Tensor *h2 = linear_forward(algo->fc2, a1);
+    if (!h2) {
+        tensor_free(a1);
+        tensor_free(h1);
+        return NULL;
+    }
+    Tensor *a2 = tensor_relu(h2);
+    if (!a2) {
+        tensor_free(h2);
+        tensor_free(a1);
+        tensor_free(h1);
+        return NULL;
+    }
+    if (h1_out) *h1_out = h1; else tensor_free(h1);
+    if (a1_out) *a1_out = a1; else tensor_free(a1);
+    if (h2_out) *h2_out = h2; else tensor_free(h2);
+    if (a2_out) *a2_out = a2; else tensor_free(a2);
+    return a2;
+}
+
 static tfrl_action iql_act(void *ctx, tfrl_obs obs) {
     tfrl_iql_algo *algo = (tfrl_iql_algo *)ctx;
     tfrl_action action = {0};
@@ -164,9 +203,23 @@ static tfrl_action iql_act(void *ctx, tfrl_obs obs) {
         return action;
     }
     Tensor *x = obs_to_tensor(algo, obs);
-    Tensor *q_values = linear_forward(algo->q, x);
+    Tensor *h1 = NULL, *a1 = NULL, *h2 = NULL, *feat = NULL;
+    feat = mlp_features(algo, x, &h1, &a1, &h2, &feat);
+    Tensor *q_values = feat ? linear_forward(algo->q, feat) : NULL;
+    if (!q_values) {
+        tensor_free(feat);
+        tensor_free(h2);
+        tensor_free(a1);
+        tensor_free(h1);
+        tensor_free(x);
+        return action;
+    }
     action.index = argmax_tensor(q_values);
     tensor_free(q_values);
+    tensor_free(feat);
+    tensor_free(h2);
+    tensor_free(a1);
+    tensor_free(h1);
     tensor_free(x);
     return action;
 }
@@ -192,7 +245,17 @@ static void iql_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_action
         }
     }
 
-    Tensor *q_values = linear_forward(algo->q, x);
+    Tensor *h1 = NULL, *a1 = NULL, *h2 = NULL, *feat = NULL;
+    feat = mlp_features(algo, x, &h1, &a1, &h2, &feat);
+    Tensor *q_values = feat ? linear_forward(algo->q, feat) : NULL;
+    if (!q_values) {
+        tensor_free(feat);
+        tensor_free(h2);
+        tensor_free(a1);
+        tensor_free(h1);
+        tensor_free(x);
+        return;
+    }
     for (int i = 0; i < count; i++) {
         float r = iql_rand_uniform(algo);
         if (r < algo->epsilon) {
@@ -211,6 +274,10 @@ static void iql_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_action
         out_actions[i].index = best;
     }
     tensor_free(q_values);
+    tensor_free(feat);
+    tensor_free(h2);
+    tensor_free(a1);
+    tensor_free(h1);
     tensor_free(x);
 }
 
@@ -219,6 +286,12 @@ static void iql_update(void *ctx, const tfrl_transition *transition) {
     if (!transition) return;
     algo->step_count++;
     int step_id = algo->step_count;
+
+    if (algo->epsilon_decay_steps > 0) {
+        float t = (float)step_id / (float)algo->epsilon_decay_steps;
+        if (t > 1.0f) t = 1.0f;
+        algo->epsilon = algo->epsilon_start + t * (algo->epsilon_end - algo->epsilon_start);
+    }
 
     if (!algo->replay) return;
     tfrl_replay_push(algo->replay, transition, 1.0f);
@@ -285,13 +358,26 @@ static void iql_update(void *ctx, const tfrl_transition *transition) {
             }
         }
 
-        Tensor *q_values = linear_forward(algo->q, algo->x);
-        Tensor *v_values = linear_forward(algo->v, algo->x);
-        Tensor *v_next = linear_forward(algo->v, algo->x_next);
+        Tensor *h1 = NULL, *a1 = NULL, *h2 = NULL, *feat_x = NULL;
+        feat_x = mlp_features(algo, algo->x, &h1, &a1, &h2, &feat_x);
+        Tensor *nh1 = NULL, *na1 = NULL, *nh2 = NULL, *feat_next = NULL;
+        feat_next = mlp_features(algo, algo->x_next, &nh1, &na1, &nh2, &feat_next);
+
+        Tensor *q_values = feat_x ? linear_forward(algo->q, feat_x) : NULL;
+        Tensor *v_values = feat_x ? linear_forward(algo->v, feat_x) : NULL;
+        Tensor *v_next = feat_next ? linear_forward(algo->v, feat_next) : NULL;
         if (!q_values || !v_values || !v_next) {
             tensor_free(q_values);
             tensor_free(v_values);
             tensor_free(v_next);
+            tensor_free(feat_next);
+            tensor_free(nh2);
+            tensor_free(na1);
+            tensor_free(nh1);
+            tensor_free(feat_x);
+            tensor_free(h2);
+            tensor_free(a1);
+            tensor_free(h1);
             continue;
         }
 
@@ -352,6 +438,14 @@ static void iql_update(void *ctx, const tfrl_transition *transition) {
         tensor_free(v_next);
         tensor_free(v_values);
         tensor_free(q_values);
+        tensor_free(feat_next);
+        tensor_free(nh2);
+        tensor_free(na1);
+        tensor_free(nh1);
+        tensor_free(feat_x);
+        tensor_free(h2);
+        tensor_free(a1);
+        tensor_free(h1);
     }
 
     }
@@ -370,18 +464,34 @@ static void iql_destroy(void *ctx) {
     tensor_free(algo->weight_mat);
     tensor_free(algo->q_sa);
     tensor_free(algo->weight_v);
-    tensor_free(algo->q->weight);
-    tensor_free(algo->q->bias);
-    free(algo->q);
-    tensor_free(algo->v->weight);
-    tensor_free(algo->v->bias);
-    free(algo->v);
+    if (algo->fc1) {
+        tensor_free(algo->fc1->weight);
+        tensor_free(algo->fc1->bias);
+        free(algo->fc1);
+    }
+    if (algo->fc2) {
+        tensor_free(algo->fc2->weight);
+        tensor_free(algo->fc2->bias);
+        free(algo->fc2);
+    }
+    if (algo->q) {
+        tensor_free(algo->q->weight);
+        tensor_free(algo->q->bias);
+        free(algo->q);
+    }
+    if (algo->v) {
+        tensor_free(algo->v->weight);
+        tensor_free(algo->v->bias);
+        free(algo->v);
+    }
     free(algo);
 }
 
 static void iql_save(void *ctx, const char *path) {
     tfrl_iql_algo *algo = (tfrl_iql_algo *)ctx;
     if (!algo) return;
+    save_linear(algo->fc1, path, "fc1");
+    save_linear(algo->fc2, path, "fc2");
     save_linear(algo->q, path, "q");
     save_linear(algo->v, path, "v");
 }
@@ -405,7 +515,10 @@ tfrl_algo tfrl_algo_iql_create(const tfrl_algo_config *cfg) {
     algo->obs_dim = cfg->obs_dims > 0 ? cfg->obs_dims : cfg->obs_n;
     algo->action_n = cfg->action_n;
     algo->gamma = cfg->gamma > 0.0f ? cfg->gamma : 0.99f;
-    algo->epsilon = cfg->epsilon;
+    algo->epsilon_start = cfg->epsilon > 0.0f ? cfg->epsilon : 0.1f;
+    algo->epsilon_end = 0.02f;
+    algo->epsilon_decay_steps = 200000;
+    algo->epsilon = algo->epsilon_start;
     algo->batch_size = cfg->batch_size > 0 ? cfg->batch_size : 64;
     algo->train_every = cfg->train_every > 0 ? cfg->train_every : 1;
     algo->learning_starts = cfg->learning_starts > 0 ? cfg->learning_starts : 0;
@@ -419,51 +532,40 @@ tfrl_algo tfrl_algo_iql_create(const tfrl_algo_config *cfg) {
         algo->replay = tfrl_replay_create(cfg->replay_size, algo->per_alpha);
     }
     int input_dim = algo->obs_type == TFRL_SPACE_BOX ? algo->obs_dim : algo->obs_n;
-    algo->q = linear_create(input_dim, algo->action_n);
-    algo->v = linear_create(input_dim, 1);
-    if (!algo->q || !algo->v) {
-        if (algo->q) {
-            tensor_free(algo->q->weight);
-            tensor_free(algo->q->bias);
-            free(algo->q);
-        }
-        if (algo->v) {
-            tensor_free(algo->v->weight);
-            tensor_free(algo->v->bias);
-            free(algo->v);
-        }
-        free(algo);
+    int hidden = 128;
+    algo->fc1 = linear_create(input_dim, hidden);
+    algo->fc2 = linear_create(hidden, hidden);
+    algo->q = linear_create(hidden, algo->action_n);
+    algo->v = linear_create(hidden, 1);
+    if (!algo->fc1 || !algo->fc2 || !algo->q || !algo->v) {
+        iql_destroy(algo);
         return out;
     }
+    init_linear(algo->fc1);
+    init_linear(algo->fc2);
     init_linear(algo->q);
     init_linear(algo->v);
     if (cfg->load_path) {
+        load_linear(algo->fc1, cfg->load_path, "fc1");
+        load_linear(algo->fc2, cfg->load_path, "fc2");
         load_linear(algo->q, cfg->load_path, "q");
         load_linear(algo->v, cfg->load_path, "v");
     }
-    Tensor *q_params[2] = {algo->q->weight, algo->q->bias};
-    Tensor *v_params[2] = {algo->v->weight, algo->v->bias};
+    Tensor *q_params[6] = {
+        algo->fc1->weight, algo->fc1->bias,
+        algo->fc2->weight, algo->fc2->bias,
+        algo->q->weight, algo->q->bias,
+    };
+    Tensor *v_params[6] = {
+        algo->fc1->weight, algo->fc1->bias,
+        algo->fc2->weight, algo->fc2->bias,
+        algo->v->weight, algo->v->bias,
+    };
     float lr = cfg->lr > 0.0f ? cfg->lr : 0.0003f;
-    algo->q_opt = adam_create(q_params, 2, lr, 0.9f, 0.999f, 1e-8f, 0.0f);
-    algo->v_opt = adam_create(v_params, 2, lr, 0.9f, 0.999f, 1e-8f, 0.0f);
+    algo->q_opt = adam_create(q_params, 6, lr, 0.9f, 0.999f, 1e-8f, 0.0f);
+    algo->v_opt = adam_create(v_params, 6, lr, 0.9f, 0.999f, 1e-8f, 0.0f);
     if (!algo->q_opt || !algo->v_opt) {
-        adam_free(algo->q_opt);
-        adam_free(algo->v_opt);
-        tensor_free(algo->q->weight);
-        tensor_free(algo->q->bias);
-        free(algo->q);
-        tensor_free(algo->v->weight);
-        tensor_free(algo->v->bias);
-        free(algo->v);
-        free(algo->idx);
-        free(algo->weights);
-        tensor_free(algo->x);
-        tensor_free(algo->x_next);
-        tensor_free(algo->target_mat);
-        tensor_free(algo->weight_mat);
-        tensor_free(algo->q_sa);
-        tensor_free(algo->weight_v);
-        free(algo);
+        iql_destroy(algo);
         return out;
     }
     if (algo->batch_size > 0 && algo->obs_dim > 0 && algo->action_n > 0) {

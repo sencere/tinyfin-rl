@@ -7,13 +7,14 @@
 #define BREAKOUT_PLAYER_MAX_LIFE 1
 #define BREAKOUT_LINES 4
 #define BREAKOUT_BRICKS_PER_LINE 8
-#define BREAKOUT_BRICK_OBS (BREAKOUT_LINES * BREAKOUT_BRICKS_PER_LINE)
-#define BREAKOUT_OBS_DIMS (12 + BREAKOUT_BRICK_OBS)
+#define BREAKOUT_BRICK_FEATURES (BREAKOUT_BRICKS_PER_LINE + 1)
+#define BREAKOUT_OBS_DIMS (12 + BREAKOUT_BRICK_FEATURES)
 #define BREAKOUT_BRICK_HEIGHT 28.0f
 #define BREAKOUT_BRICK_OFFSET_Y 40.0f
 #define BREAKOUT_PLAYER_SPEED 9.0f
 #define BREAKOUT_BALL_SPEED 4.0f
 #define BREAKOUT_BALL_RADIUS 6.0f
+#define BREAKOUT_ACTION_REPEAT 4
 
 static float clamp_float(float v, float lo, float hi) {
     if (v < lo) return lo;
@@ -128,8 +129,8 @@ static const tfrl_obs_field BREAKOUT_OBS_FIELDS[] = {
     {.name = "landing_x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
     {.name = "landing_t", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
     {.name = "score", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
-    {.name = "bricks", .len = BREAKOUT_BRICK_OBS, .dims = 2,
-     .shape = {BREAKOUT_LINES, BREAKOUT_BRICKS_PER_LINE}, .dtype = TFRL_DTYPE_FLOAT32},
+    {.name = "brick_counts", .len = BREAKOUT_BRICK_FEATURES, .dims = 1,
+     .shape = {BREAKOUT_BRICK_FEATURES, 0}, .dtype = TFRL_DTYPE_FLOAT32},
 };
 
 static const tfrl_obs_layout BREAKOUT_OBS_LAYOUT = {
@@ -251,15 +252,19 @@ static void breakout_fill_obs(const tfrl_env *env, tfrl_obs *obs) {
     float life[1] = {(float)env->arkanoid.life / (float)BREAKOUT_PLAYER_MAX_LIFE};
     float landing[1] = {landing_x / (float)ARKANOID_W};
     float landing_t_arr[1] = {landing_t};
-    float score[1] = {env->arkanoid.score / (float)BREAKOUT_BRICK_OBS};
+    float score[1] = {env->arkanoid.score / (float)(BREAKOUT_LINES * BREAKOUT_BRICKS_PER_LINE)};
 
-    float bricks[BREAKOUT_BRICK_OBS];
-    int brick_idx = 0;
-    for (int i = 0; i < BREAKOUT_LINES; i++) {
-        for (int j = 0; j < BREAKOUT_BRICKS_PER_LINE; j++) {
-            bricks[brick_idx++] = env->arkanoid.bricks[i][j] ? 1.0f : 0.0f;
+    // Compact brick features: remaining bricks per column (normalized) + total remaining.
+    float bricks[BREAKOUT_BRICK_FEATURES];
+    for (int j = 0; j < BREAKOUT_BRICKS_PER_LINE; j++) {
+        int count = 0;
+        for (int i = 0; i < BREAKOUT_LINES; i++) {
+            if (env->arkanoid.bricks[i][j]) count++;
         }
+        bricks[j] = (float)count / (float)BREAKOUT_LINES;
     }
+    bricks[BREAKOUT_BRICKS_PER_LINE] =
+        (float)env->arkanoid.bricks_left / (float)(BREAKOUT_LINES * BREAKOUT_BRICKS_PER_LINE);
 
     const float *fields[] = {
         player_x, ball_pos, ball_vel, bricks_left, ball_active,
@@ -348,10 +353,7 @@ tfrl_obs tfrl_env_reset_breakout_disc(tfrl_env *env, uint64_t seed) {
     return obs;
 }
 
-tfrl_step_result tfrl_env_step_breakout(tfrl_env *env, tfrl_action action) {
-    int act = action.index;
-    if (act < 0 || act > 2) act = 0;
-
+static tfrl_step_result breakout_step_frame(tfrl_env *env, int act) {
     if (act == 1) env->arkanoid.player_x -= BREAKOUT_PLAYER_SPEED;
     else if (act == 2) env->arkanoid.player_x += BREAKOUT_PLAYER_SPEED;
 
@@ -373,16 +375,16 @@ tfrl_step_result tfrl_env_step_breakout(tfrl_env *env, tfrl_action action) {
         env->arkanoid.ball_y += env->arkanoid.ball_vy;
     }
 
-    const float brick_reward = 1.5f;
-    const float paddle_reward = 0.02f;
-    const float life_penalty = -1.5f;
-    const float clear_bonus = 7.5f;
-    const float shaping_k = 0.10f;
+    const float brick_reward = 3.0f;
+    const float paddle_reward = 0.05f;
+    const float life_penalty = -2.0f;
+    const float clear_bonus = 15.0f;
+    const float shaping_k = 0.15f;
     const float phi_clamp = 0.15f;
-    const float move_penalty = -0.0002f;
-    const float step_penalty = -0.0002f;
-    const float progress_k = 0.01f;
-    const float center_k = 0.02f;
+    const float move_penalty = -0.00005f;
+    const float step_penalty = -0.00005f;
+    const float progress_k = 0.05f;
+    const float center_k = 0.01f;
     const float center_phi_clamp = 0.10f;
 
     double reward = 0.0;
@@ -547,9 +549,6 @@ tfrl_step_result tfrl_env_step_breakout(tfrl_env *env, tfrl_action action) {
              env->arkanoid.reward_vec[2] + env->arkanoid.reward_vec[3] +
              env->arkanoid.reward_vec[4];
 
-    env->steps += 1;
-    if (env->steps >= BREAKOUT_MAX_STEPS) done = 1;
-
     tfrl_step_result out = {0};
     breakout_fill_obs(env, &out.observation);
     out.reward = reward;
@@ -569,10 +568,40 @@ tfrl_step_result tfrl_env_step_breakout(tfrl_env *env, tfrl_action action) {
     return out;
 }
 
+tfrl_step_result tfrl_env_step_breakout(tfrl_env *env, tfrl_action action) {
+    int act = action.index;
+    if (act < 0 || act > 2) act = 0;
+
+    tfrl_step_result out = {0};
+    double reward_sum = 0.0;
+    int done = 0;
+
+    for (int i = 0; i < BREAKOUT_ACTION_REPEAT; i++) {
+        tfrl_step_result step = breakout_step_frame(env, act);
+        reward_sum += step.reward;
+
+        env->steps += 1;
+        if (env->steps >= BREAKOUT_MAX_STEPS) {
+            done = 1;
+        }
+
+        out = step;
+        if (step.done || done) {
+            done = 1;
+            break;
+        }
+    }
+
+    out.reward = reward_sum;
+    out.done = done;
+    env->last_reward = (float)out.reward;
+    env->last_done = out.done;
+    return out;
+}
+
 tfrl_step_result tfrl_env_step_breakout_disc(tfrl_env *env, tfrl_action action) {
     tfrl_step_result out = tfrl_env_step_breakout(env, action);
     out.observation.index = breakout_hash_obs(env);
     out.observation.data_len = 0;
     return out;
 }
-

@@ -29,6 +29,10 @@ typedef struct {
     int action_n;
     float gamma;
     float epsilon;
+    float epsilon_start;
+    float epsilon_end;
+    int epsilon_decay_steps;
+    int step_count;
     int deterministic;
     int seed;
     unsigned int rng_state;
@@ -208,6 +212,12 @@ static tfrl_action rnn_dqn_act_env(void *ctx, tfrl_env *env, tfrl_obs obs) {
     (void)env;
     tfrl_rnn_dqn_algo *algo = (tfrl_rnn_dqn_algo *)ctx;
     tfrl_action action = {0};
+    algo->step_count++;
+    if (algo->epsilon_decay_steps > 0) {
+        float t = (float)algo->step_count / (float)algo->epsilon_decay_steps;
+        if (t > 1.0f) t = 1.0f;
+        algo->epsilon = algo->epsilon_start + t * (algo->epsilon_end - algo->epsilon_start);
+    }
     float r = dqn_rand_uniform(algo);
     if (r < algo->epsilon) {
         action.index = dqn_rand_int(algo, algo->action_n);
@@ -336,7 +346,10 @@ tfrl_algo tfrl_algo_rnn_dqn_create(const tfrl_algo_config *cfg) {
     algo->obs_dim = cfg->obs_dims > 0 ? cfg->obs_dims : cfg->obs_n;
     algo->action_n = cfg->action_n;
     algo->gamma = cfg->gamma > 0.0f ? cfg->gamma : 0.99f;
-    algo->epsilon = cfg->epsilon;
+    algo->epsilon_start = cfg->epsilon > 0.0f ? cfg->epsilon : 0.1f;
+    algo->epsilon_end = 0.02f;
+    algo->epsilon_decay_steps = 200000;
+    algo->epsilon = algo->epsilon_start;
     algo->deterministic = cfg->deterministic;
     algo->seed = cfg->seed;
     algo->rng_state = (unsigned int)(cfg->seed > 0 ? cfg->seed : 1);

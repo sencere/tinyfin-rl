@@ -9,6 +9,7 @@
 #include "tinyfin/ops_add.h"
 #include "tinyfin/ops_log.h"
 #include "tinyfin/ops_mul.h"
+#include "tinyfin/ops_activation.h"
 #include "tinyfin/ops_reduce.h"
 #include "tinyfin/ops_reshape.h"
 #include "tinyfin/ops_slice.h"
@@ -23,8 +24,12 @@
 #define RAINBOW_TARGET_UPDATE 100
 
 typedef struct {
+    Linear *fc1;
+    Linear *fc2;
     Linear *adv;
     Linear *val;
+    Linear *target_fc1;
+    Linear *target_fc2;
     Linear *target_adv;
     Linear *target_val;
     Adam *opt;
@@ -40,6 +45,9 @@ typedef struct {
     float *support;
     float gamma;
     float epsilon;
+    float epsilon_start;
+    float epsilon_end;
+    int epsilon_decay_steps;
     int batch_size;
     int train_every;
     int learning_starts;
@@ -60,6 +68,17 @@ typedef struct {
     int *idx;
     float *weights;
 } tfrl_rainbow_algo;
+
+typedef struct {
+    Tensor *h1;
+    Tensor *a1;
+    Tensor *h2;
+    Tensor *a2;
+    Tensor *adv_logits;
+    Tensor *val_logits;
+    Tensor *adv_mean;
+    Tensor *adv_centered;
+} rainbow_forward_cache;
 
 static unsigned int rainbow_lcg_next(unsigned int *state) {
     *state = (*state * 1664525u) + 1013904223u;
@@ -164,20 +183,85 @@ static int load_linear(Linear *layer, const char *prefix, const char *tag) {
     return 1;
 }
 
-static Tensor *rainbow_forward_logits(tfrl_rainbow_algo *algo, Tensor *x, int target) {
+static Tensor *rainbow_features(tfrl_rainbow_algo *algo, Tensor *x, int target,
+                                Tensor **h1_out, Tensor **a1_out,
+                                Tensor **h2_out, Tensor **a2_out) {
+    Linear *fc1 = target ? algo->target_fc1 : algo->fc1;
+    Linear *fc2 = target ? algo->target_fc2 : algo->fc2;
+    if (!fc1 || !fc2) return NULL;
+
+    Tensor *h1 = linear_forward(fc1, x);
+    if (!h1) return NULL;
+    Tensor *a1 = tensor_relu(h1);
+    if (!a1) {
+        tensor_free(h1);
+        return NULL;
+    }
+    Tensor *h2 = linear_forward(fc2, a1);
+    if (!h2) {
+        tensor_free(a1);
+        tensor_free(h1);
+        return NULL;
+    }
+    Tensor *a2 = tensor_relu(h2);
+    if (!a2) {
+        tensor_free(h2);
+        tensor_free(a1);
+        tensor_free(h1);
+        return NULL;
+    }
+    if (h1_out) *h1_out = h1; else tensor_free(h1);
+    if (a1_out) *a1_out = a1; else tensor_free(a1);
+    if (h2_out) *h2_out = h2; else tensor_free(h2);
+    if (a2_out) *a2_out = a2; else tensor_free(a2);
+    return a2;
+}
+
+static void rainbow_cache_free(rainbow_forward_cache *cache) {
+    if (!cache) return;
+    tensor_free(cache->adv_centered);
+    tensor_free(cache->adv_mean);
+    tensor_free(cache->val_logits);
+    tensor_free(cache->adv_logits);
+    tensor_free(cache->a2);
+    tensor_free(cache->h2);
+    tensor_free(cache->a1);
+    tensor_free(cache->h1);
+    memset(cache, 0, sizeof(*cache));
+}
+
+static Tensor *rainbow_forward_logits(tfrl_rainbow_algo *algo, Tensor *x, int target, rainbow_forward_cache *cache) {
     Linear *adv = target ? algo->target_adv : algo->adv;
     Linear *val = target ? algo->target_val : algo->val;
-    Tensor *adv_logits = linear_forward(adv, x);
-    Tensor *val_logits = linear_forward(val, x);
+    Tensor *h1 = NULL, *a1 = NULL, *h2 = NULL, *feat = NULL;
+    feat = rainbow_features(algo, x, target, &h1, &a1, &h2, &feat);
+    Tensor *adv_logits = feat ? linear_forward(adv, feat) : NULL;
+    Tensor *val_logits = feat ? linear_forward(val, feat) : NULL;
     if (!adv_logits || !val_logits) {
         if (adv_logits) tensor_free(adv_logits);
         if (val_logits) tensor_free(val_logits);
+        if (!cache) {
+            tensor_free(feat);
+            tensor_free(h2);
+            tensor_free(a1);
+            tensor_free(h1);
+        } else {
+            rainbow_cache_free(cache);
+        }
         return NULL;
     }
     Tensor *adv_mean = tensor_mean(adv_logits);
     if (!adv_mean) {
         tensor_free(adv_logits);
         tensor_free(val_logits);
+        if (!cache) {
+            tensor_free(feat);
+            tensor_free(h2);
+            tensor_free(a1);
+            tensor_free(h1);
+        } else {
+            rainbow_cache_free(cache);
+        }
         return NULL;
     }
     Tensor *adv_centered = tensor_sub(adv_logits, adv_mean);
@@ -185,13 +269,36 @@ static Tensor *rainbow_forward_logits(tfrl_rainbow_algo *algo, Tensor *x, int ta
         tensor_free(adv_mean);
         tensor_free(adv_logits);
         tensor_free(val_logits);
+        if (!cache) {
+            tensor_free(feat);
+            tensor_free(h2);
+            tensor_free(a1);
+            tensor_free(h1);
+        } else {
+            rainbow_cache_free(cache);
+        }
         return NULL;
     }
     Tensor *q_logits = tensor_add(val_logits, adv_centered);
-    tensor_free(adv_centered);
-    tensor_free(adv_mean);
-    tensor_free(val_logits);
-    tensor_free(adv_logits);
+    if (!cache) {
+        tensor_free(adv_centered);
+        tensor_free(adv_mean);
+        tensor_free(val_logits);
+        tensor_free(adv_logits);
+        tensor_free(feat);
+        tensor_free(h2);
+        tensor_free(a1);
+        tensor_free(h1);
+    } else {
+        cache->h1 = h1;
+        cache->a1 = a1;
+        cache->h2 = h2;
+        cache->a2 = feat;
+        cache->adv_logits = adv_logits;
+        cache->val_logits = val_logits;
+        cache->adv_mean = adv_mean;
+        cache->adv_centered = adv_centered;
+    }
     return q_logits;
 }
 
@@ -271,7 +378,7 @@ static tfrl_action rainbow_act(void *ctx, tfrl_obs obs) {
     }
     Tensor *x = obs_to_tensor(algo, obs);
     if (x) {
-        Tensor *q_logits = rainbow_forward_logits(algo, x, 0);
+        Tensor *q_logits = rainbow_forward_logits(algo, x, 0, NULL);
         if (q_logits) {
             action.index = rainbow_argmax_action(q_logits, algo);
             tensor_free(q_logits);
@@ -293,7 +400,7 @@ static void rainbow_act_batch(void *ctx, const tfrl_obs *obs, int count, tfrl_ac
         }
         Tensor *x = obs_to_tensor(algo, obs[i]);
         if (x) {
-            Tensor *q_logits = rainbow_forward_logits(algo, x, 0);
+            Tensor *q_logits = rainbow_forward_logits(algo, x, 0, NULL);
             if (q_logits) {
                 out_actions[i].index = rainbow_argmax_action(q_logits, algo);
                 tensor_free(q_logits);
@@ -315,38 +422,12 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
                                  tfrl_obs next_obs,
                                  float gamma_n,
                                  float weight,
-                                 float *out_td) {
+    float *out_td) {
     Tensor *x = obs_to_tensor(algo, obs);
     if (!x) return;
-    Tensor *adv_logits = linear_forward(algo->adv, x);
-    Tensor *val_logits = linear_forward(algo->val, x);
-    if (!adv_logits || !val_logits) {
-        if (adv_logits) tensor_free(adv_logits);
-        if (val_logits) tensor_free(val_logits);
-        tensor_free(x);
-        return;
-    }
-    Tensor *adv_mean = tensor_mean(adv_logits);
-    if (!adv_mean) {
-        tensor_free(val_logits);
-        tensor_free(adv_logits);
-        tensor_free(x);
-        return;
-    }
-    Tensor *adv_centered = tensor_sub(adv_logits, adv_mean);
-    if (!adv_centered) {
-        tensor_free(adv_mean);
-        tensor_free(val_logits);
-        tensor_free(adv_logits);
-        tensor_free(x);
-        return;
-    }
-    Tensor *q_logits = tensor_add(val_logits, adv_centered);
+    rainbow_forward_cache cache = {0};
+    Tensor *q_logits = rainbow_forward_logits(algo, x, 0, &cache);
     if (!q_logits) {
-        tensor_free(adv_centered);
-        tensor_free(adv_mean);
-        tensor_free(val_logits);
-        tensor_free(adv_logits);
         tensor_free(x);
         return;
     }
@@ -376,22 +457,25 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
         Tensor *x_next = obs_to_tensor(algo, next_obs);
         if (!x_next) {
             tensor_free(q_logits);
+            rainbow_cache_free(&cache);
             tensor_free(x);
             return;
         }
-        Tensor *q_next_online = rainbow_forward_logits(algo, x_next, 0);
+        Tensor *q_next_online = rainbow_forward_logits(algo, x_next, 0, NULL);
         if (!q_next_online) {
             tensor_free(x_next);
             tensor_free(q_logits);
+            rainbow_cache_free(&cache);
             tensor_free(x);
             return;
         }
         int next_a = rainbow_argmax_action(q_next_online, algo);
-        Tensor *q_next_target = rainbow_forward_logits(algo, x_next, 1);
+        Tensor *q_next_target = rainbow_forward_logits(algo, x_next, 1, NULL);
         if (!q_next_target) {
             tensor_free(q_next_online);
             tensor_free(x_next);
             tensor_free(q_logits);
+            rainbow_cache_free(&cache);
             tensor_free(x);
             return;
         }
@@ -403,6 +487,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
             tensor_free(q_next_online);
             tensor_free(x_next);
             tensor_free(q_logits);
+            rainbow_cache_free(&cache);
             tensor_free(x);
             return;
         }
@@ -413,6 +498,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
             tensor_free(q_next_online);
             tensor_free(x_next);
             tensor_free(q_logits);
+            rainbow_cache_free(&cache);
             tensor_free(x);
             return;
         }
@@ -424,6 +510,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
             tensor_free(q_next_online);
             tensor_free(x_next);
             tensor_free(q_logits);
+            rainbow_cache_free(&cache);
             tensor_free(x);
             return;
         }
@@ -460,6 +547,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
     Tensor *q_view = tensor_reshape(q_logits, 2, shape);
     if (!q_view) {
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -467,6 +555,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
     if (!q_row) {
         tensor_free(q_view);
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -475,6 +564,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
         tensor_free(q_row);
         tensor_free(q_view);
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -484,6 +574,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
         tensor_free(q_row);
         tensor_free(q_view);
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -495,6 +586,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
         tensor_free(q_row);
         tensor_free(q_view);
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -509,6 +601,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
         tensor_free(q_row);
         tensor_free(q_view);
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -521,6 +614,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
         tensor_free(q_row);
         tensor_free(q_view);
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -534,6 +628,7 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
         tensor_free(q_row);
         tensor_free(q_view);
         tensor_free(q_logits);
+        rainbow_cache_free(&cache);
         tensor_free(x);
         return;
     }
@@ -588,14 +683,13 @@ static void rainbow_apply_update(tfrl_rainbow_algo *algo,
     tensor_free(q_row);
     tensor_free(q_view);
     tensor_free(q_logits);
-    tensor_free(adv_centered);
-    tensor_free(adv_mean);
-    tensor_free(val_logits);
-    tensor_free(adv_logits);
+    rainbow_cache_free(&cache);
     tensor_free(x);
 
     algo->update_count++;
     if (algo->update_count % RAINBOW_TARGET_UPDATE == 0) {
+        copy_linear(algo->target_fc1, algo->fc1);
+        copy_linear(algo->target_fc2, algo->fc2);
         copy_linear(algo->target_adv, algo->adv);
         copy_linear(algo->target_val, algo->val);
     }
@@ -606,6 +700,12 @@ static void rainbow_update(void *ctx, const tfrl_transition *transition) {
     if (!transition) return;
     algo->step_count++;
     int step_id = algo->step_count;
+
+    if (algo->epsilon_decay_steps > 0) {
+        float t = (float)step_id / (float)algo->epsilon_decay_steps;
+        if (t > 1.0f) t = 1.0f;
+        algo->epsilon = algo->epsilon_start + t * (algo->epsilon_end - algo->epsilon_start);
+    }
 
     if (algo->obs_type == TFRL_SPACE_BOX) {
         if (algo->replay) {
@@ -754,18 +854,46 @@ static void rainbow_destroy(void *ctx) {
     tfrl_replay_free(algo->replay);
     free(algo->idx);
     free(algo->weights);
-    tensor_free(algo->adv->weight);
-    tensor_free(algo->adv->bias);
-    tensor_free(algo->val->weight);
-    tensor_free(algo->val->bias);
-    tensor_free(algo->target_adv->weight);
-    tensor_free(algo->target_adv->bias);
-    tensor_free(algo->target_val->weight);
-    tensor_free(algo->target_val->bias);
-    free(algo->adv);
-    free(algo->val);
-    free(algo->target_adv);
-    free(algo->target_val);
+    if (algo->fc1) {
+        tensor_free(algo->fc1->weight);
+        tensor_free(algo->fc1->bias);
+        free(algo->fc1);
+    }
+    if (algo->fc2) {
+        tensor_free(algo->fc2->weight);
+        tensor_free(algo->fc2->bias);
+        free(algo->fc2);
+    }
+    if (algo->adv) {
+        tensor_free(algo->adv->weight);
+        tensor_free(algo->adv->bias);
+        free(algo->adv);
+    }
+    if (algo->val) {
+        tensor_free(algo->val->weight);
+        tensor_free(algo->val->bias);
+        free(algo->val);
+    }
+    if (algo->target_fc1) {
+        tensor_free(algo->target_fc1->weight);
+        tensor_free(algo->target_fc1->bias);
+        free(algo->target_fc1);
+    }
+    if (algo->target_fc2) {
+        tensor_free(algo->target_fc2->weight);
+        tensor_free(algo->target_fc2->bias);
+        free(algo->target_fc2);
+    }
+    if (algo->target_adv) {
+        tensor_free(algo->target_adv->weight);
+        tensor_free(algo->target_adv->bias);
+        free(algo->target_adv);
+    }
+    if (algo->target_val) {
+        tensor_free(algo->target_val->weight);
+        tensor_free(algo->target_val->bias);
+        free(algo->target_val);
+    }
     free(algo->support);
     free(algo);
 }
@@ -773,6 +901,8 @@ static void rainbow_destroy(void *ctx) {
 static void rainbow_save(void *ctx, const char *path) {
     tfrl_rainbow_algo *algo = (tfrl_rainbow_algo *)ctx;
     if (!algo) return;
+    save_linear(algo->fc1, path, "fc1");
+    save_linear(algo->fc2, path, "fc2");
     save_linear(algo->adv, path, "adv");
     save_linear(algo->val, path, "val");
 }
@@ -796,7 +926,10 @@ tfrl_algo tfrl_algo_rainbow_create(const tfrl_algo_config *cfg) {
     algo->obs_dim = cfg->obs_dims > 0 ? cfg->obs_dims : cfg->obs_n;
     algo->action_n = cfg->action_n;
     algo->gamma = cfg->gamma > 0.0f ? cfg->gamma : 0.99f;
-    algo->epsilon = cfg->epsilon;
+    algo->epsilon_start = cfg->epsilon > 0.0f ? cfg->epsilon : 0.1f;
+    algo->epsilon_end = 0.02f;
+    algo->epsilon_decay_steps = 200000;
+    algo->epsilon = algo->epsilon_start;
     algo->batch_size = cfg->batch_size > 0 ? cfg->batch_size : 32;
     algo->train_every = cfg->train_every > 0 ? cfg->train_every : 1;
     algo->learning_starts = cfg->learning_starts > 0 ? cfg->learning_starts : 0;
@@ -827,28 +960,49 @@ tfrl_algo tfrl_algo_rainbow_create(const tfrl_algo_config *cfg) {
         algo->support[i] = algo->v_min + (float)i * algo->delta_z;
     }
     int out_dim = algo->action_n * algo->atoms;
-    algo->adv = linear_create(input_dim, out_dim);
-    algo->val = linear_create(input_dim, out_dim);
-    algo->target_adv = linear_create(input_dim, out_dim);
-    algo->target_val = linear_create(input_dim, out_dim);
-    if (!algo->adv || !algo->val || !algo->target_adv || !algo->target_val) {
+    int hidden = 128;
+    algo->fc1 = linear_create(input_dim, hidden);
+    algo->fc2 = linear_create(hidden, hidden);
+    algo->adv = linear_create(hidden, out_dim);
+    algo->val = linear_create(hidden, out_dim);
+    algo->target_fc1 = linear_create(input_dim, hidden);
+    algo->target_fc2 = linear_create(hidden, hidden);
+    algo->target_adv = linear_create(hidden, out_dim);
+    algo->target_val = linear_create(hidden, out_dim);
+    if (!algo->fc1 || !algo->fc2 || !algo->adv || !algo->val ||
+        !algo->target_fc1 || !algo->target_fc2 || !algo->target_adv || !algo->target_val) {
         rainbow_destroy(algo);
         return out;
     }
+    init_linear(algo->fc1);
+    init_linear(algo->fc2);
     init_linear(algo->adv);
     init_linear(algo->val);
+    init_linear(algo->target_fc1);
+    init_linear(algo->target_fc2);
     init_linear(algo->target_adv);
     init_linear(algo->target_val);
+    copy_linear(algo->target_fc1, algo->fc1);
+    copy_linear(algo->target_fc2, algo->fc2);
     copy_linear(algo->target_adv, algo->adv);
     copy_linear(algo->target_val, algo->val);
     if (cfg->load_path) {
+        load_linear(algo->fc1, cfg->load_path, "fc1");
+        load_linear(algo->fc2, cfg->load_path, "fc2");
         load_linear(algo->adv, cfg->load_path, "adv");
         load_linear(algo->val, cfg->load_path, "val");
+        copy_linear(algo->target_fc1, algo->fc1);
+        copy_linear(algo->target_fc2, algo->fc2);
         copy_linear(algo->target_adv, algo->adv);
         copy_linear(algo->target_val, algo->val);
     }
-    Tensor *params[4] = {algo->adv->weight, algo->adv->bias, algo->val->weight, algo->val->bias};
-    algo->opt = adam_create(params, 4, cfg->lr > 0.0f ? cfg->lr : 0.001f, 0.9f, 0.999f, 1e-8f, 0.0f);
+    Tensor *params[8] = {
+        algo->fc1->weight, algo->fc1->bias,
+        algo->fc2->weight, algo->fc2->bias,
+        algo->adv->weight, algo->adv->bias,
+        algo->val->weight, algo->val->bias,
+    };
+    algo->opt = adam_create(params, 8, cfg->lr > 0.0f ? cfg->lr : 0.001f, 0.9f, 0.999f, 1e-8f, 0.0f);
     if (!algo->opt) {
         rainbow_destroy(algo);
         return out;
