@@ -36,6 +36,8 @@ ENV_SRCS = \
 	src/envs/tetris/render.c \
 	src/envs/arkanoid/arkanoid_env.c \
 	src/envs/arkanoid/render.c \
+	src/envs/breakout/breakout_env.c \
+	src/envs/breakout/render.c \
 	src/envs/pang/pang_env.c \
 	src/envs/pang/render.c \
 	src/envs/py_bridge/py_bridge.c \

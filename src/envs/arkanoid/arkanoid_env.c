@@ -55,12 +55,6 @@ static float arkanoid_predict_landing_t(const tfrl_env *env) {
     return tn;
 }
 
-enum {
-    ARKANOID_BRICK_OBS = ARKANOID_LINES * ARKANOID_BRICKS_PER_LINE,
-    ARKANOID_OBS_DIMS = 12 + ARKANOID_BRICK_OBS,
-    ARKANOID_DISC_OBS_N = 4096
-};
-
 static const tfrl_obs_field ARKANOID_OBS_FIELDS[] = {
     {.name = "player_x", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
     {.name = "ball_pos", .len = 2, .dims = 1, .shape = {2, 0}, .dtype = TFRL_DTYPE_FLOAT32},
