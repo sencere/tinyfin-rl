@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <langinfo.h>
+#include <locale.h>
 #include <sys/time.h>
 #include <time.h>
 #include <signal.h>
@@ -386,37 +388,88 @@ static void format_duration(double seconds, char *out, size_t out_len) {
     }
 }
 
+static void dashboard_print_banner(void) {
+    static const char *banner_unicode[] = {
+        "████████╗██╗███╗   ██╗██╗   ██╗███████╗██╗███╗   ██╗",
+        "╚══██╔══╝██║████╗  ██║╚██╗ ██╔╝██╔════╝██║████╗  ██║",
+        "   ██║   ██║██╔██╗ ██║ ╚████╔╝ █████╗  ██║██╔██╗ ██║",
+        "   ██║   ██║██║╚██╗██║  ╚██╔╝  ██╔══╝  ██║██║╚██╗██║",
+        "   ██║   ██║██║ ╚████║   ██║   ██║     ██║██║ ╚████║",
+        "   ╚═╝   ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝     ╚═╝╚═╝  ╚═══╝",
+        NULL
+    };
+    
+    // ASCII fallback must be strictly ASCII-only (no emoji)
+    static const char *banner_ascii[] = {
+        "                                                                        ",
+        " mmmmmmmm   mmmmmm   mmm   mm mmm    mmm mmmmmmmm   mmmmmm   mmm   mm ",
+        " \"\"\"##\"\"\"   \"\"##\"\"   ###   ##  ##m  m##  ##\"\"\"\"\"\"   \"\"##\"\"   ###   ## ",
+        "    ##        ##     ##\"#  ##   ##mm##   ##           ##     ##\"#  ## ",
+        "    ##        ##     ## ## ##    \"##\"    #######      ##     ## ## ## ",
+        "    ##        ##     ##  #m##     ##     ##           ##     ##  #m## ",
+        "    ##      mm##mm   ##   ###     ##     ##         mm##mm   ##   ### ",
+        "    \"\"      \"\"\"\"\"\"   \"\"   \"\"\"     \"\"     \"\"         \"\"\"\"\"\"   \"\"   \"\"\" ",
+        "                                                                        ",
+        "                                                                        "
+    };
+
+    // Initialize locale to ensure nl_langinfo works correctly
+    static int locale_initialized = 0;
+    if (!locale_initialized) {
+        setlocale(LC_ALL, "");
+        locale_initialized = 1;
+    }
+
+    int unicode_capable = 0;
+    const char *style = getenv("TFRL_BANNER");
+    if (style) {
+        if (strcmp(style, "unicode") == 0 || strcmp(style, "full") == 0) unicode_capable = 1;
+        if (strcmp(style, "ascii") == 0) unicode_capable = 0;
+    }
+
+    const char **banner = unicode_capable ? banner_unicode : banner_ascii;
+
+    // Only enable color when writing to a terminal and colors are not disabled
+    const char *color = isatty(fileno(stdout)) && !getenv("NO_COLOR") ? "\033[1;34m" : "";
+    const char *reset = color[0] ? "\033[0m" : "";
+    for (int i = 0; banner[i]; i++) {
+        fprintf(stdout, "%s%s%s\n", color, banner[i], reset);
+    }
+    fflush(stdout);
+    fputc('\n', stdout);
+}
+
 static void dashboard_box(const char *title, const char *const *lines, int line_count, int width, const char *color) {
     if (width < 20) width = 20;
     int inner = width - 2;
     if (inner < 1) inner = 1;
-    fprintf(stdout, "%s┌", color);
+    fprintf(stdout, "%s+", color);
     for (int i = 0; i < inner; i++) fputc('-', stdout);
-    fprintf(stdout, "┐\033[0m\n");
+    fprintf(stdout, "+\033[0m\n");
 
     char title_buf[256];
     snprintf(title_buf, sizeof(title_buf), " %s ", title ? title : "");
     int title_len = (int)strlen(title_buf);
     if (title_len > inner) title_len = inner;
 
-    fprintf(stdout, "%s│\033[0m", color);
+    fprintf(stdout, "%s|\033[0m", color);
     fwrite(title_buf, 1, (size_t)title_len, stdout);
     for (int i = title_len; i < inner; i++) fputc(' ', stdout);
-    fprintf(stdout, "%s│\033[0m\n", color);
+    fprintf(stdout, "%s|\033[0m\n", color);
 
     for (int li = 0; li < line_count; li++) {
         const char *line = lines[li] ? lines[li] : "";
         int len = (int)strlen(line);
         if (len > inner) len = inner;
-        fprintf(stdout, "%s│\033[0m", color);
+        fprintf(stdout, "%s|\033[0m", color);
         fwrite(line, 1, (size_t)len, stdout);
         for (int i = len; i < inner; i++) fputc(' ', stdout);
-        fprintf(stdout, "%s│\033[0m\n", color);
+        fprintf(stdout, "%s|\033[0m\n", color);
     }
 
-    fprintf(stdout, "%s└", color);
+    fprintf(stdout, "%s+", color);
     for (int i = 0; i < inner; i++) fputc('-', stdout);
-    fprintf(stdout, "┘\033[0m\n");
+    fprintf(stdout, "+\033[0m\n");
 }
 
 static void dashboard_render(const tfrl_runner_config *cfg,
@@ -454,8 +507,8 @@ static void dashboard_render(const tfrl_runner_config *cfg,
     format_duration(eta_seconds, eta_buf, sizeof(eta_buf));
 
     fprintf(stdout, "\033[H\033[J");
-    fprintf(stdout, "\033[1;34m[TINYFIN 🐟]\033[0m\n\n");
-    const char *border = "\033[38;5;34m";
+    dashboard_print_banner();
+    const char *border = "\033[38;5;39m";
     int term_width = dashboard_term_width();
     int box_width = term_width - 2;
     if (box_width > 120) box_width = 120;
@@ -539,14 +592,14 @@ static void dashboard_render(const tfrl_runner_config *cfg,
         char line_tm2[192];
         char line_tm3[192];
         snprintf(line_tm1, sizeof(line_tm1),
-                 "env %6.1fs (%3.0f%%)  update %6.1fs (%3.0f%%)",
+                 "env %7.2fs (%5.1f%%) | update %7.2fs (%5.1f%%)",
                  env_seconds, p_env * 100.0,
                  update_seconds, p_upd * 100.0);
         snprintf(line_tm2, sizeof(line_tm2),
-                 "render %6.1fs (%3.0f%%)  other %6.1fs (%3.0f%%)",
+                 "render %7.2fs (%5.1f%%) | other  %7.2fs (%5.1f%%)",
                  render_seconds, p_rnd * 100.0,
                  other, p_oth * 100.0);
-        snprintf(line_tm3, sizeof(line_tm3), "bottleneck: %s (%.0f%%)", bottleneck, bottleneck_pct * 100.0);
+        snprintf(line_tm3, sizeof(line_tm3), "bottleneck: %-6s (%5.1f%%)", bottleneck, bottleneck_pct * 100.0);
         const char *timer_lines[] = { line_tm1, line_tm2, line_tm3 };
         dashboard_box("Timers", timer_lines, 3, box_width, border);
     }
