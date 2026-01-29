@@ -2,7 +2,7 @@
 
 static const tfrl_env_spec LINEWORLD_SPEC = {
     .name = "lineworld",
-    .obs_n = LINEWORLD_W * LINEWORLD_H,
+    .obs_n = LINEWORLD_W,
     .action_n = 2,
     .max_steps = LINEWORLD_MAX_STEPS,
     .width = LINEWORLD_W,
@@ -11,25 +11,16 @@ static const tfrl_env_spec LINEWORLD_SPEC = {
     .action_type = TFRL_SPACE_DISCRETE,
     .obs_dims = 1,
     .action_dims = 1,
-    .obs_shape = {LINEWORLD_W * LINEWORLD_H, 0},
+    .obs_shape = {LINEWORLD_W, 0},
     .action_shape = {2, 0},
     .obs_dtype = TFRL_DTYPE_INT32,
     .action_dtype = TFRL_DTYPE_INT32,
     .obs_low = 0.0,
-    .obs_high = (double)(LINEWORLD_W * LINEWORLD_H - 1),
+    .obs_high = (double)(LINEWORLD_W - 1),
     .action_low = 0.0,
     .action_high = 1.0,
     .agent_count = 1,
     .obs_layout = NULL,
-};
-
-static const tfrl_obs_field LINEWORLD_CONT_OBS_FIELDS[] = {
-    {.name = "pos", .len = 1, .dims = 1, .shape = {1, 0}, .dtype = TFRL_DTYPE_FLOAT32},
-};
-
-static const tfrl_obs_layout LINEWORLD_CONT_OBS_LAYOUT = {
-    .field_count = (int)(sizeof(LINEWORLD_CONT_OBS_FIELDS) / sizeof(LINEWORLD_CONT_OBS_FIELDS[0])),
-    .fields = LINEWORLD_CONT_OBS_FIELDS,
 };
 
 static const tfrl_env_spec LINEWORLD_CONT_SPEC = {
@@ -52,12 +43,12 @@ static const tfrl_env_spec LINEWORLD_CONT_SPEC = {
     .action_low = 0.0,
     .action_high = 1.0,
     .agent_count = 1,
-    .obs_layout = &LINEWORLD_CONT_OBS_LAYOUT,
+    .obs_layout = NULL,
 };
 
 static const tfrl_env_spec LINEWORLD_DUO_SPEC = {
     .name = "lineworld_duo",
-    .obs_n = LINEWORLD_W * LINEWORLD_H,
+    .obs_n = LINEWORLD_W,
     .action_n = 2,
     .max_steps = LINEWORLD_MAX_STEPS,
     .width = LINEWORLD_W,
@@ -66,66 +57,58 @@ static const tfrl_env_spec LINEWORLD_DUO_SPEC = {
     .action_type = TFRL_SPACE_DISCRETE,
     .obs_dims = 1,
     .action_dims = 1,
-    .obs_shape = {LINEWORLD_W * LINEWORLD_H, 0},
+    .obs_shape = {LINEWORLD_W, 0},
     .action_shape = {2, 0},
     .obs_dtype = TFRL_DTYPE_INT32,
     .action_dtype = TFRL_DTYPE_INT32,
     .obs_low = 0.0,
-    .obs_high = (double)(LINEWORLD_W * LINEWORLD_H - 1),
+    .obs_high = (double)(LINEWORLD_W - 1),
     .action_low = 0.0,
     .action_high = 1.0,
     .agent_count = LINEWORLD_DUO_AGENTS,
     .obs_layout = NULL,
 };
 
-const tfrl_env_spec *tfrl_env_spec_lineworld(void) {
-    return &LINEWORLD_SPEC;
-}
+const tfrl_env_spec *tfrl_env_spec_lineworld(void) { return &LINEWORLD_SPEC; }
+const tfrl_env_spec *tfrl_env_spec_lineworld_cont(void) { return &LINEWORLD_CONT_SPEC; }
+const tfrl_env_spec *tfrl_env_spec_lineworld_duo(void) { return &LINEWORLD_DUO_SPEC; }
 
-const tfrl_env_spec *tfrl_env_spec_lineworld_cont(void) {
-    return &LINEWORLD_CONT_SPEC;
-}
-
-const tfrl_env_spec *tfrl_env_spec_lineworld_duo(void) {
-    return &LINEWORLD_DUO_SPEC;
+static void lineworld_reset_agents(tfrl_env *env) {
+    env->x = 0;
+    env->x2 = 0;
 }
 
 tfrl_obs tfrl_env_reset_lineworld(tfrl_env *env, uint64_t seed) {
     (void)seed;
     tfrl_env_reset_state(env);
+    lineworld_reset_agents(env);
     tfrl_obs obs = {0};
     obs.index = env->x;
     return obs;
 }
 
 tfrl_obs tfrl_env_reset_lineworld_cont(tfrl_env *env, uint64_t seed) {
-    (void)seed;
-    tfrl_env_reset_state(env);
-    tfrl_obs obs = {0};
-    float pos[1] = {(float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f};
-    const float *fields[] = {pos};
-    if (!tfrl_obs_flatten(&LINEWORLD_CONT_OBS_LAYOUT, fields, &obs)) {
-        obs.data_len = 0;
-    }
+    tfrl_obs obs = tfrl_env_reset_lineworld(env, seed);
+    obs.data_len = 1;
+    obs.data[0] = (float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f;
     return obs;
 }
 
 tfrl_obs tfrl_env_reset_lineworld_duo(tfrl_env *env, uint64_t seed) {
-    return tfrl_env_reset_lineworld(env, seed);
+    (void)seed;
+    tfrl_env_reset_state(env);
+    lineworld_reset_agents(env);
+    tfrl_obs obs = {0};
+    obs.index = env->x;
+    return obs;
 }
 
-tfrl_step_result tfrl_env_step_lineworld(tfrl_env *env, tfrl_action action) {
-    int act = action.index;
-    int nx = env->x;
-    if (act == 0) nx -= 1;
-    else if (act == 1) nx += 1;
-    if (nx >= 0 && nx < LINEWORLD_W) {
-        env->x = nx;
-    }
+static tfrl_step_result lineworld_step_single(tfrl_env *env, int act) {
+    int nx = env->x + (act == 1 ? 1 : -1);
+    if (nx >= 0 && nx < LINEWORLD_W) env->x = nx;
     env->steps += 1;
     int reached = (env->x == LINEWORLD_W - 1);
     int done = reached || (env->steps >= LINEWORLD_MAX_STEPS);
-
     tfrl_step_result out = {0};
     out.observation.index = env->x;
     out.reward = reached ? 1.0 : -0.01;
@@ -135,43 +118,25 @@ tfrl_step_result tfrl_env_step_lineworld(tfrl_env *env, tfrl_action action) {
     return out;
 }
 
-tfrl_step_result tfrl_env_step_lineworld_cont(tfrl_env *env, tfrl_action action) {
-    int act = action.index;
-    int nx = env->x;
-    if (act == 0) nx -= 1;
-    else if (act == 1) nx += 1;
-    if (nx >= 0 && nx < LINEWORLD_W) {
-        env->x = nx;
-    }
-    env->steps += 1;
-    int reached = (env->x == LINEWORLD_W - 1);
-    int done = reached || (env->steps >= LINEWORLD_MAX_STEPS);
+tfrl_step_result tfrl_env_step_lineworld(tfrl_env *env, tfrl_action action) {
+    int act = (action.index == 1) ? 1 : 0;
+    return lineworld_step_single(env, act);
+}
 
-    tfrl_step_result out = {0};
-    float pos[1] = {(float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f};
-    const float *fields[] = {pos};
-    if (!tfrl_obs_flatten(&LINEWORLD_CONT_OBS_LAYOUT, fields, &out.observation)) {
-        out.observation.data_len = 0;
-    }
-    out.reward = reached ? 1.0 : -0.01;
-    out.done = done;
-    env->last_reward = (float)out.reward;
-    env->last_done = out.done;
+tfrl_step_result tfrl_env_step_lineworld_cont(tfrl_env *env, tfrl_action action) {
+    tfrl_step_result out = tfrl_env_step_lineworld(env, action);
+    out.observation.data_len = 1;
+    out.observation.data[0] = (float)env->x / (float)(LINEWORLD_W - 1) * 2.0f - 1.0f;
     return out;
 }
 
 tfrl_step_result tfrl_env_step_lineworld_duo(tfrl_env *env, tfrl_action action) {
-    int act = action.index;
-    int nx = env->x;
-    if (act == 0) nx -= 1;
-    else if (act == 1) nx += 1;
-    if (nx >= 0 && nx < LINEWORLD_W) {
-        env->x = nx;
-    }
+    int act = (action.index == 1) ? 1 : 0;
+    int nx = env->x + (act == 1 ? 1 : -1);
+    if (nx >= 0 && nx < LINEWORLD_W) env->x = nx;
     env->steps += 1;
-    int reached = (env->x == LINEWORLD_W - 1) && (env->x2 == LINEWORLD_W - 1);
+    int reached = (env->x == LINEWORLD_W - 1 && env->x2 == LINEWORLD_W - 1);
     int done = reached || (env->steps >= LINEWORLD_MAX_STEPS);
-
     tfrl_step_result out = {0};
     out.observation.index = env->x;
     out.reward = reached ? 1.0 : -0.01;
@@ -183,27 +148,22 @@ tfrl_step_result tfrl_env_step_lineworld_duo(tfrl_env *env, tfrl_action action) 
 
 int tfrl_env_step_multi_lineworld_duo(tfrl_env *env, const tfrl_action *actions, int action_count,
                                      tfrl_step_result *out_steps, int max_agents) {
-    if (!env || !actions || !out_steps || max_agents < LINEWORLD_DUO_AGENTS || action_count < LINEWORLD_DUO_AGENTS) {
-        return 0;
-    }
-    int nx0 = env->x;
-    int nx1 = env->x2;
-    if (actions[0].index == 0) nx0 -= 1;
-    else if (actions[0].index == 1) nx0 += 1;
-    if (actions[1].index == 0) nx1 -= 1;
-    else if (actions[1].index == 1) nx1 += 1;
+    if (!env || !actions || !out_steps || max_agents < 2 || action_count < 2) return 0;
+    int a0 = (actions[0].index == 1) ? 1 : 0;
+    int a1 = (actions[1].index == 1) ? 1 : 0;
+    int nx0 = env->x + (a0 == 1 ? 1 : -1);
+    int nx1 = env->x2 + (a1 == 1 ? 1 : -1);
     if (nx0 >= 0 && nx0 < LINEWORLD_W) env->x = nx0;
     if (nx1 >= 0 && nx1 < LINEWORLD_W) env->x2 = nx1;
     env->steps += 1;
-
-    int reached = (env->x == LINEWORLD_W - 1) && (env->x2 == LINEWORLD_W - 1);
+    int reached = (env->x == LINEWORLD_W - 1 && env->x2 == LINEWORLD_W - 1);
     int done = reached || (env->steps >= LINEWORLD_MAX_STEPS);
-    for (int i = 0; i < LINEWORLD_DUO_AGENTS; i++) {
+    for (int i = 0; i < 2; i++) {
         out_steps[i].observation.index = (i == 0) ? env->x : env->x2;
         out_steps[i].reward = reached ? 1.0 : -0.01;
         out_steps[i].done = done;
     }
     env->last_reward = (float)out_steps[0].reward;
     env->last_done = done;
-    return LINEWORLD_DUO_AGENTS;
+    return 2;
 }

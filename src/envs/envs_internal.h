@@ -20,72 +20,91 @@ typedef enum {
     TFRL_ENV_FLOPPY = 9,
     TFRL_ENV_TETRIS = 10,
     TFRL_ENV_PANG = 11,
-    TFRL_ENV_ARKANOID = 12,
-    TFRL_ENV_BREAKOUT = 13
+    TFRL_ENV_BREAKOUT = 12,
+    TFRL_ENV_SEQ_PIXELS = 13
 } tfrl_env_kind;
 
-#define MAZE_W 10
-#define MAZE_H 10
+#define MAZE_W 8
+#define MAZE_H 8
 #define MAZE_MAX_STEPS 200
 
-#define LINEWORLD_W 7
+#define LINEWORLD_W 9
 #define LINEWORLD_H 1
-#define LINEWORLD_MAX_STEPS 50
+#define LINEWORLD_MAX_STEPS 60
 #define LINEWORLD_DUO_AGENTS 2
 
 #define POINT1D_W 21
 #define POINT1D_H 1
-#define POINT1D_MAX_STEPS 100
+#define POINT1D_MAX_STEPS 120
 #define POINT1D_STEP_SCALE 0.1f
 
-#define COIN_MAZE_W 10
-#define COIN_MAZE_H 10
+#define COIN_MAZE_W 8
+#define COIN_MAZE_H 8
 #define COIN_MAZE_MAX_STEPS 200
-#define COIN_MAZE_COINS 4
+#define COIN_MAZE_COINS 3
+#define COIN_MAZE_OBS_DIMS (COIN_MAZE_W * COIN_MAZE_H + 4)
 
-#define SNAKE_W 25
-#define SNAKE_H 14
-#define SNAKE_MAX_STEPS 500
-#define SNAKE_MAX_LEN 256
+#define SNAKE_W 20
+#define SNAKE_H 12
+#define SNAKE_MAX_STEPS 400
+#define SNAKE_MAX_LEN 128
+#define SNAKE_OBS_DIMS 14
 
-#define FLOPPY_W 800
-#define FLOPPY_H 450
-#define FLOPPY_MAX_STEPS 10000
-#define FLOPPY_MAX_TUBES 100
-#define FLOPPY_TUBES_WIDTH 80
-#define FLOPPY_RADIUS 24
+#define FLOPPY_W 320
+#define FLOPPY_H 240
+#define FLOPPY_MAX_STEPS 5000
+#define FLOPPY_MAX_TUBES 50
+#define FLOPPY_TUBES_WIDTH 30
+#define FLOPPY_RADIUS 10
 
 #define TETRIS_W 10
-#define TETRIS_H 20
-#define TETRIS_MAX_STEPS 2000
+#define TETRIS_H 18
+#define TETRIS_MAX_STEPS 1500
+#define TETRIS_OBS_DIMS 40
+#define TETRIS_DISC_OBS_N 4096
 
-#define ARKANOID_W 800
-#define ARKANOID_H 450
-#define ARKANOID_MAX_STEPS 10000
-#define ARKANOID_PLAYER_MAX_LIFE 5
-#define ARKANOID_LINES 5
-#define ARKANOID_BRICKS_PER_LINE 20
-#define ARKANOID_BRICK_HEIGHT 40.0f
-#define ARKANOID_BRICK_OFFSET_Y 50.0f
-#define ARKANOID_PLAYER_SPEED 5.0f
-#define ARKANOID_BALL_SPEED 5.0f
-#define ARKANOID_BALL_RADIUS 7.0f
-#define ARKANOID_PIXELS_W 28
-#define ARKANOID_PIXELS_H 28
-#define ARKANOID_PIXELS_PLANES 1
-#define ARKANOID_PIXELS_STACK 4
-#define ARKANOID_OBS_STACK 4
-#define ARKANOID_BRICK_OBS (ARKANOID_LINES * ARKANOID_BRICKS_PER_LINE)
-#define ARKANOID_OBS_DIMS (12 + ARKANOID_BRICK_OBS)
-#define ARKANOID_DISC_OBS_N 4096
-#define ARKANOID_PIXELS_FRAME (ARKANOID_PIXELS_W * ARKANOID_PIXELS_H)
-#define ARKANOID_PIXELS_FRAME_N (ARKANOID_PIXELS_FRAME * ARKANOID_PIXELS_PLANES)
-#define ARKANOID_PIXELS_N (ARKANOID_PIXELS_FRAME_N * ARKANOID_PIXELS_STACK)
-#define BREAKOUT_REWARD_DELAY 16
+#define BREAKOUT_W 800
+#define BREAKOUT_H 450
+#define BREAKOUT_MAX_STEPS 6000
+#define BREAKOUT_PLAYER_MAX_LIFE 1
+#define BREAKOUT_LINES 4
+#define BREAKOUT_BRICKS_PER_LINE 8
+#define BREAKOUT_BRICK_HEIGHT 28.0f
+#define BREAKOUT_BRICK_OFFSET_Y 40.0f
+#define BREAKOUT_PLAYER_SPEED_BASE 9.0f
+#define BREAKOUT_BALL_SPEED 4.0f
+#define BREAKOUT_BALL_RADIUS 6.0f
+#define BREAKOUT_ACTION_REPEAT 4
+#define BREAKOUT_BRICK_OBS (BREAKOUT_LINES * BREAKOUT_BRICKS_PER_LINE)
+#define BREAKOUT_CORE_OBS 9
+#define BREAKOUT_OBS_DIMS (BREAKOUT_CORE_OBS + BREAKOUT_BRICK_OBS)
+#define BREAKOUT_DISC_OBS_N 4096
 
-#define PANG_W 800
-#define PANG_H 450
-#define PANG_MAX_STEPS 2000
+#define BREAKOUT_ATARI_W 160
+#define BREAKOUT_ATARI_H 210
+#define BREAKOUT_ATARI_MAX_STEPS 9000
+#define BREAKOUT_ATARI_PLAYER_MAX_LIFE 1
+#define BREAKOUT_ATARI_LINES 6
+#define BREAKOUT_ATARI_BRICKS_PER_LINE 18
+#define BREAKOUT_ATARI_BRICK_HEIGHT 6.0f
+#define BREAKOUT_ATARI_BRICK_OFFSET_Y 24.0f
+#define BREAKOUT_ATARI_PLAYER_SPEED_BASE 6.0f
+#define BREAKOUT_ATARI_BALL_SPEED 2.5f
+#define BREAKOUT_ATARI_BALL_RADIUS 3.0f
+#define BREAKOUT_ATARI_ACTION_REPEAT 4
+#define BREAKOUT_ATARI_BRICK_OBS (BREAKOUT_ATARI_LINES * BREAKOUT_ATARI_BRICKS_PER_LINE)
+#define BREAKOUT_ATARI_CORE_OBS 9
+#define BREAKOUT_ATARI_OBS_DIMS (BREAKOUT_ATARI_CORE_OBS + BREAKOUT_ATARI_BRICK_OBS)
+#define BREAKOUT_ATARI_DISC_OBS_N 4096
+
+#define SEQ_PIXELS_W 20
+#define SEQ_PIXELS_H 1
+#define SEQ_PIXELS_MAX_STEPS 20
+#define SEQ_PIXELS_SEQ_LEN 10
+
+#define PANG_W 640
+#define PANG_H 360
+#define PANG_MAX_STEPS 1200
 #define PANG_MAX_BIG 2
 #define PANG_MAX_MED (PANG_MAX_BIG * 2)
 #define PANG_MAX_SMALL (PANG_MAX_BIG * 4)
@@ -136,22 +155,27 @@ typedef struct {
     float brick_w;
     float brick_h;
     int bricks_left;
-    int prev_bricks_left;
-    float prev_ball_x;
-    float prev_ball_y;
-    int prev_ball_valid;
-    float prev_phi;
-    float pred_x_ema;
-    float pred_t_ema;
-    int pred_ema_valid;
-    float vec_stack[ARKANOID_OBS_DIMS * ARKANOID_OBS_STACK];
-    float reward_vec[5];
-    float reward_delay[BREAKOUT_REWARD_DELAY];
-    int reward_delay_idx;
-    int reward_delay_filled;
-    float pixels_stack[ARKANOID_PIXELS_N];
-    int bricks[ARKANOID_LINES][ARKANOID_BRICKS_PER_LINE];
-} tfrl_arkanoid_state;
+    int bricks[BREAKOUT_LINES][BREAKOUT_BRICKS_PER_LINE];
+} tfrl_breakout_state;
+
+typedef struct {
+    float player_x;
+    float player_y;
+    float player_w;
+    float player_h;
+    int life;
+    float score;
+    float ball_x;
+    float ball_y;
+    float ball_vx;
+    float ball_vy;
+    float ball_radius;
+    int ball_active;
+    float brick_w;
+    float brick_h;
+    int bricks_left;
+    int bricks[BREAKOUT_ATARI_LINES][BREAKOUT_ATARI_BRICKS_PER_LINE];
+} tfrl_breakout_atari_state;
 
 typedef struct {
     float x;
@@ -213,8 +237,11 @@ struct tfrl_env {
     tfrl_snake_state snake;
     tfrl_floppy_state floppy;
     tfrl_tetris_state tetris;
-    tfrl_arkanoid_state arkanoid;
+    tfrl_breakout_state breakout;
+    tfrl_breakout_atari_state breakout_atari;
     tfrl_pang_state pang;
+    int seq_pixels[SEQ_PIXELS_SEQ_LEN];
+    int seq_cursor;
 };
 
 typedef struct tfrl_env tfrl_env;
@@ -257,11 +284,12 @@ const tfrl_env_spec *tfrl_env_spec_snake(void);
 const tfrl_env_spec *tfrl_env_spec_floppy(void);
 const tfrl_env_spec *tfrl_env_spec_tetris(void);
 const tfrl_env_spec *tfrl_env_spec_tetris_disc(void);
-const tfrl_env_spec *tfrl_env_spec_arkanoid_disc(void);
-const tfrl_env_spec *tfrl_env_spec_arkanoid(void);
 const tfrl_env_spec *tfrl_env_spec_breakout(void);
 const tfrl_env_spec *tfrl_env_spec_breakout_disc(void);
+const tfrl_env_spec *tfrl_env_spec_breakout_atari(void);
+const tfrl_env_spec *tfrl_env_spec_breakout_atari_disc(void);
 const tfrl_env_spec *tfrl_env_spec_pang(void);
+const tfrl_env_spec *tfrl_env_spec_seq_pixels(void);
 
 tfrl_obs tfrl_env_reset_maze(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_lineworld(tfrl_env *env, uint64_t seed);
@@ -274,11 +302,12 @@ tfrl_obs tfrl_env_reset_snake(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_floppy(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_tetris(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_tetris_disc(tfrl_env *env, uint64_t seed);
-tfrl_obs tfrl_env_reset_arkanoid_disc(tfrl_env *env, uint64_t seed);
-tfrl_obs tfrl_env_reset_arkanoid(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_breakout(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_breakout_disc(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_breakout_atari(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_breakout_atari_disc(tfrl_env *env, uint64_t seed);
 tfrl_obs tfrl_env_reset_pang(tfrl_env *env, uint64_t seed);
+tfrl_obs tfrl_env_reset_seq_pixels(tfrl_env *env, uint64_t seed);
 
 tfrl_step_result tfrl_env_step_maze(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_lineworld(tfrl_env *env, tfrl_action action);
@@ -291,11 +320,12 @@ tfrl_step_result tfrl_env_step_snake(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_floppy(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_tetris(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_tetris_disc(tfrl_env *env, tfrl_action action);
-tfrl_step_result tfrl_env_step_arkanoid_disc(tfrl_env *env, tfrl_action action);
-tfrl_step_result tfrl_env_step_arkanoid(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_breakout(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_breakout_disc(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_breakout_atari(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_breakout_atari_disc(tfrl_env *env, tfrl_action action);
 tfrl_step_result tfrl_env_step_pang(tfrl_env *env, tfrl_action action);
+tfrl_step_result tfrl_env_step_seq_pixels(tfrl_env *env, tfrl_action action);
 
 int tfrl_env_step_multi_lineworld_duo(tfrl_env *env, const tfrl_action *actions, int action_count,
                                      tfrl_step_result *out_steps, int max_agents);
@@ -313,21 +343,23 @@ size_t tfrl_env_render_bytes_lineworld(const tfrl_env *env);
 size_t tfrl_env_render_bytes_point1d(const tfrl_env *env);
 size_t tfrl_env_render_bytes_coin_maze(const tfrl_env *env);
 size_t tfrl_env_render_bytes_tetris(const tfrl_env *env);
-size_t tfrl_env_render_bytes_arkanoid(const tfrl_env *env);
 size_t tfrl_env_render_bytes_breakout(const tfrl_env *env);
+size_t tfrl_env_render_bytes_breakout_atari(const tfrl_env *env);
 size_t tfrl_env_render_bytes_snake(const tfrl_env *env);
 size_t tfrl_env_render_bytes_floppy(const tfrl_env *env);
 size_t tfrl_env_render_bytes_pang(const tfrl_env *env);
+size_t tfrl_env_render_bytes_seq_pixels(const tfrl_env *env);
 
 size_t tfrl_env_render_write_maze(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_lineworld(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_point1d(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_coin_maze(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_tetris(tfrl_env *env, void *buffer, size_t buffer_len);
-size_t tfrl_env_render_write_arkanoid(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_breakout(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_breakout_atari(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_snake(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_floppy(tfrl_env *env, void *buffer, size_t buffer_len);
 size_t tfrl_env_render_write_pang(tfrl_env *env, void *buffer, size_t buffer_len);
+size_t tfrl_env_render_write_seq_pixels(tfrl_env *env, void *buffer, size_t buffer_len);
 
 #endif

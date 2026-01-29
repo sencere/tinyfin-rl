@@ -31,6 +31,7 @@ set(SRC_ENVS
     src/envs/breakout/render.c
     src/envs/pang/pang_env.c
     src/envs/pang/render.c
+    src/envs/seq_pixels_env.c
     src/envs/py_bridge/py_bridge.c
     src/envs/render.c
     src/envs/render_grid.c

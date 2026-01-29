@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "algo_api.h"
@@ -8,6 +9,7 @@ static void apply_algo_defaults(tfrl_algo_config *cfg);
 static const int DEFAULTS_VERSION = 1;
 
 tfrl_algo tfrl_algo_random_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
 
 void tfrl_algo_config_apply_defaults(tfrl_algo_config *cfg) {
     apply_algo_defaults(cfg);
@@ -38,12 +40,46 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (cfg->iqn_tau_samples < 0) cfg->iqn_tau_samples = 32;
 }
 
+static int algo_is_policy_gradient(const char *name) {
+    if (!name) return 0;
+    return strcmp(name, "reinforce") == 0 ||
+           strcmp(name, "ppo") == 0 ||
+           strcmp(name, "a2c") == 0 ||
+           strcmp(name, "a3c") == 0 ||
+           strcmp(name, "trpo") == 0 ||
+           strcmp(name, "impala") == 0;
+}
+
+static int algo_is_value_based(const char *name) {
+    if (!name) return 0;
+    return strcmp(name, "dqn") == 0 ||
+           strcmp(name, "rnn_dqn") == 0 ||
+           strcmp(name, "gru_dqn") == 0 ||
+           strcmp(name, "lstm_dqn") == 0 ||
+           strcmp(name, "rainbow") == 0 ||
+           strcmp(name, "qrdqn") == 0 ||
+           strcmp(name, "iqn") == 0 ||
+           strcmp(name, "iql") == 0 ||
+           strcmp(name, "sac") == 0 ||
+           strcmp(name, "td3") == 0;
+}
+
 tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec) {
-    (void)spec;
     tfrl_algo out = {0};
     if (!cfg) return out;
-    // Minimal factory: use random policy for all algorithms.
-    out = tfrl_algo_random_create(cfg);
+    const char *dbg = getenv("TFRL_DEBUG_ALGO");
+    if (algo_is_policy_gradient(cfg->name)) {
+        out = tfrl_algo_reinforce_create(cfg);
+        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> reinforce\n", cfg->name);
+    } else if (algo_is_value_based(cfg->name) && spec && spec->obs_type == TFRL_SPACE_BOX) {
+        // Use policy gradient fallback for continuous/box observations.
+        out = tfrl_algo_reinforce_create(cfg);
+        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s(box) -> reinforce\n", cfg->name);
+    } else {
+        // Minimal factory: use fallback policy for all other algorithms.
+        out = tfrl_algo_random_create(cfg);
+        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> simple_q/random\n", cfg->name ? cfg->name : "(null)");
+    }
     if (!out.vtable) {
         fprintf(stderr, "algo_factory: failed to create algo '%s'\n", cfg->name ? cfg->name : "(null)");
     }

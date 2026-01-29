@@ -61,6 +61,7 @@ void tfrl_cli_print_usage(const char *name) {
     fprintf(stderr, "  --train-every N --learning-starts N --grad-steps N (dqn/rnn_dqn/gru_dqn/lstm_dqn/rainbow/qrdqn/iqn/iql/sac/td3)\n");
     fprintf(stderr, "  --c51-atoms N --c51-vmin V --c51-vmax V (rainbow)\n");
     fprintf(stderr, "  --iqn-quantiles N --iqn-tau-samples N (iqn)\n");
+    fprintf(stderr, "  --action-bias-right N (discrete policies)\n");
     fprintf(stderr, "  --actor-count N --learner-batch N --learner-batch-auto --queue-capacity N (impala split)\n");
     fprintf(stderr, "  --mcts-sims N --mcts-depth N (mcts)\n");
     fprintf(stderr, "  sequential algos: rnn_dqn|gru_dqn|lstm_dqn\n");
@@ -116,6 +117,7 @@ int tfrl_cli_parse(int argc, char **argv, tfrl_runner_config *out_cfg) {
     out_cfg->c51_vmax = arg_float(argc, argv, "--c51-vmax", -1.0e30f);
     out_cfg->iqn_quantiles = arg_int(argc, argv, "--iqn-quantiles", -1);
     out_cfg->iqn_tau_samples = arg_int(argc, argv, "--iqn-tau-samples", -1);
+    out_cfg->action_bias_right = arg_float(argc, argv, "--action-bias-right", 0.0f);
     out_cfg->log_every = arg_int(argc, argv, "--log-every", 100);
     out_cfg->render_every = arg_int(argc, argv, "--render-every", 1);
     out_cfg->render_fps = arg_int(argc, argv, "--render-fps", 60);

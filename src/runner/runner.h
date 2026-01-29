@@ -42,6 +42,7 @@ typedef struct {
     float c51_vmax;
     int iqn_quantiles;
     int iqn_tau_samples;
+    float action_bias_right;
     int log_every;
     int render;
     int render_every;

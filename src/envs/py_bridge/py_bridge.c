@@ -8,6 +8,22 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+static int py_read_line(FILE *fp, char *buf, size_t buf_len) {
+    if (!fp || !buf || buf_len == 0) return 0;
+    if (!fgets(buf, buf_len, fp)) return 0;
+    return 1;
+}
+
+static int py_parse_tokens(char *line, char **out, int max) {
+    int count = 0;
+    char *tok = strtok(line, " \t\r\n");
+    while (tok && count < max) {
+        out[count++] = tok;
+        tok = strtok(NULL, " \t\r\n");
+    }
+    return count;
+}
+
 int tfrl_env_py_connect(tfrl_env *env, const char *socket_path, const char *kind, const char *env_id, uint64_t seed) {
     if (!env || !socket_path || !kind || !env_id) return 0;
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -87,22 +103,6 @@ void tfrl_env_py_close(tfrl_env *env) {
     env->py_fd = -1;
 }
 
-static int py_read_line(FILE *fp, char *buf, size_t buf_len) {
-    if (!fp || !buf || buf_len == 0) return 0;
-    if (!fgets(buf, buf_len, fp)) return 0;
-    return 1;
-}
-
-static int py_parse_tokens(char *line, char **out, int max) {
-    int count = 0;
-    char *tok = strtok(line, " \t\r\n");
-    while (tok && count < max) {
-        out[count++] = tok;
-        tok = strtok(NULL, " \t\r\n");
-    }
-    return count;
-}
-
 int tfrl_env_py_reset_multi(tfrl_env *env, uint64_t seed, tfrl_obs *out_obs, int max_agents) {
     if (!env || !out_obs || max_agents <= 0) return 0;
     if (!env->py_fp) return 0;
@@ -145,8 +145,7 @@ int tfrl_env_py_step_multi(tfrl_env *env, const tfrl_action *actions, int action
             fprintf(env->py_fp, " %d", actions[i].index);
         } else {
             for (int d = 0; d < env->py_spec.action_dims; d++) {
-                float v = actions[i].data[d];
-                fprintf(env->py_fp, " %.6f", v);
+                fprintf(env->py_fp, " %.6f", actions[i].data[d]);
             }
         }
     }
@@ -177,12 +176,8 @@ int tfrl_env_py_step_multi(tfrl_env *env, const tfrl_action *actions, int action
             }
         }
     }
-    for (int i = 0; i < resp_agents; i++) {
-        out_steps[i].reward = atof(tokens[idx++]);
-    }
-    for (int i = 0; i < resp_agents; i++) {
-        out_steps[i].done = atoi(tokens[idx++]);
-    }
+    for (int i = 0; i < resp_agents; i++) out_steps[i].reward = atof(tokens[idx++]);
+    for (int i = 0; i < resp_agents; i++) out_steps[i].done = atoi(tokens[idx++]);
     env->last_reward = (float)out_steps[0].reward;
     env->last_done = out_steps[0].done;
     return resp_agents;

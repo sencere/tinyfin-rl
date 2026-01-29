@@ -1,44 +1,44 @@
-#include "envs/envs_internal.h"
 #include "envs/render_grid.h"
+#include "envs/envs_internal.h"
+
+static int coin_maze_is_wall_render(int x, int y) {
+    if (x < 0 || y < 0 || x >= COIN_MAZE_W || y >= COIN_MAZE_H) return 1;
+    if (x == 0 || y == 0 || x == COIN_MAZE_W - 1 || y == COIN_MAZE_H - 1) return 1;
+    return ((x + y) % 5) == 2;
+}
 
 size_t tfrl_env_render_bytes_coin_maze(const tfrl_env *env) {
-    if (!env) return 0;
-    int entity_count = 0;
-    for (int i = 0; i < COIN_MAZE_COINS; i++) {
-        if (!env->coins_collected[i]) entity_count++;
-    }
-    if (env->kind == TFRL_ENV_COIN_MAZE_DUO) {
-        entity_count += 1;
-    }
-    return tfrl_render_grid_bytes(COIN_MAZE_W, COIN_MAZE_H, entity_count);
+    (void)env;
+    return tfrl_render_grid_bytes(COIN_MAZE_W, COIN_MAZE_H, 0);
 }
 
 size_t tfrl_env_render_write_coin_maze(tfrl_env *env, void *buffer, size_t buffer_len) {
-    if (!env || !buffer) return 0;
     unsigned char cells[COIN_MAZE_W * COIN_MAZE_H];
-    for (int i = 0; i < COIN_MAZE_W * COIN_MAZE_H; i++) {
-        cells[i] = 0;
+    for (int y = 0; y < COIN_MAZE_H; y++) {
+        for (int x = 0; x < COIN_MAZE_W; x++) {
+            unsigned char v = coin_maze_is_wall_render(x, y) ? 1 : 0;
+            for (int i = 0; i < COIN_MAZE_COINS; i++) {
+                if (!env->coins_collected[i] &&
+                    env->coins_x[i] == x && env->coins_y[i] == y) {
+                    v = 2;
+                    break;
+                }
+            }
+            cells[y * COIN_MAZE_W + x] = v;
+        }
     }
-    tfrl_entity_snapshot entities[COIN_MAZE_COINS + 1];
-    int entity_count = 0;
+    uint32_t goal_x = (uint32_t)(COIN_MAZE_W - 2);
+    uint32_t goal_y = (uint32_t)(COIN_MAZE_H - 2);
     for (int i = 0; i < COIN_MAZE_COINS; i++) {
-        if (env->coins_collected[i]) continue;
-        entities[entity_count].type = 1;
-        entities[entity_count].x = (float)env->coins_x[i];
-        entities[entity_count].y = (float)env->coins_y[i];
-        entities[entity_count].value = 1.0f;
-        entity_count++;
-    }
-    if (env->kind == TFRL_ENV_COIN_MAZE_DUO) {
-        entities[entity_count].type = 2;
-        entities[entity_count].x = (float)env->x2;
-        entities[entity_count].y = (float)env->y2;
-        entities[entity_count].value = 1.0f;
-        entity_count++;
+        if (!env->coins_collected[i]) {
+            goal_x = (uint32_t)env->coins_x[i];
+            goal_y = (uint32_t)env->coins_y[i];
+            break;
+        }
     }
     return tfrl_render_grid_write(env, buffer, buffer_len, COIN_MAZE_W, COIN_MAZE_H,
                                   (uint32_t)env->x, (uint32_t)env->y,
-                                  (uint32_t)(COIN_MAZE_W - 1), (uint32_t)(COIN_MAZE_H - 1),
+                                  goal_x, goal_y,
                                   (uint32_t)COIN_MAZE_MAX_STEPS, (uint32_t)env->kind,
-                                  cells, entity_count, entity_count ? entities : NULL);
+                                  cells, 0, NULL);
 }

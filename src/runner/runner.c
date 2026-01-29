@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <langinfo.h>
 #include <locale.h>
 #include <sys/time.h>
@@ -27,9 +28,17 @@
 #include "tinyfin/backend.h"
 #include "tinyfin/tensor.h"
 
+// static void seed_rng(int seed) {
+//     if (seed <= 0) {
+//         seed = (int)time(NULL);
+//     }
+//     srand((unsigned)seed);
+// }
+
+
 static void seed_rng(int seed) {
     if (seed <= 0) {
-        seed = (int)time(NULL);
+        seed = (int)time(NULL) ^ (int)getpid();
     }
     srand((unsigned)seed);
 }
@@ -37,6 +46,47 @@ static void seed_rng(int seed) {
 static int should_render(int step, int render_every) {
     if (render_every <= 1) return 1;
     return (step % render_every) == 0;
+}
+
+static int obs_has_nan(const tfrl_obs *obs) {
+    if (!obs || obs->data_len <= 0) return 0;
+    for (int i = 0; i < obs->data_len; i++) {
+        if (!isfinite(obs->data[i])) return 1;
+    }
+    return 0;
+}
+
+static void debug_validate_obs(const tfrl_env_spec *spec, const tfrl_obs *obs, const char *tag) {
+    if (!spec || !obs) return;
+    if (spec->obs_type == TFRL_SPACE_DISCRETE) {
+        if (obs->index < 0 || obs->index >= spec->obs_n) {
+            fprintf(stderr, "[diag] %s obs index out of range: %d (obs_n=%d)\n",
+                    tag, obs->index, spec->obs_n);
+        }
+        return;
+    }
+    if (obs->data_len != spec->obs_dims) {
+        fprintf(stderr, "[diag] %s obs_len mismatch: %d (expected %d)\n",
+                tag, obs->data_len, spec->obs_dims);
+    }
+    if (obs_has_nan(obs)) {
+        fprintf(stderr, "[diag] %s obs has NaN/Inf\n", tag);
+    }
+}
+
+static void debug_validate_action(const tfrl_env_spec *spec, const tfrl_action *action, const char *tag) {
+    if (!spec || !action) return;
+    if (spec->action_type == TFRL_SPACE_DISCRETE) {
+        if (action->index < 0 || action->index >= spec->action_n) {
+            fprintf(stderr, "[diag] %s action index out of range: %d (action_n=%d)\n",
+                    tag, action->index, spec->action_n);
+        }
+        return;
+    }
+    if (action->data_len != spec->action_dims) {
+        fprintf(stderr, "[diag] %s action_len mismatch: %d (expected %d)\n",
+                tag, action->data_len, spec->action_dims);
+    }
 }
 
 static int action_multidiscrete_bins(const tfrl_env_spec *spec, int *out_b0, int *out_b1) {
@@ -85,7 +135,7 @@ static tfrl_action action_decode_for_env(tfrl_env *env, tfrl_action action) {
 static int use_arkanoid_plan_reward(const tfrl_runner_config *cfg, const tfrl_env_spec *spec) {
     if (!cfg || !cfg->algo || !spec || !spec->name) return 0;
     if (strcmp(cfg->algo, "arkanoid_plan") != 0) return 0;
-    return strcmp(spec->name, "arkanoid") == 0 || strcmp(spec->name, "breakout") == 0;
+    return strcmp(spec->name, "breakout") == 0;
 }
 
 static double arkanoid_plan_reward(const tfrl_env_spec *spec, const tfrl_obs *prev, const tfrl_obs *next) {
@@ -93,9 +143,9 @@ static double arkanoid_plan_reward(const tfrl_env_spec *spec, const tfrl_obs *pr
     float next_bricks = 0.0f;
     if (spec && spec->obs_layout && prev && next) {
         int len = 0;
-        const float *field = tfrl_obs_unflatten_field(spec->obs_layout, prev, 3, &len);
+        const float *field = tfrl_obs_unflatten_field(spec->obs_layout, prev, 6, &len);
         if (field && len >= 1) prev_bricks = field[0];
-        field = tfrl_obs_unflatten_field(spec->obs_layout, next, 3, &len);
+        field = tfrl_obs_unflatten_field(spec->obs_layout, next, 6, &len);
         if (field && len >= 1) next_bricks = field[0];
     } else if (prev && next) {
         if (prev->data_len >= 6) prev_bricks = prev->data[5];
@@ -141,11 +191,7 @@ static void configure_tinyfin(const tfrl_runner_config *cfg) {
         int device = DEVICE_CPU;
         if (!parse_device_name(cfg->device, &device)) {
             fprintf(stderr, "unknown device '%s' (expected cpu|gpu)\n", cfg->device);
-        } else {
-            tensor_set_default_device(device);
         }
-    } else if (cfg->backend && strcmp(cfg->backend, "cuda") == 0) {
-        tensor_set_default_device(DEVICE_GPU);
     }
 }
 
@@ -210,6 +256,7 @@ static void fill_algo_config(tfrl_algo_config *out,
         .c51_vmax = cfg->c51_vmax,
         .iqn_quantiles = cfg->iqn_quantiles,
         .iqn_tau_samples = cfg->iqn_tau_samples,
+        .action_bias_right = cfg->action_bias_right,
         .save_path = cfg->save_path,
         .load_path = load_path,
         .env_name = cfg->env_name,
@@ -1887,8 +1934,13 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         tfrl_algo_diagnostics(&algos[0], diag_meta, sizeof(diag_meta));
     }
     append_meta_kv(diag_meta, sizeof(diag_meta), "backend", backend_name());
-    append_meta_kv(diag_meta, sizeof(diag_meta), "device",
-                   tensor_get_default_device() == DEVICE_GPU ? "gpu" : "cpu");
+    const char *device_name = "cpu";
+    if (cfg->device && cfg->device[0]) {
+        device_name = cfg->device;
+    } else if (cfg->backend && strcmp(cfg->backend, "cuda") == 0) {
+        device_name = "gpu";
+    }
+    append_meta_kv(diag_meta, sizeof(diag_meta), "device", device_name);
     build_trace_meta(trace_meta, sizeof(trace_meta), &algo_cfg, agent_count, cfg->share_policy ? 1 : 0, diag_meta);
     if (cfg->trace_out) {
         writer = tfrl_trace_writer_open_with_meta(cfg->trace_out, trace_meta);
@@ -2044,6 +2096,11 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
         double total_return_sum = 0.0;
         double last_return = 0.0;
         int total_episode_count = 0;
+        const int diag_enabled = getenv("TFRL_DEBUG_DIAG") != NULL;
+        double diag_reward_sum = 0.0;
+        double diag_reward_min = 0.0;
+        double diag_reward_max = 0.0;
+        int diag_reward_count = 0;
         if (use_dashboard) {
             fprintf(stdout, "\033[?25l");
             fflush(stdout);
@@ -2073,6 +2130,9 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
             }
         }
         for (int step = 0; step < total_steps; step++) {
+            if (diag_enabled && step == 0 && total_agents > 0) {
+                debug_validate_obs(spec, &obs[0], "reset");
+            }
             if (agent_count == 1 || cfg->share_policy) {
                 if (algos[0].vtable && algos[0].vtable->act_env) {
                     for (int i = 0; i < env_count; i++) {
@@ -2099,6 +2159,9 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                     }
                 }
             }
+            if (diag_enabled && total_agents > 0) {
+                debug_validate_action(spec, &actions[0], "action");
+            }
             {
                 double t0 = use_profile ? now_seconds() : 0.0;
                 if (agent_count == 1) {
@@ -2122,6 +2185,17 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                     for (int a = 0; a < agent_count; a++) {
                         int idx = i * agent_count + a;
                         double reward = steps[idx].reward;
+                        if (diag_enabled) {
+                            if (diag_reward_count == 0) {
+                                diag_reward_min = reward;
+                                diag_reward_max = reward;
+                            } else {
+                                if (reward < diag_reward_min) diag_reward_min = reward;
+                                if (reward > diag_reward_max) diag_reward_max = reward;
+                            }
+                            diag_reward_sum += reward;
+                            diag_reward_count += 1;
+                        }
                         if (shape_arkanoid_reward) {
                             reward = arkanoid_plan_reward(spec, &obs[idx], &steps[idx].observation);
                         }
@@ -2131,12 +2205,16 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                             .reward = reward,
                             .next_obs = steps[idx].observation,
                             .done = steps[idx].done,
+                            .policy_version = i,
                         };
                         int algo_idx = cfg->share_policy ? 0 : a;
                         algos[algo_idx].vtable->update(algos[algo_idx].ctx, &transition);
                         update_calls++;
                         obs[idx] = steps[idx].observation;
                         episode_returns[idx] += reward;
+                        if (diag_enabled && idx == 0) {
+                            debug_validate_obs(spec, &obs[idx], "step");
+                        }
                     }
                 }
                 if (use_profile) update_seconds += now_seconds() - t0;
@@ -2203,6 +2281,15 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                                  total_episode_count, total_return_sum, last_return, elapsed,
                                  env_seconds, update_seconds, render_seconds);
             }
+            if (diag_enabled && log_every > 0 && (step % log_every) == 0 && diag_reward_count > 0) {
+                double avg = diag_reward_sum / (double)diag_reward_count;
+                fprintf(stderr, "[diag] step=%d reward avg=%.4f min=%.4f max=%.4f\n",
+                        step, avg, diag_reward_min, diag_reward_max);
+                diag_reward_sum = 0.0;
+                diag_reward_min = 0.0;
+                diag_reward_max = 0.0;
+                diag_reward_count = 0;
+            }
         }
         if (use_dashboard) {
             double elapsed = now_seconds() - start_time;
@@ -2248,7 +2335,8 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
                 count += episode_counts[i] > 0 ? episode_counts[i] : 0;
             }
             if (count > 0) {
-                fprintf(stdout, "avg_return=%.4f episodes=%d\n", sum / (double)count, count);
+                double avg = total_return_sum / (double)total_episode_count;
+                fprintf(stdout, "avg_return=%.4f episodes=%d\n", avg, count);
             }
         }
         free(obs_batch);
