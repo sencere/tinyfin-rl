@@ -234,6 +234,7 @@ struct tfrl_env {
     tfrl_env_spec py_spec;
     int py_agent_count;
     char py_name[128];
+    void *module_handle;
     tfrl_snake_state snake;
     tfrl_floppy_state floppy;
     tfrl_tetris_state tetris;

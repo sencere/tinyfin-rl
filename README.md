@@ -19,9 +19,11 @@ autograd. Rendering is optional and never drives simulation.
 ## What’s In Here
 
 - `src/` single-binary implementation (`tinyfin-rl`)
+- `include/tfrl/` public v2 C API headers
+- `envs/*/env.toml` v2 environment manifests for core envs
 - `tinyfin/` tensor + autograd backend
 - `raylib-src/` optional viewer dependency
-- `build/libtfrl_env.so` shared env library for Python bindings
+- `build/libtfrl_env.so` combined shared env library for Python bindings
 - `architecture.md` and `roadmap.md` for direction
 
 ## Build
@@ -39,18 +41,17 @@ Perf build (aggressive local flags):
 make PERF=1
 ```
 
-Convenience build scripts:
+Recommended build scripts:
 
 ```bash
-./scripts/build_tinyfin.sh
-./scripts/build_tinyfin_rl.sh
+./scripts/build.sh
+./scripts/build.sh --backend cuda --with-raylib
 ```
 
 With CUDA:
 
 ```bash
-ENABLE_CUDA=1 CLEAN=1 ./scripts/build_tinyfin.sh
-ENABLE_CUDA=1 CLEAN=1 ./scripts/build_tinyfin_rl.sh
+./scripts/build.sh --backend cuda --clean
 ```
 
 Build only the shared env library:
@@ -74,37 +75,27 @@ Select environment:
 ./build/tinyfin-rl train --algo dqn --env lineworld --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 500
 ./build/tinyfin-rl train --algo dqn --env coin_maze_duo --steps 500 --share-policy
-./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 500
+./build/tinyfin-rl train --algo ppo --env lineworld_cont --steps 500
 ./build/tinyfin-rl train --algo random --env point1d --steps 500
 ./build/tinyfin-rl train --algo dqn --env coin_maze --steps 500
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 16 --steps 2000
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --threads 4 --render live --render-env 0
-./build/tinyfin-rl train --algo dqn --env tetris --steps 20000
-./build/tinyfin-rl train --algo ppo --env tetris_disc --steps 20000
-./build/tinyfin-rl train --algo tetris_plan --env tetris --steps 2000
 ```
 
 ## Algorithms
 
 ```bash
 ./build/tinyfin-rl train --algo dqn --steps 2000
-./build/tinyfin-rl train --algo rainbow --steps 2000
-./build/tinyfin-rl train --algo qrdqn --steps 2000
-./build/tinyfin-rl train --algo iql --steps 2000
-./build/tinyfin-rl train --algo iqn --steps 2000
-./build/tinyfin-rl train --algo reinforce --steps 2000 --steps-per-batch 512
 ./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01 --kl-target 0.01
-./build/tinyfin-rl train --algo a2c --steps 2000 --steps-per-batch 64
-./build/tinyfin-rl train --algo a3c --steps 2000 --envs 4 --steps-per-batch 64
-./build/tinyfin-rl train --algo trpo --steps 2000 --steps-per-batch 64 --clip-eps 0.01
-./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2
-./build/tinyfin-rl train --algo td3 --steps 2000
-./build/tinyfin-rl train --algo impala --steps 2000 --steps-per-batch 64
-./build/tinyfin-rl train --algo impala --steps 2000 --actor-count 4 --queue-capacity 1024
-./build/tinyfin-rl train --algo mcts --env maze_rooms --steps 2000 --mcts-sims 400 --mcts-depth 80
+./build/tinyfin-rl train --algo nca --env lineworld --steps 2000 --save runs/lineworld.nca
+./build/tinyfin-rl train --algo random --steps 2000
 ./build/tinyfin-rl train --algo dqn --steps 2000 --save runs/dqn
 ./build/tinyfin-rl eval --algo dqn --episodes 5 --load runs/dqn
 ```
+
+v2 deliberately fails fast for old placeholder algorithms such as `rainbow`,
+`qrdqn`, `iqn`, `iql`, `a2c`, `a3c`, `trpo`, `sac`, `td3`, `impala`, and
+`mcts`.
 
 ## Modes
 
@@ -139,10 +130,9 @@ make build/tinyfin-prod
 - The canonical environment is a four-room grid (`maze_rooms`).
 - Reference environments: `lineworld`, `lineworld_cont`, `point1d`, `coin_maze`.
 - Arcade environments: `snake`, `floppy`, `tetris`, `pang`.
-- PPO requires discrete observations: use `tetris_disc` for PPO on tetris.
-- `tetris_plan` is a lookahead planner (current + next piece) that overrides actions.
 - Multi-agent environments: `lineworld_duo`, `coin_maze_duo`.
-- DQN/REINFORCE/PPO plus A2C/A3C/TRPO/IMPALA/Rainbow/QR-DQN/IQL/IQN/SAC/TD3 are implemented in C using Tinyfin.
+- v2 exposes `dqn`, `ppo`, `nca`, and `random`; removed v1 placeholder algorithm names fail fast.
+- Core env manifests exist under `envs/`, and core envs also build as separated shared libraries.
 - Rendering is optional and uses render snapshots, not env-owned raylib.
 - Batch helpers include `tfrl_env_step_batch`, `tfrl_env_reset_batch`, and `tfrl_env_reset_batch_seeds`.
 - Multiprocess DQN actors (shared-memory queue) are available for higher throughput.
@@ -161,7 +151,8 @@ export TFRL_PY_BRIDGE=/tmp/tfrl_py_bridge.sock
 ## Docs
 
 - `docs/overview.md` quickstart and modes
-- `docs/algorithms.md` DQN/REINFORCE/PPO usage
+- `docs/usage.md` current v2 usage guide
+- `docs/algorithms.md` algorithm scope and usage
 - `docs/render_snapshot.md` snapshot format
 - `docs/trace.md` trace format
 - `docs/perf.md` batch stepping + benchmark
@@ -173,6 +164,7 @@ export TFRL_PY_BRIDGE=/tmp/tfrl_py_bridge.sock
 - `docs/python_bridge.md` Python env bridge (Gymnasium/PettingZoo/Retro)
 - `docs/python_workflow.md` Python usage overview (C loop + bridge)
 - `docs/env_api.md` env API + Python binding
+- `docs/env_lifecycle.md` create, compile, train, evaluate, and production env workflow
 - `scripts/run_tests.sh` lightweight test runner
 - `scripts/golden_runs.sh` golden run regression script
 - `scripts/ci.sh` build + tests + golden runs

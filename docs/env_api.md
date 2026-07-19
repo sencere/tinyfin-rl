@@ -1,6 +1,7 @@
 # Environment API
 
-The environment API is a small C interface and is exported via `libtfrl_env.so`.
+The environment API is a small C interface and is exported via the combined
+`libtfrl_env.so` plus separated core env modules.
 
 ## Types
 
@@ -18,6 +19,20 @@ tfrl_env *env = tfrl_env_create(&cfg);
 tfrl_obs obs = tfrl_env_reset(env, 0);
 tfrl_action action = {.index = 0};
 tfrl_step_result step = tfrl_env_step(env, action);
+```
+
+The same API can load a separated env module by path:
+
+```c
+tfrl_env_config cfg = {.name = "build/libtfrl_env_lineworld.so", .seed = 0};
+tfrl_env *env = tfrl_env_create(&cfg);
+```
+
+It can also load an env manifest:
+
+```c
+tfrl_env_config cfg = {.name = "envs/lineworld/env.toml", .seed = 0};
+tfrl_env *env = tfrl_env_create(&cfg);
 ```
 
 For box spaces, use `data_len` + `data[]` (up to `TFRL_MAX_BOX_DIMS`):
@@ -93,7 +108,8 @@ tfrl_env_reset_batch_seeds(envs, reset_count, seeds, obs);
 - `snake`
 - `floppy`
 - `tetris`
-- `arkanoid`
+- `breakout`
+- `breakout_atari`
 - `pang`
 - `py:gymnasium:ENV_ID` (Python bridge)
 - `py:pettingzoo:MODULE` (Python bridge)
@@ -101,14 +117,25 @@ tfrl_env_reset_batch_seeds(envs, reset_count, seeds, obs);
 
 ## Adding a New C Env
 
+Core v2 envs also build as separated shared libraries:
+
+- `build/libtfrl_env_lineworld.so`
+- `build/libtfrl_env_maze_rooms.so`
+- `build/libtfrl_env_coin_maze.so`
+
+To add an env today:
+
 1) Add a new file under `src/envs/` that implements:
    - `tfrl_env_spec_*`
    - `tfrl_env_reset_*`
    - `tfrl_env_step_*`
 2) Register it in `src/envs/registry.c` with its name, ops, and agent count.
 3) Add the new file to the build lists in `CMakeLists.txt` and `Makefile`.
+4) Add a manifest under `envs/<name>/env.toml`.
 
-`tfrl_env_create` no longer needs per-env branches; it uses the registry.
+Dynamic loading by shared library path and manifest path is implemented.
+Manifest-backed discovery that avoids central registry edits is still planned.
+For the full lifecycle workflow, see `docs/env_lifecycle.md`.
 
 ## Python
 

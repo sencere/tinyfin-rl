@@ -1,320 +1,94 @@
 # Algorithms
 
-Tinyfin-RL selects algorithms via `--algo`. All algorithms share the
-`tfrl_algo` interface in `src/core/algo_api.h`.
+Tinyfin-RL v2 exposes a small algorithm set through `--algo`: `dqn`, `ppo`,
+`nca`, and `random`. Public consumers should include `tfrl/algo.h`; the old
+`src/core/algo_api.h` path is kept as an internal compatibility shim.
 
-Defaults are versioned and applied per algorithm in `src/core/algo_factory.c`.
-
-Note: Continuous (box) actions are currently supported by `random`, `sac`, and `td3`. MCTS currently supports `maze_rooms` and `lineworld`.
+Removed v1 placeholder names now fail fast instead of silently mapping to a
+fallback policy: `rainbow`, `qrdqn`, `iqn`, `iql`, `a2c`, `a3c`, `trpo`, `sac`,
+`td3`, `impala`, and `mcts`.
 
 ## DQN
 
-Discrete-action DQN with a Tinyfin `Linear` policy head.
+Discrete-action value-policy path. The current implementation is a compact
+tabular/simple-Q baseline behind the DQN interface; the v2 target is to replace
+this with Tinyfin-backed replay, target-network, and checkpoint support.
 
 ```bash
-./build/tinyfin-rl train --algo dqn --steps 2000
+./build/tinyfin-rl train --algo dqn --env lineworld --steps 2000
 ```
 
-Flags:
+Supported flags:
 
 - `--gamma`
 - `--lr`
 - `--epsilon`
 - `--replay-size`
 - `--batch-size`
-- `--per-alpha`
-- `--per-beta`
-- `--c51-atoms`
-- `--c51-vmin`
-- `--c51-vmax`
-- `--save PATH` / `--load PATH`
-
-## Random
-
-Baseline random policy (supports discrete and box actions).
-
-```bash
-./build/tinyfin-rl train --algo random --steps 2000
-```
-
-## Rainbow DQN (C51 + Dueling)
-
-Rainbow DQN with n-step returns, dueling heads, and C51-style categorical support.
-
-```bash
-./build/tinyfin-rl train --algo rainbow --steps 2000
-```
-
-Flags:
-
-- `--gamma`
-- `--lr`
-- `--epsilon`
-- `--replay-size`
-- `--batch-size`
+- `--train-every`
+- `--learning-starts`
+- `--grad-steps`
 - `--per-alpha`
 - `--per-beta`
 - `--save PATH` / `--load PATH`
-
-## QR-DQN (Minimal)
-
-Quantile-regression DQN with a fixed set of quantiles per action.
-
-```bash
-./build/tinyfin-rl train --algo qrdqn --steps 2000
-```
-
-Flags:
-
-- `--gamma`
-- `--lr`
-- `--epsilon`
-- `--replay-size`
-- `--batch-size`
-- `--per-alpha`
-- `--per-beta`
-- `--save PATH` / `--load PATH`
-
-## IQL (Implicit Q-Learning)
-
-IQL trains a value head with expectile regression against Q-values and uses the
-value estimate for Q-targets. This implementation uses an implicit policy via
-argmax Q with optional epsilon exploration.
-
-```bash
-./build/tinyfin-rl train --algo iql --steps 2000 --replay-size 10000 --batch-size 64
-```
-
-Flags:
-
-- `--gamma`
-- `--lr`
-- `--epsilon`
-- `--replay-size`
-- `--batch-size`
-- `--per-alpha`
-- `--per-beta`
-- `--save PATH` / `--load PATH`
-
-## IQN (Minimal)
-
-Implicit quantile regression with sampled taus appended to the input features.
-Note: the current IQN implementation can segfault during backward; treat as experimental.
-
-```bash
-./build/tinyfin-rl train --algo iqn --steps 2000
-```
-
-Flags:
-
-- `--gamma`
-- `--lr`
-- `--epsilon`
-- `--replay-size`
-- `--batch-size`
-- `--per-alpha`
-- `--per-beta`
-- `--iqn-quantiles`
-- `--iqn-tau-samples`
-- `--save PATH` / `--load PATH`
-
-## MCTS (Planner)
-
-UCT-style MCTS for discrete environments (`maze_rooms`, `lineworld`).
-
-```bash
-./build/tinyfin-rl train --algo mcts --env maze_rooms --steps 2000 --mcts-sims 400 --mcts-depth 80
-```
-
-Flags:
-
-- `--mcts-sims`
-- `--mcts-depth`
-
-## REINFORCE
-
-Vanilla policy gradient with episodic returns.
-
-```bash
-./build/tinyfin-rl train --algo reinforce --steps 2000 --steps-per-batch 512
-```
-
-Save a policy:
-
-```bash
-./build/tinyfin-rl train --algo reinforce --steps 2000 --save runs/reinforce
-```
 
 ## PPO
 
-Minimal PPO with a Tinyfin `Linear` policy + value head, clipped ratio loss (min of ratio vs clip), value clipping,
-advantage normalization, GAE(λ), entropy bonus, and KL early stopping (`--kl-target`).
+Policy-gradient path for discrete or box observations. The current
+implementation routes through the existing reinforce-style learner; the v2
+target is clipped PPO with GAE, value loss, entropy metrics, and checkpoints.
 
 ```bash
-./build/tinyfin-rl train --algo ppo --steps 2000 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01
+./build/tinyfin-rl train --algo ppo --env maze_rooms --steps 2000 --steps-per-batch 64
 ```
 
-## A2C (Minimal)
+Supported flags:
 
-Advantage actor-critic with a shared optimizer for policy + value heads.
+- `--gamma`
+- `--lr`
+- `--clip-eps`
+- `--kl-target`
+- `--gae-lambda`
+- `--steps-per-batch`
+- `--epochs`
+- `--entropy-coef`
+- `--save PATH` / `--load PATH`
+
+## Tinyfin-NCA
+
+Neural cellular automata policy for discrete-action environments. The current
+implementation maps observations into a 1D cell state, applies deterministic
+local rollout updates, reads Q-values from the evolved state, and trains the
+kernel/readout parameters online with a TD-style update.
 
 ```bash
-./build/tinyfin-rl train --algo a2c --steps 2000 --steps-per-batch 64 --entropy-coef 0.01
+./build/tinyfin-rl train --algo nca --env lineworld --steps 2000 --epsilon 0.1
 ```
 
-## A3C (Async, Minimal)
-
-Async actor-critic with a shared optimizer guarded by a mutex. Uses multiple envs (`--envs`) to drive concurrent updates.
-Rendering and trace output are disabled in async mode.
+Save and load:
 
 ```bash
-./build/tinyfin-rl train --algo a3c --steps 2000 --envs 4 --steps-per-batch 64 --entropy-coef 0.01
+./build/tinyfin-rl train --algo nca --env lineworld --steps 2000 --save runs/lineworld.nca
+./build/tinyfin-rl eval --algo nca --env lineworld --load runs/lineworld.nca --episodes 10 --deterministic
 ```
 
-## TRPO (KL-Penalty, Minimal)
+Supported flags:
 
-KL-penalized policy updates with a value baseline (approximate TRPO).
+- `--gamma`
+- `--lr`
+- `--epsilon`
+- `--save PATH` / `--load PATH`
+
+Remaining NCA work: Tinyfin autograd-backed optimization, diversity metrics,
+and PPO integration.
+
+## Random
+
+Baseline random policy for discrete and box actions.
 
 ```bash
-./build/tinyfin-rl train --algo trpo --steps 2000 --steps-per-batch 64 --clip-eps 0.01
+./build/tinyfin-rl train --algo random --env lineworld --steps 2000
 ```
 
-## SAC (Discrete/Continuous, Minimal)
-
-Soft actor-critic for discrete actions with twin Q networks. For box actions, this uses a stochastic Gaussian policy
-(mean/log-std head) with tanh squashing and log-prob correction for the entropy term.
-
-```bash
-./build/tinyfin-rl train --algo sac --steps 2000 --entropy-coef 0.2
-```
-
-Off-policy flags:
-
-- `--replay-size`
-- `--batch-size`
-- `--per-alpha`
-- `--per-beta`
-
-## TD3 (Discrete/Continuous, Minimal)
-
-Twin Q networks with delayed policy updates for discrete actions. For box actions, this uses a minimal continuous variant
-with deterministic actions (no entropy term) and target policy smoothing noise.
-
-```bash
-./build/tinyfin-rl train --algo td3 --steps 2000
-```
-
-Off-policy flags:
-
-- `--replay-size`
-- `--batch-size`
-- `--per-alpha`
-- `--per-beta`
-
-## IMPALA / V-trace (Minimal)
-
-V-trace corrections over on-policy rollouts (single-process).
-
-```bash
-./build/tinyfin-rl train --algo impala --steps 2000 --steps-per-batch 64 --clip-eps 1.0
-```
-
-To run with an async actor/learner split:
-
-```bash
-./build/tinyfin-rl train --algo impala --steps 2000 --actor-count 4 --queue-capacity 1024
-```
-
-Rendering and trace output are disabled when using the split runner.
-
-Checkpoint format:
-
-- DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
-- Rainbow DQN: `PATH.adv.w.tensor`, `PATH.adv.b.tensor`, `PATH.val.w.tensor`, `PATH.val.b.tensor`
-- QR-DQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
-- IQL: `PATH.q.w.tensor`, `PATH.q.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
-- IQN: `PATH.q.w.tensor`, `PATH.q.b.tensor`
-- REINFORCE: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`
-- PPO: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
-- A2C: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
-- A3C: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
-- TRPO: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
-- SAC: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
-- TD3: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.q1.w.tensor`, `PATH.q1.b.tensor`, `PATH.q2.w.tensor`, `PATH.q2.b.tensor`
-- IMPALA: `PATH.pi.w.tensor`, `PATH.pi.b.tensor`, `PATH.v.w.tensor`, `PATH.v.b.tensor`
-
----
-
-## Additional Algorithms (Design Plan)
-
-This section outlines a scoped design plan for future algorithm extensions.
-
-### Goals
-
-- Add A3C (async actor-critic), Rainbow DQN C51 + dueling, distributional variants beyond QR-DQN, and an IMPALA-scale actor/learner split.
-- Keep the core runner/trace contract stable; prefer new modules over invasive refactors.
-
-### Non-Goals
-
-- New environments or UI changes.
-- Major changes to the Tinyfin tensor core.
-- Distributed deployment beyond a single host.
-
-### Baseline Assumptions
-
-- Algorithms implement `tfrl_algo` and are selected via `--algo`.
-- Replay buffers already support PER for DQN-family off-policy algorithms.
-- IMPALA exists in a single-process V-trace form; PPO/A2C already provide policy/value heads.
-
-### A3C (Async Actor-Critic)
-
-- **Architecture:** N env workers, each with local rollouts; shared global params.
-- **Update Flow:** worker computes gradients on its local batch and applies to shared optimizer.
-- **Minimal Infra:** add a thread-safe optimizer step or a gradient queue with a learner thread.
-- **Config:** `--threads` controls actor count; add `--async` or a new `--algo a3c`.
-- **Diagnostics:** per-worker return stats, update lag, gradient norm.
-
-### Rainbow DQN Extensions (C51 + Dueling)
-
-- **Model:** split into value stream V(s) and advantage stream A(s, a) combined as `Q = V + (A - mean(A))`.
-- **Distributional Head:** categorical logits over fixed support atoms (C51).
-- **Loss:** cross-entropy between projected target distribution and predicted atoms.
-- **Replay:** reuse PER; TD error becomes KL/cross-entropy for priorities.
-- **Config:** `--atoms`, `--v-min`, `--v-max` (defaults aligned with DQN scale).
-
-### Distributional Beyond QR-DQN
-
-- **Candidate:** IQN (implicit quantile networks) or FQF (fully parameterized quantile function).
-- **Model:** quantile embeddings + shared trunk + action head.
-- **Loss:** quantile regression with Huber for sampled taus.
-- **Replay:** same PER path; priority from quantile TD error.
-- **Scope:** pick one variant (IQN preferred) to avoid parallel abstractions.
-
-### IMPALA-Scale Actor/Learner Split
-
-- **Topology:** actor threads/processes collect rollouts; a learner consumes batches.
-- **Transport:** shared-memory ring buffer first; optional socket/pipe framing later.
-- **Backpressure:** bounded queue with drop or block strategy; expose queue depth.
-- **Learner:** uses V-trace; optionally batches across actors for throughput.
-- **Config:** `--actor-count`, `--learner-batch`, `--queue-capacity`.
-
-### Shared Infrastructure Changes
-
-- New model components (dueling head, categorical support, quantile embeddings).
-- Replay buffer metadata for distributional loss (optional).
-- Lightweight threading/queue utilities for async and actor/learner split.
-- Algo diagnostics surface (trace metadata + stdout summaries).
-
-### Testing Plan
-
-- Unit tests for C51 projection and quantile loss.
-- Deterministic smoke tests with fixed seeds.
-- Replay buffer tests for distributional priority updates.
-- Minimal convergence checks (short runs, sanity curves).
-
-### Rollout Order
-
-1. Rainbow C51 + dueling (most contained).
-2. IQN (or FQF) distributional variant.
-3. A3C async (threading).
-4. IMPALA-scale actor/learner split (queues/process separation).
+Use this for smoke tests and environment sanity checks, not as a training
+baseline for completed algorithm claims.

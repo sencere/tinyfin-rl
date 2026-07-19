@@ -10,6 +10,7 @@ static const int DEFAULTS_VERSION = 1;
 
 tfrl_algo tfrl_algo_random_create(const tfrl_algo_config *cfg);
 tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg);
+tfrl_algo tfrl_algo_nca_create(const tfrl_algo_config *cfg);
 
 void tfrl_algo_config_apply_defaults(tfrl_algo_config *cfg) {
     apply_algo_defaults(cfg);
@@ -17,9 +18,10 @@ void tfrl_algo_config_apply_defaults(tfrl_algo_config *cfg) {
 
 static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (!cfg) return;
+    int is_nca = cfg->name && strcmp(cfg->name, "nca") == 0;
     if (cfg->defaults_version <= 0) cfg->defaults_version = DEFAULTS_VERSION;
     if (cfg->gamma <= 0.0f) cfg->gamma = 0.99f;
-    if (cfg->lr < 0.0f) cfg->lr = 0.0005f;
+    if (cfg->lr < 0.0f) cfg->lr = is_nca ? 0.02f : 0.0005f;
     if (cfg->epsilon < 0.0f) cfg->epsilon = 0.1f;
     if (cfg->entropy_coef < 0.0f) cfg->entropy_coef = 0.0f;
     if (cfg->clip_eps < 0.0f) cfg->clip_eps = 0.2f;
@@ -40,45 +42,39 @@ static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (cfg->iqn_tau_samples < 0) cfg->iqn_tau_samples = 32;
 }
 
-static int algo_is_policy_gradient(const char *name) {
+static int algo_is_supported(const char *name) {
     if (!name) return 0;
-    return strcmp(name, "reinforce") == 0 ||
+    return strcmp(name, "random") == 0 ||
+           strcmp(name, "dqn") == 0 ||
            strcmp(name, "ppo") == 0 ||
-           strcmp(name, "a2c") == 0 ||
-           strcmp(name, "a3c") == 0 ||
-           strcmp(name, "trpo") == 0 ||
-           strcmp(name, "impala") == 0;
-}
-
-static int algo_is_value_based(const char *name) {
-    if (!name) return 0;
-    return strcmp(name, "dqn") == 0 ||
-           strcmp(name, "rnn_dqn") == 0 ||
-           strcmp(name, "gru_dqn") == 0 ||
-           strcmp(name, "lstm_dqn") == 0 ||
-           strcmp(name, "rainbow") == 0 ||
-           strcmp(name, "qrdqn") == 0 ||
-           strcmp(name, "iqn") == 0 ||
-           strcmp(name, "iql") == 0 ||
-           strcmp(name, "sac") == 0 ||
-           strcmp(name, "td3") == 0;
+           strcmp(name, "nca") == 0 ||
+           strcmp(name, "reinforce") == 0;
 }
 
 tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec) {
     tfrl_algo out = {0};
     if (!cfg) return out;
     const char *dbg = getenv("TFRL_DEBUG_ALGO");
-    if (algo_is_policy_gradient(cfg->name)) {
+    const char *name = cfg->name ? cfg->name : "random";
+    if (!algo_is_supported(name)) {
+        fprintf(stderr,
+                "algo_factory: unsupported v2 algo '%s' (supported: random, dqn, ppo, nca)\n",
+                name);
+        return out;
+    }
+
+    if (strcmp(name, "nca") == 0) {
+        out = tfrl_algo_nca_create(cfg);
+        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> nca\n", name);
+    } else if (strcmp(name, "ppo") == 0 || strcmp(name, "reinforce") == 0) {
         out = tfrl_algo_reinforce_create(cfg);
-        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> reinforce\n", cfg->name);
-    } else if (algo_is_value_based(cfg->name) && spec && spec->obs_type == TFRL_SPACE_BOX) {
-        // Use policy gradient fallback for continuous/box observations.
-        out = tfrl_algo_reinforce_create(cfg);
-        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s(box) -> reinforce\n", cfg->name);
+        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> reinforce\n", name);
+    } else if (strcmp(name, "dqn") == 0 && spec && spec->obs_type == TFRL_SPACE_BOX) {
+        fprintf(stderr, "algo_factory: dqn requires discrete observations in v2\n");
+        return out;
     } else {
-        // Minimal factory: use fallback policy for all other algorithms.
         out = tfrl_algo_random_create(cfg);
-        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> simple_q/random\n", cfg->name ? cfg->name : "(null)");
+        if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> simple_q/random\n", name);
     }
     if (!out.vtable) {
         fprintf(stderr, "algo_factory: failed to create algo '%s'\n", cfg->name ? cfg->name : "(null)");

@@ -30,9 +30,8 @@ If you keep all parameters identical, results should be reproducible.
 - Changing `--envs`, `--batch-size`, or `--replay-size` changes sampling order.
 - Different binaries or compiler settings can change floating-point behavior.
 - Aggressive flags like `-ffast-math` or `-march=native` can change numerics.
- - Replay sampling uses deterministic RNG only when `--deterministic` is set.
- - Epsilon policies and action-noise paths use deterministic RNG only when `--deterministic` is set.
- - SAC/TD3 stochastic policy sampling uses deterministic RNG only when `--deterministic` is set.
+- Replay sampling uses deterministic RNG only when `--deterministic` is set.
+- Epsilon policies use deterministic RNG only when `--deterministic` is set.
 
 ## Recommended Practice
 

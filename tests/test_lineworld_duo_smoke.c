@@ -23,14 +23,14 @@ int main(void) {
     int got = tfrl_env_reset_multi(env, 0, obs, 2);
     if (!expect(got == 2, "reset_multi")) return 1;
     if (!expect(obs[0].index == 0, "agent0 start")) return 1;
-    if (!expect(obs[1].index == 1, "agent1 start")) return 1;
+    if (!expect(obs[1].index == 0, "agent1 start")) return 1;
 
     tfrl_action actions[2] = {{.index = 1}, {.index = 1}};
     tfrl_step_result steps[2] = {0};
     int stepped = tfrl_env_step_multi(env, actions, 2, steps, 2);
     if (!expect(stepped == 2, "step_multi")) return 1;
     if (!expect(steps[0].observation.index == 1, "agent0 step")) return 1;
-    if (!expect(steps[1].observation.index == 2, "agent1 step")) return 1;
+    if (!expect(steps[1].observation.index == 1, "agent1 step")) return 1;
 
     tfrl_env_destroy(env);
     return 0;

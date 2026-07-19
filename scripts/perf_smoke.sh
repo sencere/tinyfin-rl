@@ -11,7 +11,7 @@ echo "[smoke] mp dqn"
   --mp-actors 2 --mp-queue 1024 --mp-sync-every 50 --mp-sync-path runs/mp_sync_smoke \
   --log-every 1000000 --render off
 
-echo "[smoke] impala telemetry"
-"$bin" train --algo impala --env maze_rooms --steps "$steps" \
-  --actor-count 2 --learner-batch 2 --learner-batch-auto --queue-capacity 256 \
+echo "[smoke] ppo telemetry"
+"$bin" train --algo ppo --env maze_rooms --steps "$steps" \
+  --envs 2 --threads 2 --steps-per-batch 64 \
   --log-every 50 --profile --render off

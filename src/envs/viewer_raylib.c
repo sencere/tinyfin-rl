@@ -100,13 +100,32 @@ static void draw_grid(const tfrl_grid_snapshot_v3 *grid, const unsigned char *ce
     int h = (int)grid->height;
     float cell_w = (float)GetScreenWidth() / (float)w;
     float cell_h = (float)GetScreenHeight() / (float)h;
+    if (w <= 0 || h <= 0) return;
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             unsigned char v = cells[y * w + x];
             Color c = (v > 0) ? DARKGRAY : RAYWHITE;
-            DrawRectangle((int)(x * cell_w), (int)(y * cell_h), (int)cell_w, (int)cell_h, c);
+            int rx = (int)(x * cell_w);
+            int ry = (int)(y * cell_h);
+            int rw = (int)(cell_w + 1.0f);
+            int rh = (int)(cell_h + 1.0f);
+            DrawRectangle(rx, ry, rw, rh, c);
+            DrawRectangleLines(rx, ry, rw, rh, LIGHTGRAY);
         }
     }
+    if (grid->goal_x < grid->width && grid->goal_y < grid->height) {
+        int gx = (int)((float)grid->goal_x * cell_w);
+        int gy = (int)((float)grid->goal_y * cell_h);
+        DrawRectangle(gx + 4, gy + 4, (int)cell_w - 8, (int)cell_h - 8, GREEN);
+    }
+    if (grid->agent_x < grid->width && grid->agent_y < grid->height) {
+        float cx = ((float)grid->agent_x + 0.5f) * cell_w;
+        float cy = ((float)grid->agent_y + 0.5f) * cell_h;
+        float radius = cell_w < cell_h ? cell_w * 0.32f : cell_h * 0.32f;
+        DrawCircle((int)cx, (int)cy, radius, BLUE);
+    }
+    DrawText(TextFormat("step %u/%u  reward %.3f", grid->step, grid->max_steps, grid->reward),
+             12, 12, 20, BLACK);
 }
 
 static void draw_arkanoid(const tfrl_arkanoid_snapshot *ark, const unsigned char *bricks) {

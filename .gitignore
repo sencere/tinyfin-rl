@@ -1,0 +1,23 @@
+# Build outputs
+build/
+build-cmake/
+
+# Runtime artifacts
+runs/
+*.tft
+
+# Model/checkpoint artifacts
+*.policy
+*.ckpt
+*.checkpoint
+*.weights
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.npz
+*.npy
+
+# Local scratch files
+fish_once
+fish_once.c

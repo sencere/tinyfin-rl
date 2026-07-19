@@ -13,7 +13,7 @@ make
 ./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 500
 ./build/tinyfin-rl train --algo dqn --env coin_maze_duo --steps 500 --share-policy
 ./build/tinyfin-rl train --algo dqn --env py:gymnasium:CartPole-v1 --steps 500
-./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 500
+./build/tinyfin-rl train --algo ppo --env lineworld_cont --steps 500
 ./build/tinyfin-rl train --algo random --env point1d --steps 500
 ./build/tinyfin-rl train --algo dqn --env coin_maze --steps 500
 ./build/tinyfin-rl train --algo dqn --steps 1000 --save runs/dqn
@@ -22,10 +22,14 @@ make
 ./build/tinyfin-rl train --algo dqn --env lineworld --envs 8 --threads 4 --render live --render-env 0
 ```
 
+For the full current v2 workflow, see `docs/usage.md`. For creating,
+compiling, training, evaluating, and production-running an env, see
+`docs/env_lifecycle.md`.
+
 With raylib:
 
 ```bash
-make USE_RAYLIB=1
+./scripts/build.sh --with-raylib
 ./build/tinyfin-rl train --algo dqn --steps 1000 --render live --render-fps 10
 ```
 
@@ -34,10 +38,7 @@ make USE_RAYLIB=1
 ```bash
 ./build/tinyfin-rl train --algo dqn --steps 2000 --trace-out runs/run.tft
 ./build/tinyfin-rl eval --algo dqn --episodes 10 --render live
-make -C raylib-src/src
-make clean
-make USE_RAYLIB=1
-export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
+./scripts/build.sh --with-raylib
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
 ```
 

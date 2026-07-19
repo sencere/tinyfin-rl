@@ -30,13 +30,10 @@ run_case() {
 
 run_case "lineworld_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld --steps 400 --log-every 1 --deterministic --seed 1" 0.2 0.2 1
 run_case "lineworld_duo_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld_duo --steps 400 --log-every 1 --deterministic --seed 1 --agents 2 --share-policy --replay-size 2000 --batch-size 32" 0.2 0.2 1
-run_case "lineworld_rainbow" "./build/tinyfin-rl train --algo rainbow --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" 0.2 0.2 1
-run_case "lineworld_qrdqn" "./build/tinyfin-rl train --algo qrdqn --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" 0.2 0.2 1
-run_case "lineworld_cont_dqn" "./build/tinyfin-rl train --algo dqn --env lineworld_cont --steps 400 --log-every 1 --deterministic --seed 1" 0.2 0.2 1
-run_case "lineworld_mcts" "./build/tinyfin-rl train --algo mcts --env lineworld --steps 200 --log-every 1 --deterministic --seed 1 --mcts-sims 200 --mcts-depth 40" 0.2 0.2 1
 run_case "lineworld_ppo" "./build/tinyfin-rl train --algo ppo --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --steps-per-batch 64 --epochs 2 --clip-eps 0.2 --gae-lambda 0.95 --entropy-coef 0.01" -0.2 0.0 1
 run_case "lineworld_ppo_clip01" "./build/tinyfin-rl train --algo ppo --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --steps-per-batch 64 --epochs 2 --clip-eps 0.1 --gae-lambda 0.95 --entropy-coef 0.01" -0.2 0.0 1
+run_case "lineworld_cont_ppo" "./build/tinyfin-rl train --algo ppo --env lineworld_cont --steps 400 --log-every 1 --deterministic --seed 1" -0.2 0.0 1
+run_case "lineworld_nca" "./build/tinyfin-rl train --algo nca --env lineworld --steps 400 --log-every 1 --deterministic --seed 1 --epsilon 0.1" -0.2 0.0 1
 run_case "maze_rooms_dqn" "./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 600 --log-every 1 --deterministic --seed 1" -0.2 -0.2 1
-run_case "point1d_sac" "./build/tinyfin-rl train --algo sac --env point1d --steps 600 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" -0.2 -0.2 1
-run_case "point1d_td3" "./build/tinyfin-rl train --algo td3 --env point1d --steps 600 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32" -0.2 -0.2 1
+run_case "point1d_ppo" "./build/tinyfin-rl train --algo ppo --env point1d --steps 600 --log-every 1 --deterministic --seed 1" -0.2 -0.2 1
 run_case "coin_maze_duo_dqn" "./build/tinyfin-rl train --algo dqn --env coin_maze_duo --steps 600 --log-every 1 --deterministic --seed 1 --replay-size 2000 --batch-size 32 --share-policy" -0.2 -0.2 1

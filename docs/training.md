@@ -13,27 +13,15 @@ Use replay/PER tuning:
 ./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64 --per-alpha 0.6 --per-beta 0.4
 ```
 
-## Rainbow / QR-DQN / IQN
+## v2 Algorithm Scope
 
-```bash
-./build/tinyfin-rl train --algo rainbow --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
-./build/tinyfin-rl train --algo qrdqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
-./build/tinyfin-rl train --algo iql --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
-./build/tinyfin-rl train --algo iqn --env maze_rooms --steps 2000 --replay-size 10000 --batch-size 64
-```
-
-Note: IQN is currently unstable and may segfault during backward.
+Tinyfin-RL v2 exposes `dqn`, `ppo`, `nca`, and `random`. Removed v1 placeholder names
+fail fast until they have real, tested implementations.
 
 ## Coin Maze (DQN)
 
 ```bash
 ./build/tinyfin-rl train --algo dqn --env coin_maze --steps 2000 --replay-size 10000 --batch-size 64
-```
-
-## REINFORCE
-
-```bash
-./build/tinyfin-rl train --algo reinforce --env lineworld --steps 2000 --steps-per-batch 256
 ```
 
 ## PPO
@@ -58,40 +46,6 @@ Note: IQN is currently unstable and may segfault during backward.
 
 ```bash
 ./build/tinyfin-rl train --algo dqn --env py:gymnasium:CartPole-v1 --steps 2000
-```
-
-## A2C / A3C / TRPO / IMPALA
-
-```bash
-./build/tinyfin-rl train --algo a2c --env maze_rooms --steps 2000 --steps-per-batch 64
-./build/tinyfin-rl train --algo a3c --env maze_rooms --steps 2000 --envs 4 --steps-per-batch 64
-./build/tinyfin-rl train --algo trpo --env maze_rooms --steps 2000 --steps-per-batch 64 --clip-eps 0.01
-./build/tinyfin-rl train --algo impala --env maze_rooms --steps 2000 --steps-per-batch 64 --clip-eps 1.0
-```
-
-Async runner (actor/learner split):
-
-```bash
-./build/tinyfin-rl train --algo impala --env maze_rooms --steps 2000 --actor-count 4 --queue-capacity 1024
-```
-
-## SAC / TD3 (Continuous)
-
-```bash
-./build/tinyfin-rl train --algo sac --env point1d --steps 2000 --replay-size 10000 --batch-size 64 --entropy-coef 0.2
-./build/tinyfin-rl train --algo td3 --env point1d --steps 2000 --replay-size 10000 --batch-size 64
-```
-
-Notes:
-
-- SAC uses a stochastic Gaussian policy with tanh squashing and log-prob correction for entropy.
-- TD3 remains deterministic for continuous actions.
-- Async A3C and IMPALA split runs disable render/trace output.
-
-## MCTS (Planner)
-
-```bash
-./build/tinyfin-rl train --algo mcts --env maze_rooms --steps 2000 --mcts-sims 400 --mcts-depth 80
 ```
 
 ## Checkpoints
@@ -121,9 +75,6 @@ Record a trace and replay it:
 Then build the viewer and replay:
 
 ```bash
-make -C raylib-src/src
-make clean
-make USE_RAYLIB=1
-export LD_LIBRARY_PATH="$PWD/raylib-src/src:$PWD/tinyfin:$LD_LIBRARY_PATH"
+./scripts/build.sh --with-raylib
 ./build/tinyfin-rl replay --trace-in runs/run.tft --render-fps 10
 ```

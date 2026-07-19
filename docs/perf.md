@@ -49,7 +49,7 @@ Summarize baseline results:
 python3 scripts/perf_compare.py runs/perf_baselines
 ```
 
-Smoke checks (mp DQN + IMPALA telemetry):
+Smoke checks (multiprocess DQN + PPO telemetry):
 
 ```bash
 ./scripts/perf_smoke.sh
@@ -84,10 +84,10 @@ Write a JSON report:
 ./build/tinyfin-rl train --algo dqn --env maze_rooms --steps 20000 --profile-json runs/profile.json
 ```
 
-IMPALA telemetry (queue depth + SPS):
+PPO telemetry:
 
 ```bash
-./build/tinyfin-rl train --algo impala --env maze_rooms --steps 20000 --actor-count 4 --learner-batch 8 --learner-batch-auto --log-every 200 --profile
+./build/tinyfin-rl train --algo ppo --env maze_rooms --steps 20000 --envs 4 --threads 4 --steps-per-batch 64 --log-every 200 --profile
 ```
 
 ## Tuning Knobs

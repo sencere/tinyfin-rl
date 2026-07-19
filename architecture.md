@@ -1,124 +1,137 @@
-# Tinyfin-RL Architecture
+# Tinyfin-RL v2 Architecture
 
-Tinyfin-RL is a **C-first reinforcement learning system** built around a single
-executable, a deterministic environment core, and Tinyfin as the tensor +
-autograd backend. Rendering is optional and never drives simulation.
+Tinyfin-RL is a C-first reinforcement learning system built around a single
+CLI binary, a deterministic environment API, optional render snapshots, and
+Tinyfin as the tensor/autograd backend.
 
-## Design Goals
+This document describes the current v2 implementation state. It also calls out
+where the code is still in transition.
 
-- One executable (`tinyfin-rl`)
-- One control loop (train / eval / replay)
-- Environment is the source of truth
-- Algorithms are configurable (`--algo dqn|ppo|reinforce`)
-- Tinyfin handles math; Tinyfin-RL handles control
-- Rendering is optional and isolated
+## Layers
 
-## Core Runtime Flow
+```text
+CLI
+  -> runner
+    -> algorithm
+    -> environment
+    -> trace writer
+    -> optional viewer
 
+production runner
+  -> checkpoint loader
+  -> algorithm inference
+  -> environment or client integration
 ```
-CLI -> Runner -> Env + Algo -> (optional) Trace + Viewer
-```
 
-The runner owns simulation and decides if training, evaluation, or replay is
-executed.
+The runner coordinates work. Environments own simulation state. Algorithms own
+policy/update state. Rendering consumes snapshots and does not drive stepping.
+
+## Public API
+
+Public headers live in `include/tfrl/`:
+
+- `tfrl/env.h`
+- `tfrl/algo.h`
+- `tfrl/runner.h`
+- `tfrl/metrics.h`
+- `tfrl/checkpoint.h`
+- `tfrl/render_snapshot.h`
+- `tfrl/tfrl.h`
+
+The old headers under `src/core/` and `src/runner/` are compatibility shims for
+internal source files. New code should include `tfrl/...`.
 
 ## Environment API
 
-Minimal C API for a deterministic, renderer-agnostic environment:
+The core environment API is renderer-agnostic:
 
 ```c
 tfrl_env *tfrl_env_create(const tfrl_env_config *cfg);
+void tfrl_env_destroy(tfrl_env *env);
 tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed);
 tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action);
 const tfrl_env_spec *tfrl_env_get_spec(const tfrl_env *env);
 ```
 
-`tfrl_env_spec` includes space types, shapes, dtypes, and bounds for both
-observations and actions.
+`tfrl_env_spec` describes observation/action spaces, shapes, dtypes, bounds,
+and agent count.
 
-Rendering uses snapshots:
+Batch and multi-agent helpers are also part of the public API:
+
+```c
+int tfrl_env_reset_multi(tfrl_env *env, uint64_t seed, tfrl_obs *out_obs, int max_agents);
+int tfrl_env_step_multi(tfrl_env *env, const tfrl_action *actions, int action_count,
+                        tfrl_step_result *out_steps, int max_agents);
+void tfrl_env_step_batch(tfrl_env **envs, int env_count,
+                         const tfrl_action *actions,
+                         tfrl_step_result *out_steps);
+```
+
+## Environment Modules
+
+Current state:
+
+- Environment implementations still live under `src/envs/`.
+- The normal build compiles them into `tinyfin-rl`.
+- `build/libtfrl_env.so` exposes the combined env library for bindings.
+- Core env manifests exist under `envs/*/env.toml`.
+- Each core env builds as a separate shared library.
+- The runner can load envs statically by name or dynamically by library path.
+
+Remaining target state:
+
+- Adding an env should not require editing central registry code.
+
+## Algorithm API
+
+Algorithms share one C interface:
+
+```c
+tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec);
+tfrl_action tfrl_algo_act(tfrl_algo *algo, tfrl_env *env, tfrl_obs obs);
+void tfrl_algo_act_batch(tfrl_algo *algo, const tfrl_obs *obs, int count,
+                         tfrl_action *out_actions);
+void tfrl_algo_destroy(tfrl_algo *algo);
+```
+
+v2 exposes only:
+
+- `dqn`
+- `ppo`
+- `nca`
+- `random`
+
+Removed v1 placeholder algorithm names fail fast. The current `dqn` and `ppo`
+paths are compatibility baselines behind the v2 names. `nca` is implemented as
+a trainable cellular policy with deterministic rollout and save/load support.
+The next milestone is real Tinyfin-backed DQN/PPO and full Tinyfin autograd
+optimization for NCA.
+
+## Rendering
+
+Rendering is snapshot-based:
 
 ```c
 size_t tfrl_env_render_bytes_needed(const tfrl_env *env);
 size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len);
 ```
 
-The environment **does not include raylib** and never opens windows.
+Environments write snapshots. The viewer consumes snapshots. Raylib is optional
+and only belongs to the viewer layer.
 
-## Algorithm API
+## Build Targets
 
-Algorithms are small C modules chosen at runtime:
+Current Make targets:
 
-```c
-tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spec);
-tfrl_action algo_act(tfrl_obs obs);
-void algo_act_batch(const tfrl_obs *obs, int count, tfrl_action *out_actions);
-void algo_update(const tfrl_transition *transition);
-void algo_save(const char *path);
-```
+- `build/tinyfin-rl`
+- `build/tinyfin-prod`
+- `build/libtfrl_env.so`
+- smoke tests under `build/`
 
-Algorithms may use Tinyfin for models and optimization. DQN, REINFORCE, and PPO
-use Tinyfin `Linear` layers with SGD/Adam.
+CMake targets mirror the same current shape where CMake is available. The
+desired v2 target list adds per-env libraries and separate algorithm libraries.
 
-## Rendering
+## Production
 
-Rendering is a viewer module that consumes render snapshots and owns raylib.
-It is optional and only compiled when `USE_RAYLIB=1` (Makefile) or
-`-DTFRL_WITH_RAYLIB=ON` (CMake).
-
-## Vectorized Stepping
-
-The environment API includes a batch stepping helper:
-
-```c
-void tfrl_env_step_batch(tfrl_env **envs, int env_count,
-                         const tfrl_action *actions,
-                         tfrl_step_result *out_steps);
-```
-
-Algorithms may implement `act_batch` for batched inference (DQN does).
-
-## Trace Replay
-
-Traces are a sequence of render snapshots. `tinyfin-rl replay` reads a trace
-file and feeds frames to the viewer.
-
-## Repository Layout
-
-```
-tinyfin-rl/
-  src/
-    main.c
-    cli/
-    runner/
-    core/
-      env_api.h
-    envs/
-      envs.c
-      envs_internal.h
-      registry.c
-      maze.c
-      lineworld.c
-      point1d.c
-      coin_maze.c
-      py_bridge.c
-      render.c
-      viewer.h
-      viewer_raylib.c
-      viewer_stub.c
-    core/
-      algo_api.h
-      algo_dqn.c
-      trace.c
-      render_snapshot.h
-  tinyfin/         # tensor + autograd
-  raylib-src/      # optional raylib
-  roadmap.md
-```
-
-## Current Focus
-
-- One binary running train/eval/replay
-- One canonical environment (`maze_rooms`) + one small validation env (`lineworld`)
-- DQN/REINFORCE/PPO implemented in C with Tinyfin
-- Render snapshots + optional raylib viewer
+`tinyfin-prod` is the current inference-oriented binary. The stable production
+ABI and checkpoint bundle format are still planned work.

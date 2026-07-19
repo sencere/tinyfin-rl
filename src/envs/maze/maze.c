@@ -27,16 +27,10 @@ const tfrl_env_spec *tfrl_env_spec_maze(void) {
     return &MAZE_SPEC;
 }
 
-static int maze_is_wall(int x, int y) {
-    if (x < 0 || y < 0 || x >= MAZE_W || y >= MAZE_H) return 1;
-    if (x == 0 || y == 0 || x == MAZE_W - 1 || y == MAZE_H - 1) return 1;
-    return ((x + y) % 4) == 1;
-}
-
 static void maze_spawn_agent(tfrl_env *env) {
     for (int y = 1; y < MAZE_H - 1; y++) {
         for (int x = 1; x < MAZE_W - 1; x++) {
-            if (!maze_is_wall(x, y)) {
+            if (!tfrl_env_is_wall_maze(x, y)) {
                 env->x = x;
                 env->y = y;
                 return;
@@ -63,7 +57,7 @@ tfrl_step_result tfrl_env_step_maze(tfrl_env *env, tfrl_action action) {
     if (act == 1) ny += 1;
     if (act == 2) nx -= 1;
     if (act == 3) nx += 1;
-    if (!maze_is_wall(nx, ny)) {
+    if (!tfrl_env_is_wall_maze(nx, ny)) {
         env->x = nx;
         env->y = ny;
     }

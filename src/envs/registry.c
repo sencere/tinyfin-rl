@@ -3,6 +3,13 @@
 #include <string.h>
 
 static const tfrl_env_ops ENVS[] = {
+#if defined(TFRL_ENV_MODULE_MAZE_ROOMS)
+    {"maze_rooms", TFRL_ENV_MAZE, 1, tfrl_env_spec_maze, tfrl_env_reset_maze, tfrl_env_step_maze, NULL, tfrl_env_render_bytes_maze, tfrl_env_render_write_maze},
+#elif defined(TFRL_ENV_MODULE_LINEWORLD)
+    {"lineworld", TFRL_ENV_LINEWORLD, 1, tfrl_env_spec_lineworld, tfrl_env_reset_lineworld, tfrl_env_step_lineworld, NULL, tfrl_env_render_bytes_lineworld, tfrl_env_render_write_lineworld},
+#elif defined(TFRL_ENV_MODULE_COIN_MAZE)
+    {"coin_maze", TFRL_ENV_COIN_MAZE, 1, tfrl_env_spec_coin_maze, tfrl_env_reset_coin_maze, tfrl_env_step_coin_maze, NULL, tfrl_env_render_bytes_coin_maze, tfrl_env_render_write_coin_maze},
+#else
     {"maze_rooms", TFRL_ENV_MAZE, 1, tfrl_env_spec_maze, tfrl_env_reset_maze, tfrl_env_step_maze, NULL, tfrl_env_render_bytes_maze, tfrl_env_render_write_maze},
     {"lineworld", TFRL_ENV_LINEWORLD, 1, tfrl_env_spec_lineworld, tfrl_env_reset_lineworld, tfrl_env_step_lineworld, NULL, tfrl_env_render_bytes_lineworld, tfrl_env_render_write_lineworld},
     {"lineworld_cont", TFRL_ENV_LINEWORLD_CONT, 1, tfrl_env_spec_lineworld_cont, tfrl_env_reset_lineworld_cont, tfrl_env_step_lineworld_cont, NULL, tfrl_env_render_bytes_lineworld, tfrl_env_render_write_lineworld},
@@ -20,6 +27,7 @@ static const tfrl_env_ops ENVS[] = {
     {"breakout_atari_disc", TFRL_ENV_BREAKOUT, 1, tfrl_env_spec_breakout_atari_disc, tfrl_env_reset_breakout_atari_disc, tfrl_env_step_breakout_atari_disc, NULL, tfrl_env_render_bytes_breakout_atari, tfrl_env_render_write_breakout_atari},
     {"seq_pixels", TFRL_ENV_SEQ_PIXELS, 1, tfrl_env_spec_seq_pixels, tfrl_env_reset_seq_pixels, tfrl_env_step_seq_pixels, NULL, tfrl_env_render_bytes_seq_pixels, tfrl_env_render_write_seq_pixels},
     {"pang", TFRL_ENV_PANG, 1, tfrl_env_spec_pang, tfrl_env_reset_pang, tfrl_env_step_pang, NULL, tfrl_env_render_bytes_pang, tfrl_env_render_write_pang},
+#endif
 };
 
 const tfrl_env_ops *tfrl_env_find_ops(const char *name) {
@@ -27,7 +35,7 @@ const tfrl_env_ops *tfrl_env_find_ops(const char *name) {
     for (size_t i = 0; i < sizeof(ENVS) / sizeof(ENVS[0]); i++) {
         if (strcmp(ENVS[i].name, name) == 0) return &ENVS[i];
     }
-    return &ENVS[0];
+    return NULL;
 }
 
 size_t tfrl_env_count(void) {

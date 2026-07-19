@@ -266,12 +266,9 @@ static void fill_algo_config(tfrl_algo_config *out,
 
     // Breakout benefits from gentler value-based defaults. Only apply when the
     // user did not explicitly set the parameter (negative/unset in CLI).
-    const int is_value_algo =
-        strcmp(algo_name, "dqn") == 0 || strcmp(algo_name, "rnn_dqn") == 0 ||
-        strcmp(algo_name, "gru_dqn") == 0 || strcmp(algo_name, "lstm_dqn") == 0 ||
-        strcmp(algo_name, "rainbow") == 0 || strcmp(algo_name, "qrdqn") == 0 ||
-        strcmp(algo_name, "iqn") == 0 || strcmp(algo_name, "iql") == 0;
-    if (is_value_algo) {
+    const int is_dqn_algo = strcmp(algo_name, "dqn") == 0;
+    const int is_nca_algo = strcmp(algo_name, "nca") == 0;
+    if (is_dqn_algo) {
         if (cfg->lr < 0.0f) out->lr = 0.001f;
         if (cfg->epsilon < 0.0f && cfg->mode == TFRL_MODE_TRAIN) out->epsilon = 0.2f;
         if (cfg->replay_size < 0) out->replay_size = 100000;
@@ -280,12 +277,16 @@ static void fill_algo_config(tfrl_algo_config *out,
         if (cfg->train_every < 0) out->train_every = 4;
         if (cfg->grad_steps < 0) out->grad_steps = 1;
     }
+    if (is_nca_algo) {
+        if (cfg->lr < 0.0f) out->lr = 0.02f;
+        if (cfg->epsilon < 0.0f && cfg->mode == TFRL_MODE_TRAIN) out->epsilon = 0.1f;
+    }
 
     const int is_breakout = spec->name && strcmp(spec->name, "breakout") == 0;
     const int is_snake = spec->name && strcmp(spec->name, "snake") == 0;
     const int is_tetris = spec->name && strcmp(spec->name, "tetris") == 0;
     const int is_maze = spec->name && strcmp(spec->name, "maze_rooms") == 0;
-    if (is_value_algo && (is_breakout || is_snake || is_tetris)) {
+    if (is_dqn_algo && (is_breakout || is_snake || is_tetris)) {
         // These simple game envs benefit from starting updates much earlier and updating every step.
         if (cfg->learning_starts < 0) out->learning_starts = 1000;
         if (cfg->train_every < 0) out->train_every = 1;
@@ -550,88 +551,81 @@ static void format_duration(double seconds, char *out, size_t out_len) {
     }
 }
 
-static void dashboard_print_banner(void) {
-    static const char *banner_unicode[] = {
-        "████████╗██╗███╗   ██╗██╗   ██╗███████╗██╗███╗   ██╗",
-        "╚══██╔══╝██║████╗  ██║╚██╗ ██╔╝██╔════╝██║████╗  ██║",
-        "   ██║   ██║██╔██╗ ██║ ╚████╔╝ █████╗  ██║██╔██╗ ██║",
-        "   ██║   ██║██║╚██╗██║  ╚██╔╝  ██╔══╝  ██║██║╚██╗██║",
-        "   ██║   ██║██║ ╚████║   ██║   ██║     ██║██║ ╚████║",
-        "   ╚═╝   ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝     ╚═╝╚═╝  ╚═══╝",
-        NULL
-    };
-    
-    // ASCII fallback must be strictly ASCII-only (no emoji)
-    static const char *banner_ascii[] = {
-        "                                                                        ",
-        " mmmmmmmm   mmmmmm   mmm   mm mmm    mmm mmmmmmmm   mmmmmm   mmm   mm ",
-        " \"\"\"##\"\"\"   \"\"##\"\"   ###   ##  ##m  m##  ##\"\"\"\"\"\"   \"\"##\"\"   ###   ## ",
-        "    ##        ##     ##\"#  ##   ##mm##   ##           ##     ##\"#  ## ",
-        "    ##        ##     ## ## ##    \"##\"    #######      ##     ## ## ## ",
-        "    ##        ##     ##  #m##     ##     ##           ##     ##  #m## ",
-        "    ##      mm##mm   ##   ###     ##     ##         mm##mm   ##   ### ",
-        "    \"\"      \"\"\"\"\"\"   \"\"   \"\"\"     \"\"     \"\"         \"\"\"\"\"\"   \"\"   \"\"\" ",
-        "                                                                        ",
-        "                                                                        "
-    };
-
-    // Initialize locale to ensure nl_langinfo works correctly
-    static int locale_initialized = 0;
-    if (!locale_initialized) {
-        setlocale(LC_ALL, "");
-        locale_initialized = 1;
-    }
-
-    int unicode_capable = 0;
-    const char *style = getenv("TFRL_BANNER");
-    if (style) {
-        if (strcmp(style, "unicode") == 0 || strcmp(style, "full") == 0) unicode_capable = 1;
-        if (strcmp(style, "ascii") == 0) unicode_capable = 0;
-    }
-
-    const char **banner = unicode_capable ? banner_unicode : banner_ascii;
-
-    // Only enable color when writing to a terminal and colors are not disabled
-    const char *color = isatty(fileno(stdout)) && !getenv("NO_COLOR") ? "\033[1;34m" : "";
-    const char *reset = color[0] ? "\033[0m" : "";
-    for (int i = 0; banner[i]; i++) {
-        fprintf(stdout, "%s%s%s\n", color, banner[i], reset);
-    }
-    fflush(stdout);
-    fputc('\n', stdout);
+static int dashboard_use_color(void) {
+    return isatty(fileno(stdout)) && getenv("NO_COLOR") == NULL;
 }
 
-static void dashboard_box(const char *title, const char *const *lines, int line_count, int width, const char *color) {
-    if (width < 20) width = 20;
-    int inner = width - 2;
-    if (inner < 1) inner = 1;
-    fprintf(stdout, "%s+", color);
-    for (int i = 0; i < inner; i++) fputc('-', stdout);
-    fprintf(stdout, "+\033[0m\n");
+static void dashboard_center_line(int width, const char *text, const char *color) {
+    int len = text ? (int)strlen(text) : 0;
+    int pad = (width > len) ? (width - len) / 2 : 0;
+    for (int i = 0; i < pad; i++) fputc(' ', stdout);
+    fprintf(stdout, "%s%s%s\n", color, text ? text : "", color && color[0] ? "\033[0m" : "");
+}
 
-    char title_buf[256];
-    snprintf(title_buf, sizeof(title_buf), " %s ", title ? title : "");
-    int title_len = (int)strlen(title_buf);
-    if (title_len > inner) title_len = inner;
-
-    fprintf(stdout, "%s|\033[0m", color);
-    fwrite(title_buf, 1, (size_t)title_len, stdout);
-    for (int i = title_len; i < inner; i++) fputc(' ', stdout);
-    fprintf(stdout, "%s|\033[0m\n", color);
-
-    for (int li = 0; li < line_count; li++) {
-        const char *line = lines[li] ? lines[li] : "";
-        int len = (int)strlen(line);
-        if (len > inner) len = inner;
-        fprintf(stdout, "%s|\033[0m", color);
-        fwrite(line, 1, (size_t)len, stdout);
-        for (int i = len; i < inner; i++) fputc(' ', stdout);
-        fprintf(stdout, "%s|\033[0m\n", color);
+static void dashboard_print_banner(int width) {
+    static const char *banner[] = {
+        "#######  ###  ###   ###  ###   ###  #######  ###  ###   ###",
+        "  ###    ###  ####  ###   ### ###   ###      ###  ####  ###",
+        "  ###    ###  ##### ###    #####    #####    ###  ##### ###",
+        "  ###    ###  ### #####     ###     ###      ###  ### #####",
+        "  ###    ###  ###  ####     ###     ###      ###  ###  ####",
+        "  ###    ###  ###   ###     ###     ###      ###  ###   ###",
+        NULL
+    };
+    const char *blue = dashboard_use_color() ? "\033[1;38;5;39m" : "";
+    for (int i = 0; banner[i]; i++) {
+        dashboard_center_line(width, banner[i], blue);
     }
+}
 
-    fprintf(stdout, "%s+", color);
-    for (int i = 0; i < inner; i++) fputc('-', stdout);
-    fprintf(stdout, "+\033[0m\n");
+static void dashboard_progress_bar(int width, double progress) {
+    int bar_width = width - 30;
+    if (bar_width > 70) bar_width = 70;
+    if (bar_width < 20) bar_width = 20;
+    int filled = (int)((progress / 100.0) * (double)bar_width);
+    if (filled < 0) filled = 0;
+    if (filled > bar_width) filled = bar_width;
+    int total_width = bar_width + 7;
+    int pad = (width > total_width) ? (width - total_width) / 2 : 0;
+    const char *text = dashboard_use_color() ? "\033[37m" : "";
+    const char *fill = dashboard_use_color() ? "\033[44m" : "";
+    const char *empty = dashboard_use_color() ? "\033[40m" : "";
+    const char *reset = dashboard_use_color() ? "\033[0m" : "";
+    for (int i = 0; i < pad; i++) fputc(' ', stdout);
+    fprintf(stdout, "%s[", text);
+    for (int i = 0; i < bar_width; i++) {
+        if (dashboard_use_color()) {
+            fprintf(stdout, "%s \033[0m", i < filled ? fill : empty);
+        } else {
+            fputc(i < filled ? '#' : ' ', stdout);
+        }
+    }
+    fprintf(stdout, "%s] %3d%%%s\n", text, (int)(progress + 0.5), reset);
+}
+
+static void dashboard_heading(int x, const char *title) {
+    const char *blue = dashboard_use_color() ? "\033[1;38;5;39m" : "";
+    const char *reset = dashboard_use_color() ? "\033[0m" : "";
+    fprintf(stdout, "\033[%dG%s%s%s\n", x, blue, title, reset);
+}
+
+static void dashboard_stat_str(int x, const char *label, const char *value) {
+    const char *label_color = dashboard_use_color() ? "\033[37m" : "";
+    const char *value_color = dashboard_use_color() ? "\033[1;38;5;33m" : "";
+    const char *reset = dashboard_use_color() ? "\033[0m" : "";
+    fprintf(stdout, "\033[%dG%s%-17s: %s%s%s\n", x, label_color, label, value_color, value, reset);
+}
+
+static void dashboard_stat_double(int x, const char *label, const char *fmt, double value) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), fmt, value);
+    dashboard_stat_str(x, label, buf);
+}
+
+static void dashboard_stat_ll(int x, const char *label, long long value) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%lld", value);
+    dashboard_stat_str(x, label, buf);
 }
 
 static void dashboard_render(const tfrl_runner_config *cfg,
@@ -669,65 +663,56 @@ static void dashboard_render(const tfrl_runner_config *cfg,
     format_duration(eta_seconds, eta_buf, sizeof(eta_buf));
 
     fprintf(stdout, "\033[H\033[J");
-    dashboard_print_banner();
-    const char *border = "\033[38;5;39m";
     int term_width = dashboard_term_width();
-    int box_width = term_width - 2;
-    if (box_width > 120) box_width = 120;
-    if (box_width < 60) box_width = 60;
-    int inner_width = box_width - 2;
+    int x = (term_width - 42) / 2 + 1;
+    if (x < 1) x = 1;
 
-    char progress_bar[160];
-    int bar_space = inner_width - 28;
-    if (bar_space < 10) bar_space = 10;
-    if (bar_space > 80) bar_space = 80;
-    int filled = (int)((progress / 100.0) * (double)bar_space);
-    if (filled < 0) filled = 0;
-    if (filled > bar_space) filled = bar_space;
-    int pos = 0;
-    pos += snprintf(progress_bar + pos, sizeof(progress_bar) - (size_t)pos, "[");
-    for (int i = 0; i < bar_space && pos < (int)sizeof(progress_bar) - 1; i++) {
-        progress_bar[pos++] = (i < filled) ? '=' : ' ';
+    dashboard_print_banner(term_width);
+    fputc('\n', stdout);
+    dashboard_progress_bar(term_width, progress);
+    fputc('\n', stdout);
+
+    dashboard_heading(x, "PROGRESS");
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%d / %d", step + 1, total_steps);
+        dashboard_stat_str(x, "step", buf);
     }
-    if (pos < (int)sizeof(progress_bar) - 1) progress_bar[pos++] = ']';
-    progress_bar[pos] = '\0';
+    dashboard_stat_ll(x, "steps left", steps_left);
+    dashboard_stat_str(x, "eta", eta_buf);
+    dashboard_stat_str(x, "elapsed", elapsed_buf);
 
-    char line_p1[192];
-    char line_p2[192];
-    snprintf(line_p1, sizeof(line_p1), "%s %6.2f%%  step %d/%d", progress_bar, progress, step + 1, total_steps);
-    snprintf(line_p2, sizeof(line_p2), "left %d  eta %s  elapsed %s", steps_left, eta_buf, elapsed_buf);
-    const char *progress_lines[] = { line_p1, line_p2 };
-    dashboard_box("Progress", progress_lines, 2, box_width, border);
+    fputc('\n', stdout);
+    dashboard_heading(x, "THROUGHPUT");
+    dashboard_stat_double(x, "steps/s", "%8.1f", steps_per_sec);
+    dashboard_stat_double(x, "samples/s", "%8.1f", samples_per_sec);
+    dashboard_stat_ll(x, "env steps", total_env_steps);
 
-    char line_t1[192];
-    char line_t2[192];
-    snprintf(line_t1, sizeof(line_t1), "steps/s %8.1f  samples/s %10.1f  episodes/s %6.2f",
-             steps_per_sec, samples_per_sec, episodes_per_sec);
-    snprintf(line_t2, sizeof(line_t2), "env_steps %lld  avg_len %7.1f  est_episodes_left %7.0f",
-             total_env_steps, avg_ep_len, est_eps_left);
-    const char *throughput_lines[] = { line_t1, line_t2 };
-    dashboard_box("Throughput", throughput_lines, 2, box_width, border);
+    fputc('\n', stdout);
+    dashboard_heading(x, "LEARNING");
+    dashboard_stat_double(x, "last return", "%9.4f", last_return);
+    dashboard_stat_double(x, "avg return", "%9.4f", avg_return);
+    dashboard_stat_ll(x, "episodes", total_episodes);
+    dashboard_stat_double(x, "episodes/s", "%7.2f", episodes_per_sec);
+    dashboard_stat_double(x, "avg ep length", "%7.1f", avg_ep_len);
+    dashboard_stat_double(x, "eps left est", "%7.0f", est_eps_left);
 
-    char line_r1[192];
-    char line_r2[192];
-    snprintf(line_r1, sizeof(line_r1), "last_return %9.4f  avg_return %9.4f", last_return, avg_return);
-    snprintf(line_r2, sizeof(line_r2), "episodes %d  envs %d  agents %d", total_episodes, env_count, agent_count);
-    const char *return_lines[] = { line_r1, line_r2 };
-    dashboard_box("Learning", return_lines, 2, box_width, border);
-
-    char line_c1[192];
-    char line_c2[192];
-    snprintf(line_c1, sizeof(line_c1), "algo=%s env=%s backend=%s device=%s",
-             cfg->algo ? cfg->algo : "ppo",
-             cfg->env_name ? cfg->env_name : "maze_rooms",
-             cfg->backend ? cfg->backend : "cpu",
-             cfg->device ? cfg->device : "cpu");
-    snprintf(line_c2, sizeof(line_c2), "threads=%d  render_every=%d  log_every=%d",
-             cfg->threads > 0 ? cfg->threads : env_count,
-             cfg->render_every,
-             cfg->log_every);
-    const char *config_lines[] = { line_c1, line_c2 };
-    dashboard_box("Config", config_lines, 2, box_width, border);
+    fputc('\n', stdout);
+    dashboard_heading(x, "CONFIG");
+    {
+        char cfg_line[128];
+        snprintf(cfg_line, sizeof(cfg_line), "%s / %s / %s",
+                 cfg->algo ? cfg->algo : "ppo",
+                 cfg->env_name ? cfg->env_name : "maze_rooms",
+                 cfg->backend ? cfg->backend : "cpu");
+        dashboard_stat_str(x, "algo/env/backend", cfg_line);
+        snprintf(cfg_line, sizeof(cfg_line), "%d / %d", env_count, agent_count);
+        dashboard_stat_str(x, "envs / agents", cfg_line);
+        snprintf(cfg_line, sizeof(cfg_line), "%d / %d",
+                 cfg->threads > 0 ? cfg->threads : env_count,
+                 cfg->log_every);
+        dashboard_stat_str(x, "threads/log", cfg_line);
+    }
 
     if (elapsed_seconds > 0.0) {
         double other = elapsed_seconds - env_seconds - update_seconds - render_seconds;
@@ -750,20 +735,15 @@ static void dashboard_render(const tfrl_runner_config *cfg,
             bottleneck = "other";
             bottleneck_pct = p_oth;
         }
-        char line_tm1[192];
-        char line_tm2[192];
-        char line_tm3[192];
-        snprintf(line_tm1, sizeof(line_tm1),
-                 "env %7.2fs (%5.1f%%) | update %7.2fs (%5.1f%%)",
-                 env_seconds, p_env * 100.0,
-                 update_seconds, p_upd * 100.0);
-        snprintf(line_tm2, sizeof(line_tm2),
-                 "render %7.2fs (%5.1f%%) | other  %7.2fs (%5.1f%%)",
-                 render_seconds, p_rnd * 100.0,
-                 other, p_oth * 100.0);
-        snprintf(line_tm3, sizeof(line_tm3), "bottleneck: %-6s (%5.1f%%)", bottleneck, bottleneck_pct * 100.0);
-        const char *timer_lines[] = { line_tm1, line_tm2, line_tm3 };
-        dashboard_box("Timers", timer_lines, 3, box_width, border);
+        char bottleneck_line[64];
+        fputc('\n', stdout);
+        dashboard_heading(x, "TIMERS");
+        dashboard_stat_double(x, "env", "%7.2fs", env_seconds);
+        dashboard_stat_double(x, "update", "%7.2fs", update_seconds);
+        dashboard_stat_double(x, "render", "%7.2fs", render_seconds);
+        dashboard_stat_double(x, "other", "%7.2fs", other);
+        snprintf(bottleneck_line, sizeof(bottleneck_line), "%s (%.1f%%)", bottleneck, bottleneck_pct * 100.0);
+        dashboard_stat_str(x, "bottleneck", bottleneck_line);
     }
     fflush(stdout);
 }
@@ -1409,7 +1389,7 @@ typedef struct {
 
 static int is_dqn_family(const char *name) {
     if (!name) return 0;
-    return strcmp(name, "dqn") == 0 || strcmp(name, "rainbow") == 0 || strcmp(name, "qrdqn") == 0 || strcmp(name, "iqn") == 0;
+    return strcmp(name, "dqn") == 0;
 }
 
 static void mp_actor_main(const tfrl_mp_actor *actor) {

@@ -10,7 +10,7 @@
 
 Common flags:
 
-- `--algo dqn|rainbow|qrdqn|iql|iqn|ppo|reinforce|a2c|a3c|trpo|sac|td3|impala|mcts|random`
+- `--algo dqn|ppo|nca|random`
 - `--env maze_rooms|lineworld|lineworld_duo|lineworld_cont|point1d|coin_maze|coin_maze_duo`
 - `--env py:gymnasium:ENV_ID` (Python bridge)
 - `--env py:pettingzoo:MODULE` (Python bridge, e.g. `py:pettingzoo:butterfly.pistonball_v6`)
@@ -22,31 +22,21 @@ Common flags:
 - `--seed N`
 - `--gamma G`
 - `--lr LR`
-- `--epsilon E` (DQN family)
+- `--epsilon E` (DQN)
 - `--clip-eps E` (PPO)
 - `--kl-target K` (PPO)
 - `--gae-lambda L` (PPO)
 - `--steps-per-batch N` (PPO/REINFORCE)
 - `--epochs N` (PPO)
-- `--replay-size N` (DQN family, SAC, TD3)
-- `--batch-size N` (DQN family, SAC, TD3)
-- `--train-every N` (DQN family, SAC, TD3)
-- `--learning-starts N` (DQN family, SAC, TD3)
-- `--grad-steps N` (DQN family, SAC, TD3)
-- `--per-alpha N` (DQN family, SAC, TD3)
-- `--per-beta N` (DQN family, SAC, TD3)
-- `--c51-atoms N` (Rainbow)
-- `--c51-vmin V` (Rainbow)
-- `--c51-vmax V` (Rainbow)
-- `--iqn-quantiles N` (IQN)
-- `--iqn-tau-samples N` (IQN)
-- `--actor-count N` (IMPALA split)
-- `--learner-batch N` (IMPALA split)
-- `--learner-batch-auto` (adaptive batch sizing for IMPALA)
-- `--queue-capacity N` (IMPALA split)
-- `--mcts-sims N` (MCTS)
-- `--mcts-depth N` (MCTS)
-- `--entropy-coef N` (A2C/IMPALA/SAC)
+- `--replay-size N` (DQN)
+- `--batch-size N` (DQN)
+- `--train-every N` (DQN)
+- `--learning-starts N` (DQN)
+- `--grad-steps N` (DQN)
+- `--per-alpha N` (DQN)
+- `--per-beta N` (DQN)
+- `--entropy-coef N` (PPO)
+- `--epsilon E` (DQN/NCA exploration)
 - `--save PATH`
 - `--load PATH`
 - `--log-every N`
@@ -57,7 +47,7 @@ Common flags:
 - `--trace-out FILE`
 - `--profile` (print profiling summary)
 - `--profile-json FILE` (write JSON profile summary)
-- `--mp-actors N` (multiprocess actor count for off-policy algos)
+- `--mp-actors N` (multiprocess actor count for DQN)
 - `--mp-queue N` (shared queue capacity for mp mode)
 - `--mp-sync-every N` (sync interval for actor policy reload)
 - `--mp-sync-path PATH` (sync checkpoint prefix)
@@ -65,6 +55,9 @@ Common flags:
 - `--share-policy` (use one policy for all agents)
 - `--backend cpu|cuda|blas`
 - `--device cpu|gpu`
+
+Removed v1 placeholder algorithm names now fail fast: `rainbow`, `qrdqn`,
+`iqn`, `iql`, `a2c`, `a3c`, `trpo`, `sac`, `td3`, `impala`, and `mcts`.
 
 Defaults:
 

@@ -1,0 +1,141 @@
+#ifndef TFRL_PUBLIC_ENV_H
+#define TFRL_PUBLIC_ENV_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+#define TFRL_RESTRICT
+#else
+#define TFRL_RESTRICT restrict
+#endif
+
+#define TFRL_MAX_BOX_DIMS 128
+
+typedef struct {
+    int index;
+    int data_len;
+    float data[TFRL_MAX_BOX_DIMS];
+} tfrl_obs;
+
+typedef struct {
+    int index;
+    int data_len;
+    float data[TFRL_MAX_BOX_DIMS];
+} tfrl_action;
+
+typedef struct {
+    tfrl_obs observation;
+    double reward;
+    int done;
+} tfrl_step_result;
+
+typedef enum {
+    TFRL_SPACE_DISCRETE = 0,
+    TFRL_SPACE_BOX = 1
+} tfrl_space_type;
+
+typedef enum {
+    TFRL_DTYPE_INT32 = 0,
+    TFRL_DTYPE_FLOAT32 = 1
+} tfrl_dtype;
+
+typedef struct {
+    const char *name;
+    int len;
+    int dims;
+    int shape[2];
+    tfrl_dtype dtype;
+} tfrl_obs_field;
+
+typedef struct {
+    int field_count;
+    const tfrl_obs_field *fields;
+} tfrl_obs_layout;
+
+typedef struct {
+    const char *name;
+    int obs_n;
+    int action_n;
+    int max_steps;
+    int width;
+    int height;
+    tfrl_space_type obs_type;
+    tfrl_space_type action_type;
+    int obs_dims;
+    int action_dims;
+    int obs_shape[2];
+    int action_shape[2];
+    tfrl_dtype obs_dtype;
+    tfrl_dtype action_dtype;
+    double obs_low;
+    double obs_high;
+    double action_low;
+    double action_high;
+    int agent_count;
+    const tfrl_obs_layout *obs_layout;
+} tfrl_env_spec;
+
+typedef struct {
+    const char *name;
+    uint64_t seed;
+} tfrl_env_config;
+
+typedef struct tfrl_env tfrl_env;
+
+typedef struct {
+    const char *name;
+    const char *kind;
+    uint32_t abi_version;
+    uint32_t flags;
+} tfrl_env_desc;
+
+#define TFRL_ENV_ABI_VERSION 2u
+#define TFRL_ENV_FLAG_RENDER_SNAPSHOT 0x00000001u
+#define TFRL_ENV_FLAG_MULTI_AGENT 0x00000002u
+
+tfrl_env *tfrl_env_create(const tfrl_env_config *cfg);
+void tfrl_env_destroy(tfrl_env *env);
+tfrl_obs tfrl_env_reset(tfrl_env *env, uint64_t seed);
+tfrl_step_result tfrl_env_step(tfrl_env *env, tfrl_action action);
+const tfrl_env_spec *tfrl_env_get_spec(const tfrl_env *env);
+int tfrl_env_agent_count(const tfrl_env *env);
+
+size_t tfrl_env_state_size(const tfrl_env *env);
+int tfrl_env_state_save(const tfrl_env *env, void *buffer, size_t buffer_len);
+int tfrl_env_state_load(tfrl_env *env, const void *buffer, size_t buffer_len);
+
+int tfrl_env_reset_multi(tfrl_env *env, uint64_t seed, tfrl_obs *out_obs, int max_agents);
+int tfrl_env_step_multi(tfrl_env *env, const tfrl_action *actions, int action_count,
+                        tfrl_step_result *out_steps, int max_agents);
+
+void tfrl_env_step_batch(tfrl_env **TFRL_RESTRICT envs, int env_count,
+                         const tfrl_action *TFRL_RESTRICT actions,
+                         tfrl_step_result *TFRL_RESTRICT out_steps);
+void tfrl_env_reset_batch(tfrl_env **TFRL_RESTRICT envs, int env_count, uint64_t seed_base,
+                          tfrl_obs *TFRL_RESTRICT out_obs);
+void tfrl_env_reset_batch_seeds(tfrl_env **TFRL_RESTRICT envs, int env_count,
+                                const uint64_t *TFRL_RESTRICT seeds,
+                                tfrl_obs *TFRL_RESTRICT out_obs);
+
+int tfrl_obs_layout_total_len(const tfrl_obs_layout *layout);
+int tfrl_obs_layout_validate(const tfrl_obs_layout *layout);
+int tfrl_obs_flatten(const tfrl_obs_layout *layout, const float *const *fields,
+                     tfrl_obs *out_obs);
+int tfrl_obs_unflatten_copy(const tfrl_obs_layout *layout, const tfrl_obs *obs,
+                            float *const *out_fields);
+const float *tfrl_obs_unflatten_field(const tfrl_obs_layout *layout, const tfrl_obs *obs,
+                                      int field_index, int *out_len);
+
+size_t tfrl_env_render_bytes_needed(const tfrl_env *env);
+size_t tfrl_env_render_write(tfrl_env *env, void *buffer, size_t buffer_len);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

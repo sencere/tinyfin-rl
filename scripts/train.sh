@@ -26,7 +26,7 @@ per_alpha="${PER_ALPHA:-}"
 per_beta="${PER_BETA:-}"
 
 # Docs-recommended defaults for DQN family unless overridden.
-if [[ "$algo" == "dqn" || "$algo" == "rainbow" || "$algo" == "qrdqn" || "$algo" == "iqn" ]]; then
+if [[ "$algo" == "dqn" ]]; then
   replay_size="${replay_size:-10000}"
   batch_size="${batch_size:-128}"
   per_alpha="${per_alpha:-0.6}"

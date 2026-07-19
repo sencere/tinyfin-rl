@@ -9,14 +9,13 @@
 ## Build
 
 ```bash
-make
+./scripts/build.sh
 ```
 
 With CUDA (Tinyfin backend):
 
 ```bash
-make -C tinyfin ENABLE_CUDA=1 libtinyfin.so
-make
+./scripts/build.sh --backend cuda
 ```
 
 Run with CUDA:
@@ -28,7 +27,13 @@ Run with CUDA:
 With raylib:
 
 ```bash
-make USE_RAYLIB=1
+./scripts/build.sh --with-raylib
+```
+
+Set shell paths for interactive use:
+
+```bash
+. ./scripts/setup_env.sh
 ```
 
 Env shared library for Python bindings:
@@ -36,6 +41,20 @@ Env shared library for Python bindings:
 ```bash
 make
 ls build/libtfrl_env.so
+```
+
+Separated core env modules:
+
+```bash
+ls build/libtfrl_env_lineworld.so
+ls build/libtfrl_env_maze_rooms.so
+ls build/libtfrl_env_coin_maze.so
+```
+
+Run against a module path:
+
+```bash
+./build/tinyfin-rl train --algo random --env build/libtfrl_env_lineworld.so --steps 100
 ```
 
 ## CMake (optional)

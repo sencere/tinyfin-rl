@@ -19,15 +19,14 @@ int main(void) {
     const tfrl_env_spec *spec = tfrl_env_get_spec(env);
     if (!expect(spec != NULL, "spec")) return 1;
     if (!expect(spec->obs_type == TFRL_SPACE_BOX, "obs type")) return 1;
-    if (!expect(spec->action_type == TFRL_SPACE_BOX, "action type")) return 1;
+    if (!expect(spec->action_type == TFRL_SPACE_DISCRETE, "action type")) return 1;
 
     tfrl_obs obs = tfrl_env_reset(env, 0);
     if (!expect(obs.data_len == 1, "reset obs len")) return 1;
     if (!expect(obs.data[0] >= -1.0f && obs.data[0] <= 1.0f, "reset obs range")) return 1;
 
     tfrl_action action = {0};
-    action.data_len = 1;
-    action.data[0] = 1.0f;
+    action.index = 1;
 
     for (int i = 0; i < 10; i++) {
         tfrl_step_result step = tfrl_env_step(env, action);

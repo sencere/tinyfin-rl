@@ -23,6 +23,6 @@ echo "runtime hint: export LD_LIBRARY_PATH=\"$root/raylib-src/src:$root/tinyfin:
 
 if [[ "$build_tinyfin_rl" == "1" ]]; then
   TFRL_SKIP_RAYLIB=1 USE_RAYLIB=1 bash "$root/scripts/build_tinyfin_rl.sh"
-else
+elif [[ "${TFRL_RAYLIB_DEP:-0}" != "1" ]]; then
   echo "build hint: USE_RAYLIB=1 scripts/build_tinyfin_rl.sh"
 fi

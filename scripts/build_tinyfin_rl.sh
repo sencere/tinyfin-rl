@@ -18,7 +18,7 @@ if [[ "$build_tinyfin" == "1" && ! -f "$root/tinyfin/libtinyfin.so" ]]; then
 fi
 
 if [[ "$use_raylib" == "1" && "$skip_raylib" != "1" ]]; then
-  bash "$root/scripts/build_raylib.sh"
+  BUILD_TINYFIN_RL=0 TFRL_RAYLIB_DEP=1 bash "$root/scripts/build_raylib.sh"
 fi
 
 if [[ "$clean" == "1" ]]; then
@@ -31,11 +31,28 @@ if [[ "$build_env_lib_only" == "1" ]]; then
   exit 0
 fi
 
+mkdir -p "$root/build"
+viewer_mode="headless"
+if [[ "$use_raylib" == "1" ]]; then
+  viewer_mode="raylib"
+fi
+viewer_mode_file="$root/build/.tinyfin_rl_viewer_mode"
+if [[ -f "$root/build/tinyfin-rl" ]]; then
+  current_viewer_mode=""
+  if [[ -f "$viewer_mode_file" ]]; then
+    current_viewer_mode="$(cat "$viewer_mode_file")"
+  fi
+  if [[ "$current_viewer_mode" != "$viewer_mode" ]]; then
+    rm -f "$root/build/tinyfin-rl"
+  fi
+fi
+
 if [[ "$use_raylib" == "1" ]]; then
   make -C "$root" USE_RAYLIB=1
 else
   make -C "$root"
 fi
+printf "%s\n" "$viewer_mode" > "$viewer_mode_file"
 
 echo "tinyfin-rl built: $root/build/tinyfin-rl"
 echo "libtfrl_env built: $root/build/libtfrl_env.so"

@@ -88,6 +88,12 @@ int main(int argc, char **argv) {
     cfg.deterministic = deterministic;
     cfg.load_path = load_path;
     cfg.env_name = env_name;
+    cfg.obs_type = spec->obs_type;
+    cfg.action_type = spec->action_type;
+    cfg.obs_n = spec->obs_n;
+    cfg.action_n = spec->action_n;
+    cfg.obs_dims = spec->obs_dims;
+    cfg.action_dims = spec->action_dims;
     tfrl_algo_config_apply_defaults(&cfg);
     tfrl_algo algo = tfrl_algo_create(&cfg, spec);
     if (!algo.vtable || (!algo.vtable->act && !algo.vtable->act_env)) {
