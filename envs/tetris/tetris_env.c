@@ -1,11 +1,32 @@
 #include "envs/envs_internal.h"
 
 #include <string.h>
+#include <stdlib.h>
 
-static const int TETRIS_PIECE_COUNT = 1;
-static const int TETRIS_PIECES[1][4][2] = {
-    {{0, 0}, {1, 0}, {0, 1}, {1, 1}},
+static const int TETRIS_PIECE_COUNT = 7;
+static const int TETRIS_PIECES[7][4][2] = {
+    {{1, 0}, {1, 1}, {1, 2}, {1, 3}}, /* I */
+    {{0, 0}, {1, 0}, {0, 1}, {1, 1}}, /* O */
+    {{1, 0}, {0, 1}, {1, 1}, {2, 1}}, /* T */
+    {{1, 0}, {2, 0}, {0, 1}, {1, 1}}, /* S */
+    {{0, 0}, {1, 0}, {1, 1}, {2, 1}}, /* Z */
+    {{0, 0}, {0, 1}, {0, 2}, {1, 2}}, /* J */
+    {{2, 0}, {2, 1}, {1, 2}, {2, 2}}, /* L */
 };
+
+static void tetris_piece_cell(const tfrl_env *env, int i, int *x, int *y) {
+    int px = TETRIS_PIECES[env->tetris.piece][i][0];
+    int py = TETRIS_PIECES[env->tetris.piece][i][1];
+    int rot = env->tetris.rot & 3;
+    for (int r = 0; r < rot; r++) {
+        int pivot = env->tetris.piece == 0 ? 3 : 2;
+        int nx = pivot - py;
+        py = px;
+        px = nx;
+    }
+    *x = px;
+    *y = py;
+}
 
 static int tetris_can_place(const tfrl_env *env, int px, int py);
 
@@ -75,9 +96,27 @@ const tfrl_env_spec *tfrl_env_spec_tetris(void) { return &TETRIS_SPEC; }
 const tfrl_env_spec *tfrl_env_spec_tetris_disc(void) { return &TETRIS_DISC_SPEC; }
 
 static void tetris_spawn_piece(tfrl_env *env) {
-    env->tetris.piece = 0;
+    if (env->tetris.bag_index >= TETRIS_PIECE_COUNT) {
+        for (int i = 0; i < TETRIS_PIECE_COUNT; i++) env->tetris.bag[i] = i;
+        for (int i = TETRIS_PIECE_COUNT - 1; i > 0; i--) {
+            int j = tfrl_env_rand_range_int(env, 0, i);
+            int tmp = env->tetris.bag[i]; env->tetris.bag[i] = env->tetris.bag[j]; env->tetris.bag[j] = tmp;
+        }
+        env->tetris.bag_index = 0;
+    }
+    env->tetris.piece = env->tetris.next_piece >= 0
+        ? env->tetris.next_piece : env->tetris.bag[env->tetris.bag_index++];
+    if (env->tetris.bag_index >= TETRIS_PIECE_COUNT) {
+        for (int i = 0; i < TETRIS_PIECE_COUNT; i++) env->tetris.bag[i] = i;
+        for (int i = TETRIS_PIECE_COUNT - 1; i > 0; i--) {
+            int j = tfrl_env_rand_range_int(env, 0, i);
+            int tmp = env->tetris.bag[i]; env->tetris.bag[i] = env->tetris.bag[j]; env->tetris.bag[j] = tmp;
+        }
+        env->tetris.bag_index = 0;
+    }
+    env->tetris.next_piece = env->tetris.bag[env->tetris.bag_index++];
     env->tetris.rot = 0;
-    env->tetris.x = TETRIS_W / 2 - 1;
+    env->tetris.x = TETRIS_W / 2 - 2;
     env->tetris.y = 0;
 }
 
@@ -108,6 +147,32 @@ static void tetris_compute_columns(const tfrl_env *env, int *heights, int *holes
         heights[x] = height;
         holes[x] = hole;
     }
+}
+
+static float tetris_board_cost(const tfrl_env *env) {
+    int heights[TETRIS_W], holes[TETRIS_W], filled = 0;
+    tetris_compute_columns(env, heights, holes, &filled);
+    int height_sum = 0, hole_sum = 0, bumpiness = 0;
+    for (int x = 0; x < TETRIS_W; x++) {
+        height_sum += heights[x];
+        hole_sum += holes[x];
+        if (x > 0) bumpiness += abs(heights[x] - heights[x - 1]);
+    }
+    return 0.050f * (float)height_sum + 0.150f * (float)hole_sum +
+           0.025f * (float)bumpiness + 0.005f * (float)filled;
+}
+
+static float tetris_line_potential(const tfrl_env *env) {
+    float potential = 0.0f;
+    for (int y = 0; y < TETRIS_H; y++) {
+        int filled = 0;
+        for (int x = 0; x < TETRIS_W; x++) filled += env->tetris.grid[x][y] != 0;
+        if (filled >= 2) {
+            float ratio = (float)filled / (float)TETRIS_W;
+            potential += ratio * ratio;
+        }
+    }
+    return potential;
 }
 
 static void tetris_fill_obs(const tfrl_env *env, tfrl_obs *obs) {
@@ -192,6 +257,8 @@ tfrl_obs tfrl_env_reset_tetris(tfrl_env *env, uint64_t seed) {
     memset(env->tetris.grid, 0, sizeof(env->tetris.grid));
     env->tetris.lines = 0;
     env->tetris.score = 0.0;
+    env->tetris.bag_index = TETRIS_PIECE_COUNT;
+    env->tetris.next_piece = -1;
     tetris_spawn_piece(env);
     tfrl_obs obs = {0};
     tetris_fill_obs(env, &obs);
@@ -207,8 +274,10 @@ tfrl_obs tfrl_env_reset_tetris_disc(tfrl_env *env, uint64_t seed) {
 
 static int tetris_can_place(const tfrl_env *env, int px, int py) {
     for (int i = 0; i < 4; i++) {
-        int x = px + TETRIS_PIECES[0][i][0];
-        int y = py + TETRIS_PIECES[0][i][1];
+        int dx, dy;
+        tetris_piece_cell(env, i, &dx, &dy);
+        int x = px + dx;
+        int y = py + dy;
         if (x < 0 || x >= TETRIS_W || y < 0 || y >= TETRIS_H) return 0;
         if (env->tetris.grid[x][y]) return 0;
     }
@@ -217,8 +286,10 @@ static int tetris_can_place(const tfrl_env *env, int px, int py) {
 
 static void tetris_lock_piece(tfrl_env *env) {
     for (int i = 0; i < 4; i++) {
-        int x = env->tetris.x + TETRIS_PIECES[0][i][0];
-        int y = env->tetris.y + TETRIS_PIECES[0][i][1];
+        int dx, dy;
+        tetris_piece_cell(env, i, &dx, &dy);
+        int x = env->tetris.x + dx;
+        int y = env->tetris.y + dy;
         if (x >= 0 && x < TETRIS_W && y >= 0 && y < TETRIS_H) {
             env->tetris.grid[x][y] = 1;
         }
@@ -247,26 +318,34 @@ static int tetris_clear_lines(tfrl_env *env) {
 }
 
 tfrl_step_result tfrl_env_step_tetris(tfrl_env *env, tfrl_action action) {
+    float old_cost = tetris_board_cost(env);
+    float old_line_potential = tetris_line_potential(env);
     int act = action.index;
     if (act < 0 || act > 3) act = 0;
     int nx = env->tetris.x;
     int ny = env->tetris.y;
     if (act == 0) nx -= 1;
     if (act == 1) nx += 1;
-    if (act == 2) ny += 1;
-    if (act == 3) ny += 2;
+    if (act == 2) {
+        int old_rot = env->tetris.rot;
+        env->tetris.rot = (env->tetris.rot + 1) & 3;
+        if (!tetris_can_place(env, nx, ny)) env->tetris.rot = old_rot;
+    }
+    if (act == 3) {
+        while (tetris_can_place(env, nx, ny + 1)) ny++;
+    }
     if (tetris_can_place(env, nx, ny)) {
         env->tetris.x = nx;
         env->tetris.y = ny;
     }
 
-    double reward = -0.01;
+    double reward = -0.02 - (double)old_cost * 0.05;
     int done = 0;
 
     if (!tetris_can_place(env, env->tetris.x, env->tetris.y + 1)) {
         tetris_lock_piece(env);
         int cleared = tetris_clear_lines(env);
-        if (cleared > 0) reward += (double)cleared;
+        if (cleared > 0) reward += 5.0 + 10.0 * (double)cleared * (double)cleared;
         tetris_spawn_piece(env);
         if (!tetris_can_place(env, env->tetris.x, env->tetris.y)) {
             done = 1;
@@ -278,6 +357,13 @@ tfrl_step_result tfrl_env_step_tetris(tfrl_env *env, tfrl_action action) {
 
     env->steps += 1;
     if (env->steps >= TETRIS_MAX_STEPS) done = 1;
+
+    if (!done) {
+        float new_cost = tetris_board_cost(env);
+        reward += (double)(old_cost - new_cost) * 0.20;
+    }
+    float new_line_potential = tetris_line_potential(env);
+    reward += (double)(new_line_potential - old_line_potential) * 0.25;
 
     tfrl_step_result out = {0};
     tetris_fill_obs(env, &out.observation);

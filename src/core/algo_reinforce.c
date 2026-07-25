@@ -27,10 +27,13 @@ typedef struct {
     float lr;
     float epsilon;
     float entropy_coef;
+    float clip_eps;
+    float gae_lambda;
     float value_coef;
     float action_bias_right;
     int action_bias_index;
     int hidden_size;
+    int rollout_batch_size;
 
     Linear *fc1;
     Linear *fc2;
@@ -45,10 +48,12 @@ typedef struct {
         float *obs_buf;
         int *action_buf;
         float *reward_buf;
+        float *old_logp_buf;
     } *trajs;
 
     float last_return;
     int last_steps;
+    float last_logprob;
 } tfrl_reinforce_algo;
 
 typedef struct {
@@ -194,6 +199,7 @@ static struct reinforce_traj *reinforce_get_traj(tfrl_reinforce_algo *algo, int 
             new_trajs[i].obs_buf = NULL;
             new_trajs[i].action_buf = NULL;
             new_trajs[i].reward_buf = NULL;
+            new_trajs[i].old_logp_buf = NULL;
         }
         algo->trajs = new_trajs;
         algo->traj_count = new_count;
@@ -210,10 +216,12 @@ static void reinforce_traj_push(tfrl_reinforce_algo *algo, struct reinforce_traj
         float *new_obs = (float *)realloc(traj->obs_buf, obs_bytes);
         int *new_actions = (int *)realloc(traj->action_buf, (size_t)new_cap * sizeof(int));
         float *new_rewards = (float *)realloc(traj->reward_buf, (size_t)new_cap * sizeof(float));
-        if (!new_obs || !new_actions || !new_rewards) return;
+        float *new_old_logp = (float *)realloc(traj->old_logp_buf, (size_t)new_cap * sizeof(float));
+        if (!new_obs || !new_actions || !new_rewards || !new_old_logp) return;
         traj->obs_buf = new_obs;
         traj->action_buf = new_actions;
         traj->reward_buf = new_rewards;
+        traj->old_logp_buf = new_old_logp;
         traj->capacity = new_cap;
     }
 
@@ -224,6 +232,7 @@ static void reinforce_traj_push(tfrl_reinforce_algo *algo, struct reinforce_traj
     if (act >= algo->action_n) act = algo->action_n - 1;
     traj->action_buf[traj->length] = act;
     traj->reward_buf[traj->length] = (float)tr->reward;
+    traj->old_logp_buf[traj->length] = algo->last_logprob;
     traj->length += 1;
 }
 
@@ -232,23 +241,31 @@ static void reinforce_train_episode(tfrl_reinforce_algo *algo, struct reinforce_
     int T = traj->length;
 
     float *returns = (float *)malloc((size_t)T * sizeof(float));
-    if (!returns) {
+    float *advantages = (float *)malloc((size_t)T * sizeof(float));
+    if (!returns || !advantages) {
+        free(returns);
+        free(advantages);
         traj->length = 0;
         return;
     }
 
     float G = 0.0f;
+    float gae = 0.0f;
     for (int t = T - 1; t >= 0; t--) {
         G = traj->reward_buf[t] + algo->gamma * G;
         returns[t] = G;
+        /* With the current one-step value head, use zero bootstrap at the
+         * trajectory boundary and GAE(lambda) over observed rewards. */
+        gae = traj->reward_buf[t] + algo->gamma * algo->gae_lambda * gae;
+        advantages[t] = gae;
     }
 
     float mean = 0.0f;
-    for (int t = 0; t < T; t++) mean += returns[t];
+    for (int t = 0; t < T; t++) mean += advantages[t];
     mean /= (float)T;
     float var = 0.0f;
     for (int t = 0; t < T; t++) {
-        float d = returns[t] - mean;
+        float d = advantages[t] - mean;
         var += d * d;
     }
     var /= (float)T;
@@ -259,6 +276,7 @@ static void reinforce_train_episode(tfrl_reinforce_algo *algo, struct reinforce_
 
     for (int t = 0; t < T; t++) {
         float ret_norm = (returns[t] - mean) / std;
+        float adv_norm = (advantages[t] - mean) / std;
         float *vec = traj->obs_buf + (size_t)t * (size_t)algo->obs_dim;
 
         tfrl_policy_cache cache = {0};
@@ -281,7 +299,18 @@ static void reinforce_train_episode(tfrl_reinforce_algo *algo, struct reinforce_
 
         Tensor *ce = tensor_cross_entropy(probs, target);
         float value_pred = cache.value && cache.value->data ? cache.value->data[0] : 0.0f;
-        float adv = ret_norm - value_pred;
+        float adv = adv_norm - value_pred;
+        if (probs && algo->clip_eps > 0.0f) {
+            int act = traj->action_buf[t];
+            float current = logf(probs->data[act] > 1e-8f ? probs->data[act] : 1e-8f);
+            float ratio = expf(current - traj->old_logp_buf[t]);
+            float lo = 1.0f - algo->clip_eps;
+            float hi = 1.0f + algo->clip_eps;
+            if ((adv > 0.0f && ratio > hi) || (adv < 0.0f && ratio < lo)) {
+                float clipped = ratio < lo ? lo : (ratio > hi ? hi : ratio);
+                adv *= clipped / (fabsf(ratio) > 1e-8f ? ratio : 1.0f);
+            }
+        }
         int shape1[1] = {1};
         Tensor *ret = tensor_new(1, shape1);
         if (ret) ret->data[0] = adv;
@@ -368,6 +397,7 @@ static void reinforce_train_episode(tfrl_reinforce_algo *algo, struct reinforce_
     algo->last_return = returns[0];
     algo->last_steps = T;
     free(returns);
+    free(advantages);
     traj->length = 0;
 }
 
@@ -400,6 +430,8 @@ static tfrl_action reinforce_act(void *ctx, tfrl_obs obs) {
     Tensor *probs = tensor_softmax(cache.logits);
     int act = reinforce_sample_action(algo, probs);
     action.index = act;
+    algo->last_logprob = probs && probs->data[act] > 1e-8f
+        ? logf(probs->data[act]) : logf(1e-8f);
 
     const char *dbg = getenv("TFRL_DEBUG_ACTIONS");
     if (dbg && *dbg) {
@@ -438,7 +470,7 @@ static void reinforce_update(void *ctx, const tfrl_transition *transition) {
     struct reinforce_traj *traj = reinforce_get_traj(algo, transition->policy_version);
     if (!traj) return;
     reinforce_traj_push(algo, traj, transition);
-    if (transition->done) {
+    if (transition->done || traj->length >= algo->rollout_batch_size) {
         reinforce_train_episode(algo, traj);
     }
 }
@@ -472,6 +504,7 @@ static void reinforce_destroy(void *ctx) {
             free(algo->trajs[i].obs_buf);
             free(algo->trajs[i].action_buf);
             free(algo->trajs[i].reward_buf);
+            free(algo->trajs[i].old_logp_buf);
         }
         free(algo->trajs);
     }
@@ -481,8 +514,10 @@ static void reinforce_destroy(void *ctx) {
 static int reinforce_diagnostics(void *ctx, char *buffer, size_t buffer_len) {
     tfrl_reinforce_algo *algo = (tfrl_reinforce_algo *)ctx;
     if (!buffer || buffer_len == 0 || !algo) return 0;
-    snprintf(buffer, buffer_len, "reinforce ep_return=%.3f ep_len=%d lr=%.5f gamma=%.3f",
-             algo->last_return, algo->last_steps, algo->lr, algo->gamma);
+    snprintf(buffer, buffer_len,
+             "ppo_baseline ep_return=%.3f ep_len=%d lr=%.5f gamma=%.3f clip=%.3f gae=%.3f entropy=%.3f",
+             algo->last_return, algo->last_steps, algo->lr, algo->gamma,
+             algo->clip_eps, algo->gae_lambda, algo->entropy_coef);
     return 1;
 }
 
@@ -521,10 +556,14 @@ tfrl_algo tfrl_algo_reinforce_create(const tfrl_algo_config *cfg) {
     algo->lr = (cfg->lr > 0.0f) ? cfg->lr : 0.0005f;
     algo->epsilon = (cfg->epsilon >= 0.0f) ? cfg->epsilon : 0.1f;
     algo->entropy_coef = (cfg->entropy_coef > 0.0f) ? cfg->entropy_coef : 0.01f;
+    algo->clip_eps = cfg->clip_eps > 0.0f ? cfg->clip_eps : 0.2f;
+    algo->gae_lambda = cfg->gae_lambda > 0.0f ? cfg->gae_lambda : 0.95f;
     algo->value_coef = 0.5f;
     algo->action_bias_right = cfg->action_bias_right;
     algo->action_bias_index = (cfg->action_n > 2) ? 2 : -1;
     algo->hidden_size = 64;
+    algo->rollout_batch_size = cfg->steps_per_batch > 0 ? cfg->steps_per_batch : 64;
+    if (algo->rollout_batch_size > 2048) algo->rollout_batch_size = 2048;
 
     algo->fc1 = linear_create(algo->obs_dim, algo->hidden_size);
     algo->fc2 = linear_create(algo->hidden_size, algo->hidden_size);

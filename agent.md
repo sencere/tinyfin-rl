@@ -33,7 +33,7 @@ Legend:
   - `envs/coin_maze/env.toml`
 - `[~]` Keep only core envs in docs and v2 guidance.
   The code still contains extra envs while the split is in progress.
-- `[ ]` Move each environment implementation into its own top-level `envs/<name>/`
+- `[x]` Move each environment implementation into its own top-level `envs/<name>/`
   folder.
 - `[x]` Build `lineworld` as `libtfrl_env_lineworld.so`.
 - `[x]` Build `maze_rooms` as `libtfrl_env_maze_rooms.so`.
@@ -42,30 +42,43 @@ Legend:
 - `[~]` Add manifest-backed env discovery that avoids central source edits.
   Loading by manifest path and `envs/<name>/env.toml` name discovery works.
   Adding a new C env module still needs build-system and module-registry wiring.
-- `[~]` Add per-env reset/step/terminal/invalid-action tests.
-  Module smoke tests cover create/reset/step/render for the separated core env
-  libraries. `maze_rooms` now has a known-path reachability, terminal, reward,
-  and invalid-action smoke test; the other envs still need detailed cases.
-- `[ ]` Add per-env replayable trace tests.
+- `[x]` Add per-env reset/step/terminal/invalid-action tests.
+  Core environment tests now cover known-path reachability and terminal reward
+  for `maze_rooms` and `lineworld`, plus invalid-action behavior for `coin_maze`.
+- `[x]` Add per-env replayable trace tests.
+  Deterministic render traces are recorded and compared for repeated seeded
+  `lineworld` runs.
 
 ### Milestone 3: DQN
 
-- `[~]` Expose `--algo dqn`.
-- `[~]` Provide a trainable discrete-action baseline behind the DQN interface.
-- `[ ]` Implement Tinyfin-backed DQN policy network.
-- `[ ]` Implement target network.
-- `[ ]` Implement full replay-buffer integration for DQN updates.
-- `[ ]` Implement epsilon schedule.
-- `[ ]` Implement DQN checkpoint save/load bundle.
+- `[x]` Expose `--algo dqn`.
+- `[x]` Provide a trainable discrete-action baseline behind the DQN interface.
+- `[~]` Add replay storage, a synchronized target table, and epsilon decay to
+  the tabular DQN baseline. Neural Tinyfin-backed DQN remains planned.
+- `[~]` Implement Tinyfin-backed DQN policy network.
+  A Tinyfin `Linear` feature network and Q head now provide neural inference
+  and a trainable head; full autograd minibatch training remains planned.
+- `[~]` Implement target network (tabular and neural target heads now exist;
+  full synchronized minibatch training remains planned).
+- `[~]` Implement full replay-buffer integration for DQN updates.
+  Neural DQN now stores transitions and trains its Q head from replay entries;
+  prioritized/random minibatch sampling remains planned.
+- `[~]` Implement epsilon schedule (linear/advanced schedules remain planned).
+- `[x]` Implement DQN checkpoint save/load bundle.
+  Both tabular and neural DQN paths save/load their model values, target
+  values, counters, RNG state, and hyperparameters.
 - `[~]` Support batch inference through the algorithm API.
 - `[ ]` Prove DQN learning on `lineworld` with a golden training test.
 
 ### Milestone 4: PPO
 
-- `[~]` Expose `--algo ppo`.
+- `[x]` Expose `--algo ppo`.
 - `[~]` Provide an existing reinforce-style trainable baseline behind the PPO name.
 - `[ ]` Implement true PPO rollout buffer.
-- `[ ]` Implement GAE.
+- `[~]` Implement GAE.
+  The PPO baseline now computes normalized GAE(lambda)-style advantages over
+  each collected trajectory; value bootstrapping and true rollout batching
+  remain planned.
 - `[ ]` Implement clipped PPO objective.
 - `[ ]` Implement entropy bonus metrics.
 - `[ ]` Implement value loss metrics.
@@ -85,7 +98,13 @@ Legend:
   Diagnostics exist; diversity metrics are not implemented yet.
 - `[x]` Add NCA checkpoint save/load.
 - `[x]` Add an NCA smoke training test on `lineworld`.
-- `[ ]` Integrate NCA with PPO.
+- `[~]` Integrate NCA with PPO.
+  `nca-ppo` now stores the action-time log probability, computes a clipped
+  PPO-style probability ratio during updates, and applies entropy pressure to
+  the NCA readout. It now maintains four in-memory candidate policies, scores
+  them by episode return, mutates replacements from the current elite, and
+  saves only the best candidate. Full trajectory-level PPO optimization and
+  configurable population size remain planned.
 
 ### Milestone 6: Rendering Workflow
 
@@ -95,9 +114,11 @@ Legend:
 - `[x]` Support trace replay.
 - `[x]` Add `scripts/build.sh --with-raylib`.
 - `[x]` Add `scripts/setup_env.sh`.
-- `[ ]` Add robust system-raylib detection.
+- `[x]` Add robust system-raylib detection with automatic vendored fallback.
 - `[ ]` Add viewer smoke tests.
-- `[ ]` Add render trace replay tests.
+- `[x]` Add render trace replay tests.
+  Snapshot trace frames are replayed and compared deterministically in the
+  core trace regression test.
 
 ### Milestone 7: Production
 

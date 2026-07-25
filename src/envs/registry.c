@@ -9,6 +9,9 @@ static const tfrl_env_ops ENVS[] = {
     {"lineworld", TFRL_ENV_LINEWORLD, 1, tfrl_env_spec_lineworld, tfrl_env_reset_lineworld, tfrl_env_step_lineworld, NULL, tfrl_env_render_bytes_lineworld, tfrl_env_render_write_lineworld},
 #elif defined(TFRL_ENV_MODULE_COIN_MAZE)
     {"coin_maze", TFRL_ENV_COIN_MAZE, 1, tfrl_env_spec_coin_maze, tfrl_env_reset_coin_maze, tfrl_env_step_coin_maze, NULL, tfrl_env_render_bytes_coin_maze, tfrl_env_render_write_coin_maze},
+#elif defined(TFRL_ENV_MODULE_TETRIS)
+    {"tetris", TFRL_ENV_TETRIS, 1, tfrl_env_spec_tetris, tfrl_env_reset_tetris, tfrl_env_step_tetris, NULL, tfrl_env_render_bytes_tetris, tfrl_env_render_write_tetris},
+    {"tetris_disc", TFRL_ENV_TETRIS, 1, tfrl_env_spec_tetris_disc, tfrl_env_reset_tetris_disc, tfrl_env_step_tetris_disc, NULL, tfrl_env_render_bytes_tetris, tfrl_env_render_write_tetris},
 #else
     {"maze_rooms", TFRL_ENV_MAZE, 1, tfrl_env_spec_maze, tfrl_env_reset_maze, tfrl_env_step_maze, NULL, tfrl_env_render_bytes_maze, tfrl_env_render_write_maze},
     {"lineworld", TFRL_ENV_LINEWORLD, 1, tfrl_env_spec_lineworld, tfrl_env_reset_lineworld, tfrl_env_step_lineworld, NULL, tfrl_env_render_bytes_lineworld, tfrl_env_render_write_lineworld},

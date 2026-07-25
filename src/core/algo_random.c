@@ -18,6 +18,13 @@ typedef struct {
     int action_n;
     int table_size;
     float *q;
+    float *target_q;
+    tfrl_transition *replay;
+    int replay_capacity;
+    int replay_count;
+    int replay_cursor;
+    int update_count;
+    int target_interval;
     float alpha;
     float gamma;
     float epsilon;
@@ -160,22 +167,39 @@ static void simple_q_update(void *ctx, const tfrl_transition *transition) {
     tfrl_simple_q *algo = (tfrl_simple_q *)ctx;
     if (!algo || !transition || algo->action_n <= 0 || algo->table_size <= 0) return;
 
-    int state = simple_q_obs_index(algo, transition->obs);
-    int next_state = simple_q_obs_index(algo, transition->next_obs);
-    int action = transition->action.index;
+    if (algo->replay && algo->replay_capacity > 0) {
+        algo->replay[algo->replay_cursor] = *transition;
+        algo->replay_cursor = (algo->replay_cursor + 1) % algo->replay_capacity;
+        if (algo->replay_count < algo->replay_capacity) algo->replay_count++;
+    }
+
+    const tfrl_transition *sample = transition;
+    if (algo->replay_count > 0) {
+        int index = (algo->replay_cursor - 1 + algo->replay_capacity) % algo->replay_capacity;
+        sample = &algo->replay[index];
+    }
+    int state = simple_q_obs_index(algo, sample->obs);
+    int next_state = simple_q_obs_index(algo, sample->next_obs);
+    int action = sample->action.index;
     if (action < 0) action = 0;
     if (action >= algo->action_n) action = algo->action_n - 1;
 
     float q_sa = algo->q[state * algo->action_n + action];
-    float max_next = algo->q[next_state * algo->action_n];
+    float max_next = algo->target_q[next_state * algo->action_n];
     for (int a = 1; a < algo->action_n; a++) {
-        float q = algo->q[next_state * algo->action_n + a];
+        float q = algo->target_q[next_state * algo->action_n + a];
         if (q > max_next) max_next = q;
     }
-    float target = (float)transition->reward;
-    if (!transition->done) target += algo->gamma * max_next;
+    float target = (float)sample->reward;
+    if (!sample->done) target += algo->gamma * max_next;
     algo->q[state * algo->action_n + action] =
         q_sa + algo->alpha * (target - q_sa);
+    algo->update_count++;
+    if (algo->target_interval > 0 && algo->update_count % algo->target_interval == 0) {
+        size_t q_count = (size_t)algo->table_size * (size_t)algo->action_n;
+        memcpy(algo->target_q, algo->q, q_count * sizeof(float));
+    }
+    if (algo->epsilon > 0.01f) algo->epsilon *= 0.9995f;
 }
 
 static void random_destroy(void *ctx) {
@@ -186,8 +210,46 @@ static void simple_q_destroy(void *ctx) {
     tfrl_simple_q *algo = (tfrl_simple_q *)ctx;
     if (algo) {
         free(algo->q);
+        free(algo->target_q);
+        free(algo->replay);
         free(algo);
     }
+}
+
+static void simple_q_save(void *ctx, const char *path) {
+    tfrl_simple_q *algo = (tfrl_simple_q *)ctx;
+    if (!algo || !path) return;
+    FILE *fp = fopen(path, "wb");
+    if (!fp) return;
+    fprintf(fp, "TFRL_SIMPLE_Q 1 %d %d %u %.9g %.9g %.9g %d %d\n",
+            algo->table_size, algo->action_n, algo->rng, algo->alpha,
+            algo->gamma, algo->epsilon, algo->update_count, algo->target_interval);
+    size_t count = (size_t)algo->table_size * (size_t)algo->action_n;
+    for (size_t i = 0; i < count; i++) fprintf(fp, "%.9g %.9g\n", algo->q[i], algo->target_q[i]);
+    fclose(fp);
+}
+
+static int simple_q_load(tfrl_simple_q *algo, const char *path) {
+    if (!algo || !path) return 0;
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return 0;
+    char magic[32]; int version = 0;
+    int table_size = 0, action_n = 0, updates = 0, interval = 0;
+    unsigned rng = 0; float alpha = 0.0f, gamma = 0.0f, epsilon = 0.0f;
+    int ok = fscanf(fp, "%31s %d %d %d %u %f %f %f %d %d",
+                    magic, &version, &table_size, &action_n, &rng,
+                    &alpha, &gamma, &epsilon, &updates, &interval) == 10;
+    ok = ok && strcmp(magic, "TFRL_SIMPLE_Q") == 0 && version == 1 &&
+         table_size == algo->table_size && action_n == algo->action_n;
+    size_t count = (size_t)algo->table_size * (size_t)algo->action_n;
+    for (size_t i = 0; ok && i < count; i++) ok = fscanf(fp, "%f %f", &algo->q[i], &algo->target_q[i]) == 2;
+    fclose(fp);
+    if (ok) {
+        algo->rng = rng; algo->alpha = alpha; algo->gamma = gamma;
+        algo->epsilon = epsilon; algo->update_count = updates;
+        algo->target_interval = interval;
+    }
+    return ok;
 }
 
 static int random_diagnostics(void *ctx, char *buffer, size_t buffer_len) {
@@ -200,8 +262,9 @@ static int random_diagnostics(void *ctx, char *buffer, size_t buffer_len) {
 static int simple_q_diagnostics(void *ctx, char *buffer, size_t buffer_len) {
     tfrl_simple_q *algo = (tfrl_simple_q *)ctx;
     if (!buffer || buffer_len == 0 || !algo) return 0;
-    snprintf(buffer, buffer_len, "simple_q eps=%.3f alpha=%.3f gamma=%.3f table=%d",
-             algo->epsilon, algo->alpha, algo->gamma, algo->table_size);
+    snprintf(buffer, buffer_len, "simple_q eps=%.3f alpha=%.3f gamma=%.3f table=%d replay=%d target_updates=%d",
+             algo->epsilon, algo->alpha, algo->gamma, algo->table_size,
+             algo->replay_count, algo->target_interval > 0 ? algo->update_count / algo->target_interval : 0);
     return 1;
 }
 
@@ -220,7 +283,7 @@ static const tfrl_algo_vtable SIMPLE_Q_VTABLE = {
     .act_env = NULL,
     .act_batch = simple_q_act_batch,
     .update = simple_q_update,
-    .save = NULL,
+    .save = simple_q_save,
     .destroy = simple_q_destroy,
     .diagnostics = simple_q_diagnostics,
 };
@@ -252,10 +315,19 @@ static tfrl_algo simple_q_create(const tfrl_algo_config *cfg) {
 
     size_t q_count = (size_t)algo->table_size * (size_t)algo->action_n;
     algo->q = (float *)calloc(q_count, sizeof(float));
-    if (!algo->q) {
+    algo->target_q = (float *)calloc(q_count, sizeof(float));
+    algo->replay_capacity = cfg->replay_size > 0 ? cfg->replay_size : 1000;
+    algo->replay = (tfrl_transition *)calloc((size_t)algo->replay_capacity, sizeof(tfrl_transition));
+    algo->target_interval = 100;
+    if (!algo->q || !algo->target_q || !algo->replay) {
+        free(algo->q);
+        free(algo->target_q);
+        free(algo->replay);
         free(algo);
         return out;
     }
+
+    if (cfg->load_path) simple_q_load(algo, cfg->load_path);
 
     out.ctx = algo;
     out.vtable = &SIMPLE_Q_VTABLE;

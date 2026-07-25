@@ -132,6 +132,8 @@ typedef struct {
     int grid[TETRIS_W][TETRIS_H];
     int piece;
     int next_piece;
+    int bag[7];
+    int bag_index;
     int rot;
     int x;
     int y;

@@ -2324,7 +2324,7 @@ int tfrl_runner_run(const tfrl_runner_config *cfg) {
     } else if (cfg->mode == TFRL_MODE_EVAL) {
         int episodes = cfg->episodes > 0 ? cfg->episodes : 10;
         for (int ep = 0; ep < episodes; ep++) {
-            if (tfrl_env_reset_multi(envs[0], (uint64_t)seed, obs, agent_count) != agent_count) {
+            if (tfrl_env_reset_multi(envs[0], (uint64_t)(seed + ep), obs, agent_count) != agent_count) {
                 fprintf(stderr, "env reset failed\n");
                 break;
             }

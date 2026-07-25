@@ -18,7 +18,7 @@ void tfrl_algo_config_apply_defaults(tfrl_algo_config *cfg) {
 
 static void apply_algo_defaults(tfrl_algo_config *cfg) {
     if (!cfg) return;
-    int is_nca = cfg->name && strcmp(cfg->name, "nca") == 0;
+    int is_nca = cfg->name && (strcmp(cfg->name, "nca") == 0 || strcmp(cfg->name, "nca-ppo") == 0);
     if (cfg->defaults_version <= 0) cfg->defaults_version = DEFAULTS_VERSION;
     if (cfg->gamma <= 0.0f) cfg->gamma = 0.99f;
     if (cfg->lr < 0.0f) cfg->lr = is_nca ? 0.02f : 0.0005f;
@@ -48,6 +48,7 @@ static int algo_is_supported(const char *name) {
            strcmp(name, "dqn") == 0 ||
            strcmp(name, "ppo") == 0 ||
            strcmp(name, "nca") == 0 ||
+           strcmp(name, "nca-ppo") == 0 ||
            strcmp(name, "reinforce") == 0;
 }
 
@@ -63,7 +64,7 @@ tfrl_algo tfrl_algo_create(const tfrl_algo_config *cfg, const tfrl_env_spec *spe
         return out;
     }
 
-    if (strcmp(name, "nca") == 0) {
+    if (strcmp(name, "nca") == 0 || strcmp(name, "nca-ppo") == 0) {
         out = tfrl_algo_nca_create(cfg);
         if (dbg && *dbg) fprintf(stderr, "[algo_factory] %s -> nca\n", name);
     } else if (strcmp(name, "ppo") == 0 || strcmp(name, "reinforce") == 0) {

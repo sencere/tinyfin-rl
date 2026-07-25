@@ -58,6 +58,14 @@ typedef struct {
     uint32_t bricks_per_line;
 } tfrl_arkanoid_snapshot;
 
+typedef struct {
+    uint32_t width, height, step, max_steps;
+    float reward;
+    uint32_t done, piece, next_piece, rot, x, y;
+    double score;
+    uint32_t lines;
+} tfrl_tetris_snapshot;
+
 struct tfrl_viewer {
     int fps;
     const char *title;
@@ -145,6 +153,36 @@ static void draw_arkanoid(const tfrl_arkanoid_snapshot *ark, const unsigned char
     }
 }
 
+static void draw_tetris(const tfrl_tetris_snapshot *game, const unsigned char *cells) {
+    if (!game || !cells || game->width == 0 || game->height == 0) return;
+    int board_w = (int)game->width;
+    int board_h = (int)game->height;
+    int cell = GetScreenHeight() / (board_h + 2);
+    if (cell < 8) cell = 8;
+    int ox = 24;
+    int oy = 24;
+    DrawRectangle(ox - 2, oy - 2, board_w * cell + 4, board_h * cell + 4, DARKGRAY);
+    for (int y = 0; y < board_h; y++) {
+        for (int x = 0; x < board_w; x++) {
+            Color c = cells[y * board_w + x] ? RED : (Color){30, 35, 45, 255};
+            DrawRectangle(ox + x * cell, oy + y * cell, cell - 1, cell - 1, c);
+        }
+    }
+    static const int pieces[7][4][2] = {{{1,0},{1,1},{1,2},{1,3}},{{0,0},{1,0},{0,1},{1,1}},{{1,0},{0,1},{1,1},{2,1}},{{1,0},{2,0},{0,1},{1,1}},{{0,0},{1,0},{1,1},{2,1}},{{0,0},{0,1},{0,2},{1,2}},{{2,0},{2,1},{1,2},{2,2}}};
+    for (int i = 0; i < 4; i++) {
+        int px = pieces[game->piece % 7][i][0], py = pieces[game->piece % 7][i][1];
+        for (uint32_t r = 0; r < (game->rot & 3); r++) { int pivot = game->piece % 7 == 0 ? 3 : 2; int nx = pivot - py; py = px; px = nx; }
+        int bx = (int)game->x + px, by = (int)game->y + py;
+        if (bx >= 0 && by >= 0 && bx < board_w && by < board_h)
+            DrawRectangle(ox + bx * cell, oy + by * cell, cell - 1, cell - 1, SKYBLUE);
+    }
+    DrawText(TextFormat("TETRIS  step %u/%u  lines %u  score %.0f", game->step,
+                        game->max_steps, game->lines, game->score),
+             ox, oy + board_h * cell + 12, 18, RAYWHITE);
+    DrawText(TextFormat("reward %.3f%s", game->reward, game->done ? "  DONE" : ""),
+             ox, oy + board_h * cell + 34, 18, game->done ? ORANGE : LIGHTGRAY);
+}
+
 void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
     if (!viewer || !snapshot || len < sizeof(tfrl_render_snapshot_header)) return;
     const unsigned char *bytes = (const unsigned char *)snapshot;
@@ -174,6 +212,22 @@ void tfrl_viewer_draw(tfrl_viewer *viewer, const void *snapshot, size_t len) {
         const tfrl_arkanoid_snapshot *ark = (const tfrl_arkanoid_snapshot *)payload;
         const unsigned char *bricks = payload + sizeof(tfrl_arkanoid_snapshot);
         draw_arkanoid(ark, bricks);
+        EndDrawing();
+        return;
+    }
+
+    if (header->api_version == TFRL_SNAPSHOT_API_VERSION && header->payload_kind == TFRL_SNAPSHOT_KIND_TETRIS) {
+        if (header->payload_bytes < sizeof(tfrl_tetris_snapshot)) {
+            EndDrawing();
+            return;
+        }
+        const tfrl_tetris_snapshot *game = (const tfrl_tetris_snapshot *)payload;
+        size_t cells_bytes = (size_t)game->width * (size_t)game->height;
+        if (header->payload_bytes < sizeof(*game) + cells_bytes) {
+            EndDrawing();
+            return;
+        }
+        draw_tetris(game, payload + sizeof(*game));
         EndDrawing();
         return;
     }

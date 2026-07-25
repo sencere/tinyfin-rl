@@ -11,20 +11,20 @@ set(TINYFIN_DIR "tinyfin" CACHE PATH "Path to tinyfin")
 set(SRC_ENVS
     src/envs/envs.c
     src/envs/registry.c
-    src/envs/maze/maze.c
-    src/envs/maze/render.c
-    src/envs/lineworld/lineworld.c
-    src/envs/lineworld/render.c
+    envs/maze_rooms/maze.c
+    envs/maze_rooms/render.c
+    envs/lineworld/lineworld.c
+    envs/lineworld/render.c
     src/envs/point1d/point1d.c
     src/envs/point1d/render.c
-    src/envs/coin_maze/coin_maze.c
-    src/envs/coin_maze/render.c
+    envs/coin_maze/coin_maze.c
+    envs/coin_maze/render.c
     src/envs/snake/snake_env.c
     src/envs/snake/render.c
     src/envs/floppy/floppy_env.c
     src/envs/floppy/render.c
-    src/envs/tetris/tetris_env.c
-    src/envs/tetris/render.c
+    envs/tetris/tetris_env.c
+    envs/tetris/render.c
     src/envs/breakout/breakout_env.c
     src/envs/breakout/render.c
     src/envs/breakout_atari_env.c
@@ -120,18 +120,23 @@ endfunction()
 
 add_tfrl_env_module(tfrl_env_lineworld TFRL_ENV_MODULE_LINEWORLD
     ${SRC_ENV_MODULE_CORE}
-    src/envs/lineworld/lineworld.c
-    src/envs/lineworld/render.c
+    envs/lineworld/lineworld.c
+    envs/lineworld/render.c
 )
 add_tfrl_env_module(tfrl_env_maze_rooms TFRL_ENV_MODULE_MAZE_ROOMS
     ${SRC_ENV_MODULE_CORE}
-    src/envs/maze/maze.c
-    src/envs/maze/render.c
+    envs/maze_rooms/maze.c
+    envs/maze_rooms/render.c
 )
 add_tfrl_env_module(tfrl_env_coin_maze TFRL_ENV_MODULE_COIN_MAZE
     ${SRC_ENV_MODULE_CORE}
-    src/envs/coin_maze/coin_maze.c
-    src/envs/coin_maze/render.c
+    envs/coin_maze/coin_maze.c
+    envs/coin_maze/render.c
+)
+add_tfrl_env_module(tfrl_env_tetris TFRL_ENV_MODULE_TETRIS
+    ${SRC_ENV_MODULE_CORE}
+    envs/tetris/tetris_env.c
+    envs/tetris/render.c
 )
 
 add_library(tfrl_public_api INTERFACE)
@@ -200,6 +205,22 @@ if (TFRL_PERF_FLAGS)
     target_compile_options(test_coin_maze_duo_smoke PRIVATE -O3 -march=native -ffast-math -fno-math-errno)
 endif()
 add_test(NAME coin_maze_duo_smoke COMMAND test_coin_maze_duo_smoke)
+
+add_executable(test_core_env_smoke tests/test_core_env_smoke.c ${SRC_ENVS} ${SRC_ENV_SUPPORT})
+target_include_directories(test_core_env_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(test_core_env_smoke dl m)
+add_test(NAME core_env_smoke COMMAND test_core_env_smoke)
+
+add_executable(test_trace_replay tests/test_trace_replay.c src/core/trace.c ${SRC_ENVS} ${SRC_ENV_SUPPORT})
+target_include_directories(test_trace_replay PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(test_trace_replay dl m)
+add_test(NAME trace_replay COMMAND test_trace_replay)
 
 add_executable(test_public_headers tests/test_public_headers.c)
 target_link_libraries(test_public_headers PRIVATE tfrl_public_api)
